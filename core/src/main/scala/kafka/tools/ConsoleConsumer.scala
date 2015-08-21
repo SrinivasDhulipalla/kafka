@@ -19,6 +19,7 @@ package kafka.tools
 
 import java.io.PrintStream
 import java.util.{Properties, Random}
+
 import joptsimple._
 import kafka.consumer._
 import kafka.message._
@@ -51,7 +52,11 @@ object ConsoleConsumer extends Logging {
 
     addShutdownHook(consumer, conf)
 
-    process(conf.maxMessages, conf.formatter, consumer)
+    try {
+      process(conf.maxMessages, conf.formatter, consumer)
+    }finally{
+      consumer.close()
+    }
   }
 
   def checkZk(config: ConsumerConfig) {
@@ -71,7 +76,9 @@ object ConsoleConsumer extends Logging {
   def addShutdownHook(consumer: BaseConsumer, conf: ConsumerConfig) {
     Runtime.getRuntime.addShutdownHook(new Thread() {
       override def run() {
-        consumer.close()
+        //Only the old consumer can be shutdown from a background thread.
+        if(!conf.useNewConsumer)
+          consumer.close()
 
         // if we generated a random group id (as none specified explicitly) then avoid polluting zookeeper with persistent group data, this is a hack
         if (!conf.groupIdPassed)
