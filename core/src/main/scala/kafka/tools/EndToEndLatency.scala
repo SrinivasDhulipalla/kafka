@@ -25,6 +25,8 @@ import org.apache.kafka.common.utils.Utils
 
 import scala.collection.JavaConversions._
 
+import scala.collection.JavaConversions._
+
 
 /**
  * This class records the average end to end latency for a single message to travel through Kafka
