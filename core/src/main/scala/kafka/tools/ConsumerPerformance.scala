@@ -17,6 +17,8 @@
 
 package kafka.tools
 
+import org.apache.kafka.common.utils.Utils
+
 import scala.collection.JavaConversions._
 import java.util.concurrent.atomic.AtomicLong
 import java.nio.channels.ClosedByInterruptException
@@ -174,7 +176,12 @@ object ConsumerPerformance {
       .withRequiredArg
       .describedAs("count")
       .ofType(classOf[java.lang.Integer])
-      .defaultsTo(1)
+      .defaultsTo(1)    
+    val propsFileOpt = parser.accepts("producer-properties", "External file of properties for the producer.")
+      .withRequiredArg
+      .describedAs("producer properties")
+      .ofType(classOf[java.lang.String])
+      .defaultsTo("")
     val useNewConsumerOpt = parser.accepts("new-consumer", "Use the new consumer implementation.")
 
     val options = parser.parse(args: _*)
@@ -183,7 +190,7 @@ object ConsumerPerformance {
    
     val useNewConsumer = options.has(useNewConsumerOpt)
     
-    val props = new Properties
+    val props = if (options.has(propsFileOpt)) Utils.loadProps(options.valueOf(propsFileOpt)) else new Properties
     if(useNewConsumer) {
       import org.apache.kafka.clients.consumer.ConsumerConfig
       props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, options.valueOf(bootstrapServersOpt))
