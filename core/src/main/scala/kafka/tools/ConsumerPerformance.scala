@@ -104,7 +104,7 @@ object ConsumerPerformance {
     var lastMessagesRead = 0L
     var lastConsumed = System.currentTimeMillis
     while(messagesRead < count && lastConsumed >= System.currentTimeMillis - timeout) {
-      val records = consumer.poll(100)
+      val records = consumer.poll(10000)
       if(records.count() > 0)
         lastConsumed = System.currentTimeMillis
       for(record <- records) {
@@ -177,9 +177,9 @@ object ConsumerPerformance {
       .describedAs("count")
       .ofType(classOf[java.lang.Integer])
       .defaultsTo(1)    
-    val propsFileOpt = parser.accepts("producer-properties", "External file of properties for the producer.")
+    val propsFileOpt = parser.accepts("consumer-properties", "External file of default properties for the consumer.")
       .withRequiredArg
-      .describedAs("producer properties")
+      .describedAs("default consumer properties")
       .ofType(classOf[java.lang.String])
       .defaultsTo("")
     val useNewConsumerOpt = parser.accepts("new-consumer", "Use the new consumer implementation.")
