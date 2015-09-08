@@ -38,7 +38,12 @@ import org.apache.log4j.Logger
 object ProducerPerformance extends Logging {
 
   def main(args: Array[String]) {
+    run(args)
+    System.exit(0)
+  }
 
+  def run(args: Array[String]) {
+    println("Starting run"+args.deep.mkString)
     val logger = Logger.getLogger(getClass)
     val config = new ProducerPerfConfig(args)
     if (!config.isFixedSize)
@@ -67,7 +72,6 @@ object ProducerPerformance extends Logging {
       config.dateFormat.format(startMs), config.dateFormat.format(endMs),
       config.compressionCodec.codec, config.messageSize, config.batchSize, totalMBSent,
       totalMBSent / elapsedSecs, totalMessagesSent.get, totalMessagesSent.get / elapsedSecs))
-    System.exit(0)
   }
 
   class ProducerPerfConfig(args: Array[String]) extends PerfConfig(args) {
@@ -174,6 +178,7 @@ object ProducerPerformance extends Logging {
     }
 
     val messageSendGapMs = options.valueOf(messageSendGapMsOpt).intValue()
+
   }
 
   class ProducerThread(val threadId: Int,
