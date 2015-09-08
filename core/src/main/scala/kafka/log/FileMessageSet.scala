@@ -27,6 +27,7 @@ import kafka.message._
 import kafka.common.KafkaException
 import java.util.concurrent.TimeUnit
 import kafka.metrics.{KafkaTimer, KafkaMetricsGroup}
+import org.apache.kafka.common.network.PlaintextTransportLayer
 
 /**
  * An on-disk message set. An optional start and end position can be applied to the message set
@@ -157,7 +158,13 @@ class FileMessageSet private[kafka](@volatile var file: File,
       throw new KafkaException("Size of FileMessageSet %s has been truncated during write: old size %d, new size %d"
         .format(file.getAbsolutePath, _size.get(), newSize))
     }
-    val bytesTransferred = channel.transferTo(start + writePosition, math.min(size, sizeInBytes), destChannel).toInt
+
+    val unwrappedChannel = destChannel match {
+      case c: PlaintextTransportLayer => c.socketChannel
+      case _ => destChannel
+    }
+
+    val bytesTransferred = channel.transferTo(start + writePosition, math.min(size, sizeInBytes), unwrappedChannel).toInt
     trace("FileMessageSet " + file.getAbsolutePath + " : bytes transferred : " + bytesTransferred
       + " bytes requested for transfer : " + math.min(size, sizeInBytes))
     bytesTransferred

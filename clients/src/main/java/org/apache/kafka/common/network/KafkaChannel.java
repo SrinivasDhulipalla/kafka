@@ -156,7 +156,7 @@ public class KafkaChannel {
     }
 
     private boolean send(Send send) throws IOException {
-        send.writeTo(transportLayer.socketChannel());
+        send.writeTo(transportLayer);
         if (send.completed())
             transportLayer.removeInterestOps(SelectionKey.OP_WRITE);
 
