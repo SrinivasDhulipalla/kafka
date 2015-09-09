@@ -17,8 +17,6 @@
 
 package kafka.tools
 
-import org.apache.kafka.common.utils.Utils
-
 import scala.collection.JavaConversions._
 import java.util.concurrent.atomic.AtomicLong
 import java.nio.channels.ClosedByInterruptException
@@ -104,7 +102,7 @@ object ConsumerPerformance {
     var lastMessagesRead = 0L
     var lastConsumed = System.currentTimeMillis
     while(messagesRead < count && lastConsumed >= System.currentTimeMillis - timeout) {
-      val records = consumer.poll(10000)
+      val records = consumer.poll(100)
       if(records.count() > 0)
         lastConsumed = System.currentTimeMillis
       for(record <- records) {
@@ -176,12 +174,7 @@ object ConsumerPerformance {
       .withRequiredArg
       .describedAs("count")
       .ofType(classOf[java.lang.Integer])
-      .defaultsTo(1)    
-    val propsFileOpt = parser.accepts("consumer-properties", "External file of default properties for the consumer.")
-      .withRequiredArg
-      .describedAs("default consumer properties")
-      .ofType(classOf[java.lang.String])
-      .defaultsTo("")
+      .defaultsTo(1)
     val useNewConsumerOpt = parser.accepts("new-consumer", "Use the new consumer implementation.")
 
     val options = parser.parse(args: _*)
@@ -190,7 +183,7 @@ object ConsumerPerformance {
    
     val useNewConsumer = options.has(useNewConsumerOpt)
     
-    val props = if (options.has(propsFileOpt)) Utils.loadProps(options.valueOf(propsFileOpt)) else new Properties
+    val props = new Properties
     if(useNewConsumer) {
       import org.apache.kafka.clients.consumer.ConsumerConfig
       props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, options.valueOf(bootstrapServersOpt))
