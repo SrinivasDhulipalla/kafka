@@ -20,6 +20,7 @@ package kafka.tools
 import java.util
 
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.utils.Utils
 
 import scala.collection.JavaConversions._
 import java.util.concurrent.atomic.AtomicLong
@@ -202,6 +203,11 @@ object ConsumerPerformance {
       .describedAs("count")
       .ofType(classOf[java.lang.Integer])
       .defaultsTo(1)
+    val propsFileOpt = parser.accepts("consumer-properties", "External file of default properties for the consumer.")
+      .withRequiredArg
+      .describedAs("default consumer properties")
+      .ofType(classOf[java.lang.String])
+      .defaultsTo("")
     val useNewConsumerOpt = parser.accepts("new-consumer", "Use the new consumer implementation.")
 
     val options = parser.parse(args: _*)
@@ -210,7 +216,7 @@ object ConsumerPerformance {
 
     val useNewConsumer = options.has(useNewConsumerOpt)
 
-    val props = new Properties
+    val props = if (options.has(propsFileOpt)) Utils.loadProps(options.valueOf(propsFileOpt)) else new Properties
     if(useNewConsumer) {
       import org.apache.kafka.clients.consumer.ConsumerConfig
       props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, options.valueOf(bootstrapServersOpt))
