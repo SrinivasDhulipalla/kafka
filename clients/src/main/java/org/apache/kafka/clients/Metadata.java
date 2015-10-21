@@ -169,7 +169,7 @@ public final class Metadata {
         this.cluster = this.needMetadataForAllTopics ? getClusterForCurrentTopics(cluster) : cluster;
 
         notifyAll();
-        log.warn("Updated cluster metadata version {} to {}", this.version, this.cluster);
+        log.debug("Updated cluster metadata version {} to {}", this.version, this.cluster);
     }
 
     /**
