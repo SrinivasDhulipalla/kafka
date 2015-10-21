@@ -550,6 +550,54 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
     }
   }
 
+  def hackdown() {
+    try {
+      info("shutting down")
+
+      if(isStartingUp.get)
+        throw new IllegalStateException("Kafka server is still starting up, cannot shut down!")
+
+      val canShutdown = isShuttingDown.compareAndSet(false, true)
+      if (canShutdown && shutdownLatch.getCount > 0) {
+        brokerState.newState(BrokerShuttingDown)
+        if(socketServer != null)
+          CoreUtils.swallow(socketServer.shutdown())
+        if(requestHandlerPool != null)
+          CoreUtils.swallow(requestHandlerPool.shutdown())
+        CoreUtils.swallow(kafkaScheduler.shutdown())
+        if(apis != null)
+          CoreUtils.swallow(apis.close())
+        if(replicaManager != null)
+          CoreUtils.swallow(replicaManager.shutdown())
+        if(logManager != null)
+          CoreUtils.swallow(logManager.shutdown())
+        if(consumerCoordinator != null)
+          CoreUtils.swallow(consumerCoordinator.shutdown())
+        if(kafkaController != null)
+          CoreUtils.swallow(kafkaController.shutdown())
+        if(zkUtils != null)
+          CoreUtils.swallow(zkUtils.close())
+        if (metrics != null)
+          CoreUtils.swallow(metrics.close())
+
+        brokerState.newState(NotRunning)
+
+        startupComplete.set(false)
+        isShuttingDown.set(false)
+        AppInfoParser.unregisterAppInfo(jmxPrefix, config.brokerId.toString)
+        shutdownLatch.countDown()
+        info("shut down completed")
+      }
+    }
+    catch {
+      case e: Throwable =>
+        fatal("Fatal error during KafkaServer shutdown.", e)
+        isShuttingDown.set(false)
+        throw e
+    }
+  }
+
+
   /**
    * After calling shutdown(), use this API to wait until the shutdown is complete
    */
