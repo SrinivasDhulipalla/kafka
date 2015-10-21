@@ -33,7 +33,7 @@ import org.junit.{After, Assert, Test}
 
 import scala.collection.JavaConversions._
 
-class ReplayLogProducerTest extends KafkaServerTestHarness {
+class ReplayLogProducerNewTest extends KafkaServerTestHarness {
 
   @Test
   def shouldPushMessagesFromInboundToOutboundTopic(): Unit = {
@@ -51,7 +51,7 @@ class ReplayLogProducerTest extends KafkaServerTestHarness {
     val consumerPartitionAllocated = new CountDownLatch(1)
 
     //Given
-    val replayer = new ReplayLogProducer().run(config, evenBalanceListener(consumerPartitionAllocated))
+    val replayer = new ReplayLogProducerNew().run(config, evenBalanceListener(consumerPartitionAllocated))
 
     consumerPartitionAllocated.await()
 
@@ -87,7 +87,7 @@ class ReplayLogProducerTest extends KafkaServerTestHarness {
     TestUtils.createTopic(zkClient, config.inputTopic, config.numThreads, 1, servers, new Properties())
 
     //Start the log replayer
-    val replayer = new ReplayLogProducer().run(config, evenBalanceListener(evenBalance))
+    val replayer = new ReplayLogProducerNew().run(config, evenBalanceListener(evenBalance))
 
     //Wait for each consumer (thread) to be assigned a single partition
     evenBalance.await(15, SECONDS)
@@ -124,7 +124,7 @@ class ReplayLogProducerTest extends KafkaServerTestHarness {
     val consumerPartitionAllocated = new CountDownLatch(1)
 
     //Given
-    val replayer = new ReplayLogProducer().run(config, evenBalanceListener(consumerPartitionAllocated))
+    val replayer = new ReplayLogProducerNew().run(config, evenBalanceListener(consumerPartitionAllocated))
 
     consumerPartitionAllocated.await()
 

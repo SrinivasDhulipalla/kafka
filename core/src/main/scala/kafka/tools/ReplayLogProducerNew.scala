@@ -41,22 +41,22 @@ trait Configuration {
   val consumerProps: Properties
 }
 
-class ReplayLogProducer extends Logging {
+class ReplayLogProducerNew extends Logging {
   var latch: CountDownLatch = _
   var threadList = List[ReplayThread]()
   val globalCount = new AtomicLong()
 
   def main(args: Array[String]) {
-    new ReplayLogProducer()
+    new ReplayLogProducerNew()
       .run(new ConfigBuilder(args))
       .awaitTerminationAndClose()
   }
 
-  def run(config: Configuration): ReplayLogProducer = {
+  def run(config: Configuration): ReplayLogProducerNew = {
     run(config, new NoOpConsumerRebalanceListener())
   }
 
-  def run(config: Configuration, rebalanceListener: ConsumerRebalanceListener): ReplayLogProducer = {
+  def run(config: Configuration, rebalanceListener: ConsumerRebalanceListener): ReplayLogProducerNew = {
     latch = new CountDownLatch(config.numThreads)
 
     for (a <- 1 to config.numThreads) {
