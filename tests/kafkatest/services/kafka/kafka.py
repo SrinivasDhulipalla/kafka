@@ -62,6 +62,8 @@ class KafkaService(JmxMixin, Service):
         self.interbroker_security_protocol = interbroker_security_protocol
         self.sasl_mechanism = sasl_mechanism
         self.topics = topics
+        self.client_port = 9092
+        self.use_seperate_ports_per_protocol = False
 
         for node in self.nodes:
             node.version = version
@@ -89,10 +91,37 @@ class KafkaService(JmxMixin, Service):
                 topic_cfg["topic"] = topic
                 self.create_topic(topic_cfg)
 
+    def set_protocol_and_port(self, node):
+        #may need to pin SSL/PLAINTEXT to separate ports (for rolling restarts etc)
+        if self.use_seperate_ports_per_protocol:
+            if self.security_protocol != self.interbroker_security_protocol or self.force_both_protocols_open:
+                self.listeners = 'PLAINTEXT://:9092,SSL://:9093'
+                self.advertised_listeners = 'PLAINTEXT://{0}:9092,SSL://{1}:9093'.format(node.account.hostname,
+                                                                                         node.account.hostname)
+            elif self.security_protocol == 'SSL':
+                self.listeners = 'SSL://:9093'
+                self.advertised_listeners = 'SSL://{0}:9093'.format(node.account.hostname)
+            else:
+                self.listeners = 'PLAINTEXT://:9092'
+                self.advertised_listeners = 'PLAINTEXT://{0}:9092'.format(node.account.hostname)
+        else:
+            if self.security_protocol == self.interbroker_security_protocol:
+                self.listeners = '{0}://:9092'.format(self.security_protocol)
+                self.advertised_listeners = '{0}://{1}:9092'.format(self.security_protocol, node.account.hostname)
+            else:
+                self.listeners = '{0}://:9092,{1}://:9093'.format(self.security_protocol,
+                                                                  self.interbroker_security_protocol)
+                self.advertised_listeners = '{0}://{1}:9092,{2}://{3}:9093'.format(self.security_protocol,
+                                                                                   node.account.hostname,
+                                                                                   self.interbroker_security_protocol,
+                                                                                   node.account.hostname)
+
     def prop_file(self, node):
         cfg = KafkaConfig(**node.config)
         cfg[config_property.ADVERTISED_HOSTNAME] = node.account.hostname
         cfg[config_property.ZOOKEEPER_CONNECT] = self.zk.connect_setting()
+
+        self.set_protocol_and_port(node)
 
         # TODO - clean up duplicate configuration logic
         prop_file = cfg.render()
@@ -303,4 +332,4 @@ class KafkaService(JmxMixin, Service):
 
         This is the format expected by many config files.
         """
-        return ','.join([node.account.hostname + ":9092" for node in self.nodes])
+        return ','.join([node.account.hostname + ":" + str(self.client_port) for node in self.nodes])
