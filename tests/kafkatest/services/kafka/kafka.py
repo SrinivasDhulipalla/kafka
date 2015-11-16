@@ -30,6 +30,9 @@ import signal
 import subprocess
 import time
 import os.path
+import collections
+
+Port = collections.namedtuple('Port', ['name', 'number', 'open'])
 
 class KafkaService(JmxMixin, Service):
 
@@ -47,6 +50,8 @@ class KafkaService(JmxMixin, Service):
             "path": "/mnt/kafka-data-logs",
             "collect_default": False}
     }
+
+
 
     def __init__(self, context, num_nodes, zk, security_protocol=SecurityConfig.PLAINTEXT, interbroker_security_protocol=SecurityConfig.PLAINTEXT,
                  sasl_mechanism=SecurityConfig.SASL_MECHANISM_GSSAPI, topics=None, version=TRUNK, quota_config=None, jmx_object_names=None, jmx_attributes=[]):
@@ -67,17 +72,35 @@ class KafkaService(JmxMixin, Service):
         self.sasl_mechanism = sasl_mechanism
         self.topics = topics
         self.client_port = 9092
-        self.use_seperate_ports_per_protocol = False
+
+        self.port_mappings = {
+            'PLAINTEXT': Port('PLAINTEXT', 9092, False),
+            'SSL': Port('SSL', 9093, False),
+            'SASL_PLAINTEXT': Port('SASL_PLAINTEXT', 9094, False),
+            'SASL_SSL': Port('SASL_SSL', 9095, False)
+        }
 
         for node in self.nodes:
-            node.version = version
-            node.config = KafkaConfig(**{config_property.BROKER_ID: self.idx(node)})
+                node.version = version
+                node.config = KafkaConfig(**{config_property.BROKER_ID: self.idx(node)})
 
     @property
     def security_config(self):
         return SecurityConfig(self.security_protocol, self.interbroker_security_protocol, sasl_mechanism=self.sasl_mechanism)
 
+
+    def open_port(self, protocol):
+        self.port_mappings[protocol] = self.port_mappings[protocol]._replace(open=True)
+
+
+    def close_port(self, protocol):
+        self.port_mappings[protocol] = self.port_mappings[protocol]._replace(open=False)
+
+
     def start(self):
+        self.open_port(self.security_protocol)
+        self.open_port(self.interbroker_security_protocol)
+
         if self.security_config.has_sasl_kerberos:
             self.minikdc = MiniKdc(self.context, self.nodes)
             self.minikdc.start()
@@ -95,29 +118,17 @@ class KafkaService(JmxMixin, Service):
                 self.create_topic(topic_cfg)
 
     def set_protocol_and_port(self, node):
-        #may need to pin SSL/PLAINTEXT to separate ports (for rolling restarts etc)
-        if self.use_seperate_ports_per_protocol:
-            if self.security_protocol != self.interbroker_security_protocol or self.force_both_protocols_open:
-                self.listeners = 'PLAINTEXT://:9092,SSL://:9093'
-                self.advertised_listeners = 'PLAINTEXT://{0}:9092,SSL://{1}:9093'.format(node.account.hostname,
-                                                                                         node.account.hostname)
-            elif self.security_protocol == 'SSL':
-                self.listeners = 'SSL://:9093'
-                self.advertised_listeners = 'SSL://{0}:9093'.format(node.account.hostname)
-            else:
-                self.listeners = 'PLAINTEXT://:9092'
-                self.advertised_listeners = 'PLAINTEXT://{0}:9092'.format(node.account.hostname)
-        else:
-            if self.security_protocol == self.interbroker_security_protocol:
-                self.listeners = '{0}://:9092'.format(self.security_protocol)
-                self.advertised_listeners = '{0}://{1}:9092'.format(self.security_protocol, node.account.hostname)
-            else:
-                self.listeners = '{0}://:9092,{1}://:9093'.format(self.security_protocol,
-                                                                  self.interbroker_security_protocol)
-                self.advertised_listeners = '{0}://{1}:9092,{2}://{3}:9093'.format(self.security_protocol,
-                                                                                   node.account.hostname,
-                                                                                   self.interbroker_security_protocol,
-                                                                                   node.account.hostname)
+        listeners = []
+        advertised_listeners = []
+
+        for protocol in self.port_mappings:
+            port = self.port_mappings[protocol]
+            if port.open:
+                listeners.append(port.name + "://:" + str(port.number))
+                advertised_listeners.append(port.name + "://" +  node.account.hostname + ":" + str(port.number))
+
+        self.listeners = ','.join(listeners)
+        self.advertised_listeners = ','.join(advertised_listeners)
 
     def prop_file(self, node):
         cfg = KafkaConfig(**node.config)
