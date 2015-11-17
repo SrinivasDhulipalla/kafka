@@ -71,7 +71,6 @@ class KafkaService(JmxMixin, Service):
         self.interbroker_security_protocol = interbroker_security_protocol
         self.sasl_mechanism = sasl_mechanism
         self.topics = topics
-        self.client_port = 9092
 
         self.port_mappings = {
             'PLAINTEXT': Port('PLAINTEXT', 9092, False),
@@ -340,9 +339,15 @@ class KafkaService(JmxMixin, Service):
         self.logger.info("Leader for topic %s and partition %d is now: %d" % (topic, partition, leader_idx))
         return self.get_node(leader_idx)
 
-    def bootstrap_servers(self):
+    def bootstrap_servers(self, protocol='PLAINTEXT'):
         """Return comma-delimited list of brokers in this cluster formatted as HOSTNAME1:PORT1,HOSTNAME:PORT2,...
 
         This is the format expected by many config files.
         """
-        return ','.join([node.account.hostname + ":" + str(self.client_port) for node in self.nodes])
+        port_mapping = self.port_mappings[protocol]
+        self.logger.info("Bootstrap client port is: " + str(port_mapping.number))
+
+        if not port_mapping.open:
+            raise ValueError("We are retrieving bootstrap servers for the port: %s which is not currently open. - " % str(port_mapping))
+
+        return ','.join([node.account.hostname + ":" + str(port_mapping.number) for node in self.nodes])
