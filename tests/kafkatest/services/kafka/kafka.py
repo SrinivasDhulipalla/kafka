@@ -77,8 +77,8 @@ class KafkaService(JmxMixin, Service):
         }
 
         for node in self.nodes:
-                node.version = version
-                node.config = KafkaConfig(**{config_property.BROKER_ID: self.idx(node)})
+            node.version = version
+            node.config = KafkaConfig(**{config_property.BROKER_ID: self.idx(node)})
 
     @property
     def security_config(self):
