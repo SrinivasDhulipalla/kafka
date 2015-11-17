@@ -34,8 +34,6 @@ import collections
 
 Port = collections.namedtuple('Port', ['name', 'number', 'open'])
 
-Port = collections.namedtuple('Port', ['name', 'number', 'open'])
-
 class KafkaService(JmxMixin, Service):
 
     PERSISTENT_ROOT = "/mnt"
