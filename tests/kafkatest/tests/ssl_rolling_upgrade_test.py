@@ -43,16 +43,14 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.zk.start()
 
 
-    def create_producer_and_consumer(self, port):
-        self.kafka.client_port = port
-
+    def create_producer_and_consumer(self):
         self.producer = VerifiableProducer(
-        self.test_context, self.num_producers, self.kafka, self.topic,
-        throughput=self.producer_throughput)
+            self.test_context, self.num_producers, self.kafka, self.topic,
+            throughput=self.producer_throughput)
 
         self.consumer = ConsoleConsumer(
-        self.test_context, self.num_consumers, self.kafka, self.topic,
-        consumer_timeout_ms=30000, message_validator=is_int, new_consumer=True)
+            self.test_context, self.num_consumers, self.kafka, self.topic,
+            consumer_timeout_ms=30000, message_validator=is_int, new_consumer=True)
 
         self.consumer.group_id = "unique-test-group-" + str(random.random())
 
@@ -63,23 +61,24 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
 
         # Roll cluster to include inter broker security protocol.
         # Keep Plaintext enabled so plaintext nodes can communicate during the upgrade
-        self.kafka.force_both_protocols_open = True
+        self.kafka.open_port('PLAINTEXT')
+        self.kafka.open_port('SSL')
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
             self.kafka.start_node(node)
 
         # Roll cluster to disable PLAINTEXT port
-        self.kafka.force_both_protocols_open = False
+        self.kafka.close_port('PLAINTEXT')
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
             self.kafka.start_node(node)
 
 
     def add_ssl_port(self):
-        self.kafka.use_seperate_ports_per_protocol = True
-        self.kafka.force_both_protocols_open = True
         self.kafka.interbroker_security_protocol = "PLAINTEXT"
         self.kafka.security_protocol = "SSL"
+        self.kafka.open_port("PLAINTEXT")
+        self.kafka.open_port("SSL")
 
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
@@ -96,12 +95,13 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.kafka.security_protocol = "PLAINTEXT"
         self.kafka.start()
 
-        #Rolling upgrade to SSL ensuring the Plaintext consumer continues to run
-        self.create_producer_and_consumer(9092)
+        # Rolling upgrade to SSL ensuring the Plaintext consumer continues to run
+        self.create_producer_and_consumer()
         self.run_produce_consume_validate(self.add_ssl_port)
 
-        #Now a second port is opened using SSL make sure we can produce and consume to it
-        self.create_producer_and_consumer(9093)
+        # Now a second port is opened using SSL make sure we can produce and consume to it
+        self.kafka.security_protocol = "SSL"
+        self.create_producer_and_consumer()
         self.run_produce_consume_validate(lambda: time.sleep(1))
 
 
@@ -115,16 +115,12 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         """
 
         #Given we have a broker with an additional SSL enabled port
-        self.kafka.use_seperate_ports_per_protocol = True
         self.kafka.interbroker_security_protocol = "PLAINTEXT"
         self.kafka.security_protocol = "SSL"
         self.kafka.start()
 
         #Create an SSL Producer and Consumer
-        self.create_producer_and_consumer(9093)
+        self.create_producer_and_consumer()
 
         #Run, ensuring we can consume throughout the rolling upgrade
         self.run_produce_consume_validate(self.roll_in_interbroker_security_then_disable_plaintext)
-
-
-
