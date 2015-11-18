@@ -105,26 +105,26 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.run_produce_consume_validate(lambda: time.sleep(1))
 
 
-    # def test_rolling_upgrade_phase_two(self):
-    #     """
-    #     Start with a PLAINTEXT cluster with a second SSL port open (i.e. result of phase one).
-    #     Start an SSL enabled Producer and Consumer.
-    #     Rolling upgrade to add inter-broker SSL
-    #     Rolling upgrade again to disable PLAINTEXT
-    #     Ensure the producer and consumer ran throughout
-    #     """
-    #
-    #     #Given we have a broker with an additional SSL enabled port
-    #     self.kafka.use_seperate_ports_per_protocol = True
-    #     self.kafka.interbroker_security_protocol = "PLAINTEXT"
-    #     self.kafka.security_protocol = "SSL"
-    #     self.kafka.start()
-    #
-    #     #Create an SSL Producer and Consumer
-    #     self.create_producer_and_consumer(9093)
-    #
-    #     #Run, ensuring we can consume throughout the rolling upgrade
-    #     self.run_produce_consume_validate(self.roll_in_interbroker_security_then_disable_plaintext)
+    def test_rolling_upgrade_phase_two(self):
+        """
+        Start with a PLAINTEXT cluster with a second SSL port open (i.e. result of phase one).
+        Start an SSL enabled Producer and Consumer.
+        Rolling upgrade to add inter-broker SSL
+        Rolling upgrade again to disable PLAINTEXT
+        Ensure the producer and consumer ran throughout
+        """
+
+        #Given we have a broker with an additional SSL enabled port
+        self.kafka.use_seperate_ports_per_protocol = True
+        self.kafka.interbroker_security_protocol = "PLAINTEXT"
+        self.kafka.security_protocol = "SSL"
+        self.kafka.start()
+
+        #Create an SSL Producer and Consumer
+        self.create_producer_and_consumer(9093)
+
+        #Run, ensuring we can consume throughout the rolling upgrade
+        self.run_produce_consume_validate(self.roll_in_interbroker_security_then_disable_plaintext)
 
 
 
