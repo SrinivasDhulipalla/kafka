@@ -82,7 +82,6 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
 
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
-            time.sleep(20)
             self.kafka.start_node(node)
 
 
