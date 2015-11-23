@@ -65,13 +65,17 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.kafka.open_port('SSL')
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
+            time.sleep(5)
             self.kafka.start_node(node)
+            time.sleep(5)
 
         # Roll cluster to disable PLAINTEXT port
         self.kafka.close_port('PLAINTEXT')
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
+            time.sleep(5)
             self.kafka.start_node(node)
+            time.sleep(5)
 
 
     def add_ssl_port(self):
@@ -80,7 +84,9 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
 
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
+            time.sleep(5)
             self.kafka.start_node(node)
+            time.sleep(5)
 
 
     def test_rolling_upgrade_phase_one(self):
