@@ -65,7 +65,7 @@ class KafkaService(JmxMixin, Service):
         """
         Service.__init__(self, context, num_nodes)
         JmxMixin.__init__(self, num_nodes, jmx_object_names, jmx_attributes)
-        self.log_level = "DEBUG"
+        self.log_level = "INFO"
 
         self.zk = zk
         self.quota_config = quota_config
