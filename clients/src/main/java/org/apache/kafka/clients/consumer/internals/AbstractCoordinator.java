@@ -447,7 +447,12 @@ public abstract class AbstractCoordinator implements Closeable {
                     log.info("SyncGroup for group {} failed due to {}, will find new coordinator and rejoin", groupId, error);
                     coordinatorDead();
                     future.raise(error);
-                } else {
+                }
+                else if (error == Errors.REQUEST_TIMED_OUT) {
+                    log.info("SyncGroup for group {} timed out: {}", groupId, error);
+                    future.raise(error);
+                }
+                else {
                     future.raise(new KafkaException("Unexpected error from SyncGroup: " + error.exception().getMessage()));
                 }
             }
