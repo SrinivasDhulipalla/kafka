@@ -89,7 +89,7 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
             time.sleep(15)
 
 
-    def test_rolling_upgrade_phase_one(self):
+    def rolling_upgrade_phase_one(self):
         """
         Start with a PLAINTEXT cluster, add SSL on a second port, via a rolling upgrade, ensuring we could produce
         and consume throughout over PLAINTEXT. Finally check we can produce and consume via SSL.
@@ -109,7 +109,7 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.run_produce_consume_validate(lambda: time.sleep(1))
 
 
-    def test_rolling_upgrade_phase_two(self):
+    def rolling_upgrade_phase_two(self):
         """
         Start with a PLAINTEXT cluster with a second SSL port open (i.e. result of phase one).
         Start an SSL enabled Producer and Consumer.
@@ -128,3 +128,32 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
 
         #Run, ensuring we can consume throughout the rolling upgrade
         self.run_produce_consume_validate(self.roll_in_interbroker_security_then_disable_plaintext)
+
+
+    def test1a(self):
+        self.rolling_upgrade_phase_one()
+    def test1b(self):
+        self.rolling_upgrade_phase_two()
+
+    def test2a(self):
+        self.rolling_upgrade_phase_one()
+    def test2b(self):
+        self.rolling_upgrade_phase_two()
+
+    def test3a(self):
+        self.rolling_upgrade_phase_one()
+    def test3b(self):
+        self.rolling_upgrade_phase_two()
+
+    def test4a(self):
+        self.rolling_upgrade_phase_one()
+    def test4b(self):
+        self.rolling_upgrade_phase_two()
+
+    def test5a(self):
+        self.rolling_upgrade_phase_one()
+    def test5b(self):
+        self.rolling_upgrade_phase_two()
+
+
+
