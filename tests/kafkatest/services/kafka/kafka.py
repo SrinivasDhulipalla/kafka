@@ -65,7 +65,7 @@ class KafkaService(JmxMixin, Service):
         """
         Service.__init__(self, context, num_nodes)
         JmxMixin.__init__(self, num_nodes, jmx_object_names, jmx_attributes)
-        self.log_level = "DEBUG"
+        self.log_level = "INFO"
 
         self.zk = zk
         self.quota_config = quota_config
@@ -74,6 +74,7 @@ class KafkaService(JmxMixin, Service):
         self.interbroker_security_protocol = interbroker_security_protocol
         self.sasl_mechanism = sasl_mechanism
         self.topics = topics
+        self.mini_kdc_running=False
 
         self.port_mappings = {
             'PLAINTEXT': Port('PLAINTEXT', 9092, False),
@@ -96,15 +97,23 @@ class KafkaService(JmxMixin, Service):
     def close_port(self, protocol):
         self.port_mappings[protocol] = self.port_mappings[protocol]._replace(open=False)
 
+
+    def start_minikdc(self):
+        if not self.mini_kdc_running:
+            self.logger.warn("starting minikdc")
+            if self.security_config.has_sasl_kerberos:
+                self.minikdc = MiniKdc(self.context, self.nodes)
+                self.minikdc.start()
+                self.mini_kdc_running = True
+            else:
+                self.minikdc = None
+
+
     def start(self):
         self.open_port(self.security_protocol)
         self.open_port(self.interbroker_security_protocol)
 
-        if self.security_config.has_sasl_kerberos:
-            self.minikdc = MiniKdc(self.context, self.nodes)
-            self.minikdc.start()
-        else:
-            self.minikdc = None
+        self.start_minikdc()
         Service.start(self)
 
         # Create topics if necessary
@@ -211,11 +220,39 @@ class KafkaService(JmxMixin, Service):
 
         If the node is not specified, run the command from self.nodes[0]
         """
+
         if node is None:
             node = self.nodes[0]
+
+        if self.zk_sasl_enabled:
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --topic=%(topic)s --operation=Read --operation=Write --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                'zk_connect': self.zk.connect_setting(),
+                'topic': topic_cfg.get("topic")
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --group=my-group --operation=Read --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                'zk_connect': self.zk.connect_setting()
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --cluster --operation=Create --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                'zk_connect': self.zk.connect_setting()
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+
+
         self.logger.info("Creating topic %s with settings %s", topic_cfg["topic"], topic_cfg)
 
-        cmd = "/opt/%s/bin/kafka-topics.sh " % kafka_dir(node)
+        cmd = "export KAFKA_OPTS=\"-Djava.security.auth.login.config=/mnt/security/jaas.conf  -Djava.security.krb5.conf=/mnt/security/krb5.conf\"; " \
+              "/opt/%s/bin/kafka-topics.sh " % kafka_dir(node)
         cmd += "--zookeeper %(zk_connect)s --create --topic %(topic)s --partitions %(partitions)d --replication-factor %(replication)d" % {
                 'zk_connect': self.zk.connect_setting(),
                 'topic': topic_cfg.get("topic"),
@@ -228,6 +265,8 @@ class KafkaService(JmxMixin, Service):
                 cmd += " --config %s=%s" % (config_name, str(config_value))
 
         self.logger.info("Running topic creation command...\n%s" % cmd)
+
+        self.logger.warn(cmd)
         node.account.ssh(cmd)
 
         time.sleep(1)

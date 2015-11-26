@@ -20,7 +20,7 @@ from kafkatest.services.kafka.directory import kafka_dir
 
 import subprocess
 import time
-
+from kafkatest.services.security.security_config import SecurityConfig
 
 class ZookeeperService(Service):
 
@@ -39,8 +39,16 @@ class ZookeeperService(Service):
         """
         super(ZookeeperService, self).__init__(context, num_nodes)
 
+    @property
+    def security_config(self):
+        return SecurityConfig("SASL_SSL", "SASL_SSL", sasl_mechanism=SecurityConfig.SASL_MECHANISM_GSSAPI)
+
     def start_node(self, node):
+        self.security_config.clean_node(node)
         idx = self.idx(node)
+
+        self.security_config.setup_node(node)
+
         self.logger.info("Starting ZK node %d on %s", idx, node.account.hostname)
 
         node.account.ssh("mkdir -p /mnt/zookeeper")
@@ -51,8 +59,10 @@ class ZookeeperService(Service):
         self.logger.info(config_file)
         node.account.create_file("/mnt/zookeeper.properties", config_file)
 
-        start_cmd = "/opt/%s/bin/zookeeper-server-start.sh " % kafka_dir(node)
+        start_cmd = "export KAFKA_OPTS=\"-Djava.security.auth.login.config=%s -Dsun.security.krb5.debug=true -Dzookeeper.authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider -DauthProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider -DjaasLoginRenew=3600000 -Djava.security.krb5.conf=%s \"; " % (self.security_config.JAAS_CONF_PATH, self.security_config.KRB5CONF_PATH)
+        start_cmd += " /opt/%s/bin/zookeeper-server-start.sh " % kafka_dir(node)
         start_cmd += "/mnt/zookeeper.properties 1>> %(path)s 2>> %(path)s &" % self.logs["zk_log"]
+        self.logger.warn("Running zk command: "+start_cmd)
         node.account.ssh(start_cmd)
 
         time.sleep(5)  # give it some time to start
@@ -80,6 +90,7 @@ class ZookeeperService(Service):
                              (self.__class__.__name__, node.account))
         node.account.kill_process("zookeeper", clean_shutdown=False, allow_fail=True)
         node.account.ssh("rm -rf /mnt/zookeeper /mnt/zookeeper.properties /mnt/zk.log", allow_fail=False)
+        #self.security_config.clean_node(node) #moved above so delete there when renable here
 
     def connect_setting(self):
         return ','.join([node.account.hostname + ':2181' for node in self.nodes])

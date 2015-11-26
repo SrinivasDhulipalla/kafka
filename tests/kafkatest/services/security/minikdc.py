@@ -62,8 +62,9 @@ class MiniKdc(Service):
         self.logger.info(props_file)
 
         kafka_principals = ' '.join(['kafka/' + kafka_node.account.hostname for kafka_node in self.kafka_nodes])
-        principals = 'client ' + kafka_principals
-        self.logger.info("Starting MiniKdc with principals " + principals)
+        principals = 'client ' + kafka_principals + ' zookeeper/worker1 zkclient'
+
+        self.logger.warn("Starting MiniKdc with principals " + principals)
 
         lib_dir = "/opt/%s/core/build/dependant-testlibs" % kafka_dir(node)
         kdc_jars = node.account.ssh_capture("ls " + lib_dir)
@@ -76,6 +77,7 @@ class MiniKdc(Service):
 
         node.account.scp_from(MiniKdc.KEYTAB_FILE, MiniKdc.LOCAL_KEYTAB_FILE)
         node.account.scp_from(MiniKdc.KRB5CONF_FILE, MiniKdc.LOCAL_KRB5CONF_FILE)
+        self.logger.warn("copied keytab file to "+ MiniKdc.LOCAL_KEYTAB_FILE)
 
         #KDC is set to bind openly (via 0.0.0.0). Change krb5.conf to hold the specific KDC address
         self.replace_in_file(MiniKdc.LOCAL_KRB5CONF_FILE, '0.0.0.0', node.account.hostname)

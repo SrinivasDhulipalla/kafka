@@ -44,7 +44,7 @@ class VerifiableProducer(BackgroundThreadService):
 
     def __init__(self, context, num_nodes, kafka, topic, max_messages=-1, throughput=100000, version=TRUNK):
         super(VerifiableProducer, self).__init__(context, num_nodes)
-        self.log_level = "TRACE"
+        self.log_level = "DEBUG"
 
         self.kafka = kafka
         self.topic = topic
