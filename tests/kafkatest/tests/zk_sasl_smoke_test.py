@@ -44,13 +44,10 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
             "replication-factor": 3,
             "min.insync.replicas": 2}})
 
-        self.kafka.zk_sasl_enabled=True
         self.kafka.security_protocol = "SASL_SSL"
         self.kafka.interbroker_security_protocol = "SASL_SSL"
         self.kafka.open_port("SASL_SSL")
 
-        self.kafka.start_minikdc()
-        self.zk.start()
 
     def create_producer_and_consumer(self):
         self.producer = VerifiableProducer(
@@ -64,19 +61,17 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.consumer.group_id = "group"
 
     def do_stuff(self):
-        self.logger.warn("sleeping...")
-        time.sleep(1)
+        self.kafka.zk_sasl_enabled = True
+        self.zk.stop()
+        self.zk.start()
+
 
     def test_zk_hack(self):
-        """
-        Start with a PLAINTEXT cluster with a second SSL port open (i.e. result of phase one).
-        Start an Producer and Consumer via the SECURED port
-        Rolling upgrade to add inter-broker be the secure protocol
-        Rolling upgrade again to disable PLAINTEXT
-        Ensure the producer and consumer ran throughout
-        """
-        #Given we have a broker that has both secure and PLAINTEXT ports open
 
+        self.kafka.zk_sasl_enabled = False
+        self.kafka.start_minikdc()
+        self.zk.start()
+        #kafka has the correct sasl options hacked in
         self.kafka.start()
 
         #Create Secured Producer and Consumer
