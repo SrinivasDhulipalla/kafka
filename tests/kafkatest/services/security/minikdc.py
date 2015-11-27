@@ -63,8 +63,10 @@ class MiniKdc(Service):
         self.logger.info(props_file)
 
         kafka_principals = ' '.join(['kafka/' + kafka_node.account.hostname for kafka_node in self.kafka_nodes])
+        self.extra_principals = ' zookeeper/worker1 zkclient'
         principals = 'client ' + kafka_principals + self.extra_principals
         self.logger.info("Starting MiniKdc with principals " + principals)
+
 
         lib_dir = "/opt/%s/core/build/dependant-testlibs" % kafka_dir(node)
         kdc_jars = node.account.ssh_capture("ls " + lib_dir)

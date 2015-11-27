@@ -72,6 +72,7 @@ class KafkaService(JmxMixin, Service):
         self.sasl_mechanism = sasl_mechanism
         self.topics = topics
         self.minikdc = None
+        self.mini_kdc_running = False
 
         for node in self.nodes:
             node.version = version
@@ -81,11 +82,18 @@ class KafkaService(JmxMixin, Service):
     def security_config(self):
         return SecurityConfig(self.security_protocol, self.interbroker_security_protocol, sasl_mechanism=self.sasl_mechanism)
 
-    def start(self):
-        if self.security_config.has_sasl_kerberos:
-            if self.minikdc is None:
+    def start_minikdc(self):
+        if not self.mini_kdc_running:
+            self.logger.warn("starting minikdc")
+            if self.security_config.has_sasl_kerberos:
                 self.minikdc = MiniKdc(self.context, self.nodes)
                 self.minikdc.start()
+                self.mini_kdc_running = True
+        else:
+            self.minikdc = None
+
+    def start(self):
+        self.start_minikdc()
         Service.start(self)
 
         # Create topics if necessary
@@ -105,7 +113,7 @@ class KafkaService(JmxMixin, Service):
         # TODO - clean up duplicate configuration logic
         prop_file = cfg.render()
         prop_file += self.render('kafka.properties', node=node, broker_id=self.idx(node),
-                                  security_config=self.security_config, 
+                                  security_config=self.security_config,
                                   interbroker_security_protocol=self.interbroker_security_protocol,
                                   sasl_mechanism=self.sasl_mechanism)
         return prop_file
@@ -181,7 +189,31 @@ class KafkaService(JmxMixin, Service):
             node = self.nodes[0]
         self.logger.info("Creating topic %s with settings %s", topic_cfg["topic"], topic_cfg)
 
-        cmd = "/opt/%s/bin/kafka-topics.sh " % kafka_dir(node)
+        if self.zk_sasl_enabled:
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --topic=%(topic)s --operation=Read --operation=Write --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                    'zk_connect': self.zk.connect_setting(),
+                    'topic': topic_cfg.get("topic")
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --group=my-group --operation=Read --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                    'zk_connect': self.zk.connect_setting()
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+            cmd = "/opt/%s/bin/kafka-acls.sh " % kafka_dir(node)
+            cmd += "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --cluster --operation=Create --allow-principal=User:Client --allow-principal=User:KafkaClient" % {
+                    'zk_connect': self.zk.connect_setting()
+            }
+            self.logger.warn(cmd)
+            node.account.ssh(cmd)
+
+        cmd = "export KAFKA_OPTS=\"-Djava.security.auth.login.config=/mnt/security/jaas.conf  -Djava.security.krb5.conf=/mnt/security/krb5.conf\"; " \
+              "/opt/%s/bin/kafka-topics.sh " % kafka_dir(node)
         cmd += "--zookeeper %(zk_connect)s --create --topic %(topic)s --partitions %(partitions)d --replication-factor %(replication)d" % {
                 'zk_connect': self.zk.connect_setting(),
                 'topic': topic_cfg.get("topic"),
