@@ -44,7 +44,7 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
             "replication-factor": 3,
             "min.insync.replicas": 2}})
 
-        self.kafka.zk_sasl_enabled=TrueFetcher
+        self.kafka.zk_sasl_enabled=True
         self.kafka.security_protocol = "SASL_SSL"
         self.kafka.interbroker_security_protocol = "SASL_SSL"
         self.kafka.open_port("SASL_SSL")
