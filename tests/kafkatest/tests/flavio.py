@@ -60,14 +60,13 @@ class TestRollingSSLUpgrade(ProduceConsumeValidateTest):
         self.consumer.group_id = "group"
 
     def do_stuff(self):
-        self.kafka.zk_sasl_enabled = True
-        self.zk.stop()
-        self.zk.start()
+        #add code here to bounce ZK etc
+        time.sleep(1)
 
 
     def test_zk_hack(self):
 
-        self.kafka.zk_sasl_enabled = False
+        self.kafka.zk_sasl_enabled = True
         self.kafka.start_minikdc()
         self.zk.start()
         #kafka has the correct sasl options hacked in
