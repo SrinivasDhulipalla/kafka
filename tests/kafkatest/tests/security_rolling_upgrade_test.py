@@ -61,9 +61,7 @@ class TestSecurityRollingUpgrade(ProduceConsumeValidateTest):
         #Sleeps reduce the intermittent failures reported in KAFKA-2891. Should be removed once resolved.
         for node in self.kafka.nodes:
             self.kafka.stop_node(node)
-            time.sleep(10)
             self.kafka.start_node(node)
-            time.sleep(10)
 
     def roll_in_secured_settings(self, upgrade_protocol):
         self.kafka.interbroker_security_protocol = upgrade_protocol
