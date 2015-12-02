@@ -53,7 +53,7 @@ class TestSecurityRollingUpgrade(ProduceConsumeValidateTest):
 
         self.consumer = ConsoleConsumer(
             self.test_context, self.num_consumers, self.kafka, self.topic,
-            consumer_timeout_ms=30000, message_validator=is_int, new_consumer=True)
+            consumer_timeout_ms=45000, message_validator=is_int, new_consumer=True)
 
         self.consumer.group_id = "unique-test-group-" + str(random.random())
 
@@ -98,29 +98,3 @@ class TestSecurityRollingUpgrade(ProduceConsumeValidateTest):
 
         # Rolling upgrade, opening a secure protocol, ensuring the Plaintext producer/consumer continues to run
         self.run_produce_consume_validate(self.open_secured_port, upgrade_protocol)
-
-        # Now we can produce and consume via the secured port
-        self.kafka.security_protocol = upgrade_protocol
-        self.create_producer_and_consumer()
-        self.run_produce_consume_validate(lambda: time.sleep(1))
-
-    @matrix(upgrade_protocol=["SSL", "SASL_PLAINTEXT", "SASL_SSL"], iteration=range(0, 20))
-    def test_rolling_upgrade_phase_two(self, upgrade_protocol, iteration):
-        """
-        Start with a PLAINTEXT cluster with a second Secured port open (i.e. result of phase one).
-        Start an Producer and Consumer via the SECURED port
-        Rolling upgrade to add inter-broker be the secure protocol
-        Rolling upgrade again to disable PLAINTEXT
-        Ensure the producer and consumer ran throughout
-        """
-        self.logger.warn("This is test iteration "+str(iteration))
-        #Given we have a broker that has both secure and PLAINTEXT ports open
-        self.kafka.security_protocol = upgrade_protocol
-        self.kafka.interbroker_security_protocol = "PLAINTEXT"
-        self.kafka.start()
-
-        #Create Secured Producer and Consumer
-        self.create_producer_and_consumer()
-
-        #Roll in the security protocol. Disable Plaintext. Ensure we can produce and Consume throughout
-        self.run_produce_consume_validate(self.roll_in_secured_settings, upgrade_protocol)

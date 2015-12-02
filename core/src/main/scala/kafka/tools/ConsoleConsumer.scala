@@ -19,7 +19,7 @@ package kafka.tools
 
 import java.io.PrintStream
 import java.util.concurrent.CountDownLatch
-import java.util.{Properties, Random}
+import java.util.{Date, Properties, Random}
 import joptsimple._
 import kafka.common.StreamEndException
 import kafka.consumer._
@@ -103,6 +103,7 @@ object ConsoleConsumer extends Logging {
     })
   }
 
+
   def process(maxMessages: Integer, formatter: MessageFormatter, consumer: BaseConsumer, skipMessageOnError: Boolean) {
     while (messageCount < maxMessages || maxMessages == -1) {
       messageCount += 1
@@ -123,6 +124,9 @@ object ConsoleConsumer extends Logging {
           return
       }
       try {
+        val value = new String(msg.value)
+        val message: String = s"[Offset:${msg.offset}, Partition:${msg.partition} Value:${value}]"
+        logger.info(message)
         formatter.writeTo(msg.key, msg.value, System.out)
       } catch {
         case e: Throwable =>
