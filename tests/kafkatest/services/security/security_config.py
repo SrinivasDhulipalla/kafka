@@ -187,7 +187,7 @@ class SecurityConfig(TemplateRenderer):
         return "--authorizer-properties zookeeper.connect=%(zk_connect)s --add --cluster --operation=ClusterAction --allow-principal=User:kafka " % {
                     'zk_connect': zk_connect
                 }
-    #this is a test
+    #this is a test2
 
 
     #
