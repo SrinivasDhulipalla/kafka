@@ -7,39 +7,31 @@ import scala.collection._
 
 
 class MovesOptimisedRebalancePolicy extends RabalancePolicy {
-  override def rebalancePartitions(brokers: Seq[BrokerMetadata], currentAssignment: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
-    val assignment = collection.mutable.Map(currentAssignment.toSeq: _*) //todo deep copy
 
-    //Sum replica counts for each broker
-    val brokerToReplicaCounts: mutable.LinkedHashMap[Int, Int] = mutable.LinkedHashMap(
-      assignment.values
-        .flatMap(x => x)
-        .groupBy(x => x)
-        .map { case (x, y) => (x, y.size) }
-        .toSeq
-        .sortBy(_._2)
-        : _*
-    )
-    var mostLoadedBrokers = brokerToReplicaCounts.keys
-    val emptyBrokers = brokers.map(_.id).filterNot(mostLoadedBrokers.toSet)
-    mostLoadedBrokers =  emptyBrokers.toSeq ++ mostLoadedBrokers.toSeq
+  override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
+    val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy
+    val replicaFilter = new ReplicaFilter(brokers, partitions)
 
-    println(currentAssignment)
-    println("brokerToReplicaCounts "+brokerToReplicaCounts)
-    println("most loaded "+brokerToReplicaCounts)
-    println("most loaded with empty brokers "+mostLoadedBrokers)
+
+    def racksFor(p: TopicAndPartition) = {
+      brokers.filter(broker =>
+        partitions.get(p).get
+          .contains(broker.id)
+      ).map(_.rack.get)
+    }
 
     //Ensure partitions are fully replicated
-    for (partition <- assignment.keys) {
-      def replicationFactor = {replicationFactors.get(partition.topic).get}
-      def existingReplicas = {assignment.get(partition).get}
+    for (partition <- partitions.keys) {
+      def replicationFactor = replicationFactors.get(partition.topic).get
+      def replicasForP = partitions.get(partition).get
 
-      while (existingReplicas.size < replicationFactor) {
-        val leastLoaded = mostLoadedBrokers.filterNot(existingReplicas.toSet).toSeq(0)
-        assignment.put(partition, existingReplicas :+ leastLoaded)
+      while (replicasForP.size < replicationFactor) {
+        val leastLoadedBrokers = replicaFilter.leastLoadedBrokersDownranking(racksFor(partition))
+        val leastLoadedButNoExistingReplica = leastLoadedBrokers.filterNot(replicasForP.toSet).last
+        partitions.put(partition, replicasForP :+ leastLoadedButNoExistingReplica)
       }
     }
 
-    assignment
+    partitions
   }
 }

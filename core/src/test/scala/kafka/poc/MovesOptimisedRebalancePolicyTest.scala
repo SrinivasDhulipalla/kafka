@@ -1,38 +1,13 @@
 package kafka.poc
 
-import java.util
-
-import kafka.admin.BrokerMetadata
-import kafka.common.TopicAndPartition
-import org.junit.Test
+import kafka.poc.Helper._
 import org.junit.Assert._
-
-import scala.collection.Seq
-import scala.collection.immutable.IndexedSeq
-
+import org.junit.Test
 class MovesOptimisedRebalancePolicyTest {
 
-  val temp = Map(
-    p(0) -> List(100, 101, 102),
-    p(1) -> List(100, 101, 102),
-    p(2) -> List(100, 101, 102),
-    p(3) -> List(100, 101, 102),
-    p(4) -> List(100, 101, 102),
-    p(5) -> List(100, 101, 102),
-    p(6) -> List(100, 101, 102),
-    p(7) -> List(100, 101, 102),
-    p(8) -> List(100, 101, 102),
-    p(9) -> List(100, 101, 102))
-
-  def p(i: Int) = {
-    new TopicAndPartition("my-topic", i)
-  }
-
-  def bk(id: Int, rack: String) = {
-    new BrokerMetadata(id, Option(rack))
-  }
-
-
+  /**
+    * Step 1: Ensure partitions are fully replicated
+    */
   @Test
   def shouldFullyReplicateUnderreplicatedPartitions(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -49,8 +24,6 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(4, reassigned.values.last.size)
     assertEquals(4, reassigned.values.last.distinct.size)
   }
-
-  //Start here tomorrow. Looks like something is wrong with ordering or least loaded
 
   @Test
   def shouldPickLeastLoadedBrokerWhenReReplicatingUnderreplicatedPartitions(): Unit = {
@@ -74,6 +47,23 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
+  def shouldConsiderRackConstraingWhenPickingLeastLoadedBrokerWhenReReplicatingUnderreplicatedPartitions(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack1"))
+    val underreplicated = Map(p(0) -> List(100))
+    val topics = Map("my-topic" -> 2)
+
+    //When we create a new replica for the under-replicated partition
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+
+    //Then it should be created on the broker on a different rack (102)
+    assertEquals(List(100, 102), reassigned.get(p(0)).get)
+  }
+
+
+  @Test
   def shouldCreateMultipleReplicasPerPartitionIfNecessary(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
@@ -89,6 +79,11 @@ class MovesOptimisedRebalancePolicyTest {
 
     //p1 should have two new replicas on the two empty brokers, 103, 104
     assertEquals(List(100, 103, 104), reassigned.get(p(1)).get)
+  }
+
+  @Test
+  def shouldNotReReplicateIfNoBrokerAvailableWithoutExistingReplica(): Unit = {
+
   }
 
 
