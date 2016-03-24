@@ -43,7 +43,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   //Summarise the topology as BrokerMetadata -> ReplicaCount
-  private val brokerReplicaCounts = LinkedHashMap(
+  val brokerReplicaCounts = LinkedHashMap(
     brokerTopologyByMostLoaded
       .map { case (x, y) => (x, y.size) }
       .toSeq
@@ -52,11 +52,13 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   )
 
   //Define rackFairValue: floor(replica-count / rack-count) replicas
-  private val rackFairValue = Math.floor(
-    brokerReplicaCounts.values.sum / brokerReplicaCounts
-      .keys
-      .map(_.rack)
-      .toSeq.distinct.size)
+  val rackFairValue = Math.floor(
+    brokerReplicaCounts.values.sum /
+      brokerReplicaCounts
+        .keys
+        .map(_.rack)
+        .toSeq.distinct.size
+  )
 
 
   def leastLoadedBrokers(): Seq[Int] = {
@@ -66,7 +68,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def leastLoadedBrokers(rack: String): Seq[Int] = {
     leastLoadedBrokers().filter(brokerId => brokers.find(_.id == brokerId).get.rack == rack)
   }
-
 
   def mostLoadedBrokers(): Iterable[Int] = {
     brokerTopologyByMostLoaded.keySet.toSeq.map(_.id)
@@ -98,7 +99,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     ).map(_.rack.get)
   }
 
-
   def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     brokerReplicaCounts
@@ -113,7 +113,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokerReplicaCounts.filter(_._2 < rackFairValue).keys.map(_.rack.get).toSeq.distinct
   }
 
-
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
@@ -123,7 +122,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def replicaExists(replica: Any, rack: String): Boolean = {
     brokerTopologyByMostLoaded.filter(_._1.rack == rack).values.size > 0
   }
-
 }
 
 
