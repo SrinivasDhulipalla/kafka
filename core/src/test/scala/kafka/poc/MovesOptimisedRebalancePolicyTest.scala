@@ -92,21 +92,21 @@ class MovesOptimisedRebalancePolicyTest {
     * Step 2.1: Optimise for replica fairness across racks
     */
 
-//  @Test
-//  def shouldOptimiseForEvenReplicaPlacementAcrossRacks(): Unit = {
-//    val policy = new MovesOptimisedRebalancePolicy()
-//
-//    //Given
-//    val brokers = List(bk(100, "rack1"), bk(102, "rack2"))
-//    val assignment = Map(
-//      p(0) -> List(100),
-//      p(1) -> List(100))
-//    val topics = Map("my-topic" -> 1)
-//
-//    //When
-//    val reassigned = policy.rebalancePartitions(brokers, assignment, topics)
-//
-//    //Then should be one per rack
-//    assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
-//  }
+  @Test
+  def shouldOptimiseForEvenReplicaPlacementAcrossRacks(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100),
+      p(1) -> List(100))
+    val topics = Map("my-topic" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+
+    //Then should be one per rack
+    assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
+  }
 }
