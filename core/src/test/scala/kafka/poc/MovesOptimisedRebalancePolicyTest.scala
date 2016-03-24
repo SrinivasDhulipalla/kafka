@@ -3,6 +3,7 @@ package kafka.poc
 import kafka.poc.Helper._
 import org.junit.Assert._
 import org.junit.Test
+
 class MovesOptimisedRebalancePolicyTest {
 
   /**
@@ -83,23 +84,29 @@ class MovesOptimisedRebalancePolicyTest {
 
   @Test
   def shouldNotReReplicateIfNoBrokerAvailableWithoutExistingReplica(): Unit = {
-
+    //TODO
   }
 
 
-  @Test
-  def todo(): Unit = {
-    val policy = new MovesOptimisedRebalancePolicy()
+  /**
+    * Step 2.1: Optimise for replica fairness across racks
+    */
 
-    //Given
-    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
-    val assignment = Map(p(0) -> List(100, 101, 100, 101))
-    val topics = Map("my-topic" -> 4)
-
-    //When
-    val reassigned = policy.rebalancePartitions(brokers, assignment, topics)
-
-    assertEquals(reassigned.values.iterator.next(), List(100, 101, 102, 103))
-
-  }
+//  @Test
+//  def shouldOptimiseForEvenReplicaPlacementAcrossRacks(): Unit = {
+//    val policy = new MovesOptimisedRebalancePolicy()
+//
+//    //Given
+//    val brokers = List(bk(100, "rack1"), bk(102, "rack2"))
+//    val assignment = Map(
+//      p(0) -> List(100),
+//      p(1) -> List(100))
+//    val topics = Map("my-topic" -> 1)
+//
+//    //When
+//    val reassigned = policy.rebalancePartitions(brokers, assignment, topics)
+//
+//    //Then should be one per rack
+//    assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
+//  }
 }

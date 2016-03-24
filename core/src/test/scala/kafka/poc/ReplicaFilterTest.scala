@@ -63,4 +63,23 @@ class ReplicaFilterTest {
     //Then least loaded would be 103, 102, 101, 100 but with down-ranking rack1 should get:
     assertEquals(Seq(101, 100, 103, 102), leastLoaded)
   }
+
+//  @Test
+//  def shouldCalculateRackFairValue(): Unit ={
+//    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+//
+//    assertEquals(0, new ReplicaFilter(brokers, Map(
+//      p(0) -> List(103))).rackFairValue.toInt)
+//
+//    assertEquals(0, new ReplicaFilter(brokers, Map(
+//      p(0) -> List(103, 102))).rackFairValue.toInt)
+//
+//    assertEquals(0, new ReplicaFilter(brokers, Map(
+//      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
+//
+//    assertEquals(1, new ReplicaFilter(brokers, Map(
+//      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
+//
+//  }
+
 }
