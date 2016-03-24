@@ -28,6 +28,46 @@ class ReplicaFilterTest {
   }
 
   @Test
+  def shouldSummariseReplicaCounts(): Unit = {
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100))
+
+    val counts = new ReplicaFilter(brokers, partitions).brokerReplicaCounts
+
+    val expected = Map(
+      new BrokerMetadata(101, Option("rack2")) -> 1,
+      new BrokerMetadata(100, Option("rack1")) -> 2
+    )
+
+    assertEquals(expected.toString(), counts.toMap.toString()) //TODO how do a do deep comparision without toString?
+  }
+
+
+  @Test
+  def shouldCalculateRackFairValue(): Unit ={
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+
+    //1 replica, 2 racks
+    assertEquals(0, new ReplicaFilter(brokers, Map(
+      p(0) -> List(103))).rackFairValue.toInt)
+
+    //2 replicas, 2 racks
+    assertEquals(1, new ReplicaFilter(brokers, Map(
+      p(0) -> List(103, 102))).rackFairValue.toInt)
+
+    //3 replicas, 2 racks
+    assertEquals(1, new ReplicaFilter(brokers, Map(
+      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
+
+    //4 replicas, 2 racks
+    assertEquals(2, new ReplicaFilter(brokers, Map(
+      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
+
+  }
+
+  @Test
   def shouldOrderBrokersByReplicaLoad(): Unit = {
     //Given three brokers with increasing load: 102,101,100
     val brokers = (100 to 102).map(bk(_, "rack1"))
@@ -82,22 +122,5 @@ class ReplicaFilterTest {
     assertEquals(Seq(101, 100, 103, 102), leastLoaded)
   }
 
-  //  @Test
-  //  def shouldCalculateRackFairValue(): Unit ={
-  //    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
-  //
-  //    assertEquals(0, new ReplicaFilter(brokers, Map(
-  //      p(0) -> List(103))).rackFairValue.toInt)
-  //
-  //    assertEquals(0, new ReplicaFilter(brokers, Map(
-  //      p(0) -> List(103, 102))).rackFairValue.toInt)
-  //
-  //    assertEquals(0, new ReplicaFilter(brokers, Map(
-  //      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
-  //
-  //    assertEquals(1, new ReplicaFilter(brokers, Map(
-  //      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
-  //
-  //  }
 
 }
