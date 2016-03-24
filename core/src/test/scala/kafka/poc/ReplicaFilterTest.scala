@@ -1,6 +1,7 @@
 package kafka.poc
 
 
+import kafka.admin.BrokerMetadata
 import kafka.poc.Helper._
 import org.junit.Assert._
 import org.junit.Test
@@ -8,6 +9,23 @@ import org.junit.Test
 import scala.collection.Seq
 
 class ReplicaFilterTest {
+
+  @Test
+  def shouldCreateSimpleClusterTopologyOfBrokersToReplicas(): Unit = {
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100))
+
+    val topology = new ReplicaFilter(brokers, partitions).brokerTopologyByMostLoaded
+
+    val expected = Map(
+      new BrokerMetadata(101, Option("rack2")) -> Seq(new Replica(topic, 0, 101)),
+      new BrokerMetadata(100, Option("rack1")) -> Seq( new Replica(topic, 0, 100),new Replica(topic, 1, 100))
+    )
+
+    assertEquals(expected.toString(), topology.toMap.toString()) //TODO how do a do deep comparision without toString?
+  }
 
   @Test
   def shouldOrderBrokersByReplicaLoad(): Unit = {
@@ -64,22 +82,22 @@ class ReplicaFilterTest {
     assertEquals(Seq(101, 100, 103, 102), leastLoaded)
   }
 
-//  @Test
-//  def shouldCalculateRackFairValue(): Unit ={
-//    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
-//
-//    assertEquals(0, new ReplicaFilter(brokers, Map(
-//      p(0) -> List(103))).rackFairValue.toInt)
-//
-//    assertEquals(0, new ReplicaFilter(brokers, Map(
-//      p(0) -> List(103, 102))).rackFairValue.toInt)
-//
-//    assertEquals(0, new ReplicaFilter(brokers, Map(
-//      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
-//
-//    assertEquals(1, new ReplicaFilter(brokers, Map(
-//      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
-//
-//  }
+  //  @Test
+  //  def shouldCalculateRackFairValue(): Unit ={
+  //    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+  //
+  //    assertEquals(0, new ReplicaFilter(brokers, Map(
+  //      p(0) -> List(103))).rackFairValue.toInt)
+  //
+  //    assertEquals(0, new ReplicaFilter(brokers, Map(
+  //      p(0) -> List(103, 102))).rackFairValue.toInt)
+  //
+  //    assertEquals(0, new ReplicaFilter(brokers, Map(
+  //      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
+  //
+  //    assertEquals(1, new ReplicaFilter(brokers, Map(
+  //      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
+  //
+  //  }
 
 }
