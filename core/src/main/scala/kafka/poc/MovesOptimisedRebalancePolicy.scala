@@ -28,14 +28,22 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     for(aboveParRack <- replicaFilter.aboveParRacks()){
       for(replicaToMove <- replicaFilter.weightedReplicasFor(aboveParRack)){
           for(belowParRack <-  replicaFilter.belowParRacks){
-            for (broker <- replicaFilter.leastLoadedBrokers(belowParRack)) {
-              val partition = replicaToMove.topicAndPartition
-              var replicas = partitions.get(partition).get
-              //remove the old broker from the replicas list
-              replicas = replicas.filter(_ == replicaToMove.broker)
-              //add the new broker to the replicas list
-              replicas = replicas :+ broker
-              partitions.put(partition, replicas)
+            for (belowParBroker <- replicaFilter.leastLoadedBrokers(belowParRack)) {
+
+              //only continue if load constraint is still violated
+              if(replicaFilter.belowParRacks.contains(belowParRack)) {
+
+
+                val partition = replicaToMove.topicAndPartition
+                var replicas = partitions.get(partition).get
+                //remove the old broker from the replicas list
+                val brokerFrom: Int = replicaToMove.broker
+                val brokerTo: Int = belowParBroker
+                replicas = replicas.filter(_ != brokerFrom)
+                //add the new broker to the replicas list
+                replicas = replicas :+ brokerTo
+                partitions.put(partition, replicas)
+              }
             }
           }
       }

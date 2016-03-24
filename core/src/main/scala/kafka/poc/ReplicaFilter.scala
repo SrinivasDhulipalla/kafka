@@ -8,7 +8,8 @@ import scala.collection.mutable.LinkedHashMap
 
 
 class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) {
-  val brokerTopologyByMostLoaded = {
+  val partitionsCopy = partitions
+  def brokerTopologyByMostLoaded = {
 
     //Group replicas by broker, sorting by the number of replicas (most loaded broker first)
     //... enriching with Replica & BrokerMetadata classes on the way
@@ -43,7 +44,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   //Summarise the topology as BrokerMetadata -> ReplicaCount
-  val brokerReplicaCounts = LinkedHashMap(
+  def brokerReplicaCounts() = LinkedHashMap(
     brokerTopologyByMostLoaded
       .map { case (x, y) => (x, y.size) }
       .toSeq
@@ -52,7 +53,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   )
 
   //Define rackFairValue: floor(replica-count / rack-count) replicas
-  val rackFairValue = Math.floor(
+  def rackFairValue() = Math.floor(
     brokerReplicaCounts.values.sum /
       brokerReplicaCounts
         .keys
@@ -66,7 +67,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def leastLoadedBrokers(rack: String): Seq[Int] = {
-    leastLoadedBrokers().filter(brokerId => brokers.find(_.id == brokerId).get.rack == rack)
+    leastLoadedBrokers().filter(brokerId => brokers.find(_.id == brokerId).get.rack.get == rack)
   }
 
   def mostLoadedBrokers(): Iterable[Int] = {
@@ -116,11 +117,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
-    brokerTopologyByMostLoaded.filter(_._1.rack == rack).values.flatMap(x => x).toSeq
+    brokerTopologyByMostLoaded.filter(_._1.rack.get == rack).values.flatMap(x => x).toSeq
   }
 
   def replicaExists(replica: Any, rack: String): Boolean = {
-    brokerTopologyByMostLoaded.filter(_._1.rack == rack).values.size > 0
+    brokerTopologyByMostLoaded.filter(_._1.rack.get == rack).values.size > 0
   }
 }
 
@@ -131,4 +132,21 @@ class Replica(val topic: String, val partition: Int, val broker: Int) {
   }
 
   override def toString = s"Replica[$topic:$partition:$broker]"
+
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[Replica]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: Replica =>
+      (that canEqual this) &&
+        topic == that.topic &&
+        partition == that.partition &&
+        broker == that.broker
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(topic, partition, broker)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }
