@@ -3,62 +3,55 @@ package kafka.poc
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 
-import scala.Predef
 import scala.collection._
+import scala.collection.mutable.LinkedHashMap
 
 
 class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) {
+  val brokerTopologyByMostLoaded = {
 
-  private val metadataToReplicas1: mutable.LinkedHashMap[BrokerMetadata, scala.Iterable[Replica]] = mutable.LinkedHashMap(
-    partitions
-      .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) }
-      .values
-      .flatMap(replica => replica)
-      .groupBy(replica => replica.broker)
-      .toSeq
-      .sortBy(_._2.size)
-      : _*
-  ).map { case (k, v) => (brokers.filter(_.id == k).last, v) }
-  //this is BrokerMetadata to Replica
-  private var brokerToReplicas = metadataToReplicas1
-
-  println("before empties " + brokerToReplicas)
-  private val emptyBrokers = mutable.LinkedHashMap(brokers.filterNot(brokerToReplicas.keys.toSet).map(x => x -> Seq.empty[Replica]): _*)
-  //  brokerToReplicas = emptyBrokers ++ brokerToReplicas
-
-  val foo = new mutable.LinkedHashMap[BrokerMetadata, scala.Iterable[Replica]]()
-  for (kv <- emptyBrokers) {
-    foo.put(kv._1, kv._2)
-  }
-  for (kv <- metadataToReplicas1) {
-    foo.put(kv._1, kv._2)
-  }
-
-  brokerToReplicas = foo
+    //Group replicas by broker, sorting by the number of replicas (most loaded broker first)
+    //... enriching with Replica & BrokerMetadata classes on the way
+    val brokerToReplicaExistingReplicas = LinkedHashMap(
+      partitions
+        .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) }
+        .values
+        .flatMap(replica => replica)
+        .groupBy(replica => replica.broker)
+        .toSeq
+        .sortBy(_._2.size)
+        : _*
+    ).map { case (k, v) => (brokers.filter(_.id == k).last, v) }
 
 
-  println("after empties " + brokerToReplicas)
-  println("......")
-  for (x <- brokerToReplicas) {
-    println(x)
-  }
-  println("......")
+    //Include empty brokers too, if there are any
+    val emptyBrokers = LinkedHashMap(
+      brokers
+        .filterNot(brokerToReplicaExistingReplicas.keys.toSet)
+        .map(x => x -> Seq.empty[Replica])
+        : _*)
 
-  //.map(_, Seq())
+    //Merge the two lists so the empty brokers come before the most loaded list
+    //TODO there must be a better way of doing this. Concatanating works but Intelij doesn't like it :(
+    val brokerToReplicas = new LinkedHashMap[BrokerMetadata, Seq[Replica]]()
+    for (kv <- emptyBrokers)
+      brokerToReplicas.put(kv._1, kv._2)
+    for (kv <- brokerToReplicaExistingReplicas)
+      brokerToReplicas.put(kv._1, kv._2.toSeq)
 
-  //  println("after empties "+brokerToReplicas)
-
-  //this is BrokerMetadata to Count
-  private val brokerReplicaCounts = mutable.LinkedHashMap(
     brokerToReplicas
+  }
+
+  //Summarise the topology as BrokerMetadata -> ReplicaCount
+  private val brokerReplicaCounts = LinkedHashMap(
+    brokerTopologyByMostLoaded
       .map { case (x, y) => (x, y.size) }
       .toSeq
       .sortBy(_._2)
       : _*
   )
 
-
-  //floor(replica-count / rack-count) replicas
+  //Define rackFairValue: floor(replica-count / rack-count) replicas
   private val rackFairValue = Math.floor(
     brokerReplicaCounts.values.sum / brokerReplicaCounts
       .keys
@@ -76,7 +69,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
 
 
   def mostLoadedBrokers(): Iterable[Int] = {
-    brokerToReplicas.keySet.toSeq.map(_.id)
+    brokerTopologyByMostLoaded.keySet.toSeq.map(_.id)
   }
 
   def mostLoadedBrokersDownrankingRacks(racks: Seq[String]): Iterable[Int] = {
@@ -90,11 +83,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   private def downrank(toDownrank: scala.Seq[Int], all: scala.Seq[Int]): scala.Seq[Int] = {
     val notDownranked = all.filterNot(toDownrank.toSet)
     val downranked = all.filter(toDownrank.toSet)
-
-    println("downrannking all " + all)
-    println(("downranked " + downranked))
-    println(("notDownranked " + notDownranked))
-    println(("combined " + (downranked ++ notDownranked)))
 
     downranked ++ notDownranked
   }
@@ -129,11 +117,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
-    brokerToReplicas.filter(_._1.rack == rack).values.flatMap(x => x).toSeq
+    brokerTopologyByMostLoaded.filter(_._1.rack == rack).values.flatMap(x => x).toSeq
   }
 
   def replicaExists(replica: Any, rack: String): Boolean = {
-    brokerToReplicas.filter(_._1.rack == rack).values.size > 0
+    brokerTopologyByMostLoaded.filter(_._1.rack == rack).values.size > 0
   }
 
 }
