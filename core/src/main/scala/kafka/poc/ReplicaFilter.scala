@@ -52,11 +52,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
 
   //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
   def brokerToLeaderPartitionsByMostLoaded = {
-
-    //seems a bit obtuse. We should be able to remove thihs final map
-    //      .map{case(x,y)=>(x, y.)}
-
-
     val existing = LinkedHashMap(
       partitions
         .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) } //convert map to list tuples

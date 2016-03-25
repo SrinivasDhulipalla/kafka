@@ -12,7 +12,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy
     val cluster = new ReplicaFilter(brokers, partitionsMap)
 
-    //Ensure partitions are fully replicated
+    //Step 1: Ensure partitions are fully replicated
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
@@ -24,7 +24,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    // Optimise for replica fairness across racks
+    // Step 2.1: Optimise for replica fairness across racks
     for (aboveParRack <- cluster.aboveParRacks()) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParRack)) {
         for (belowParRack <- cluster.belowParRacks) {
@@ -42,12 +42,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
     //consider leaders on above par racks
     for (aboveParRack <- cluster.leaderFairness.aboveParRacks()) {
+      //for each leader (could be optimised to be for(n) where n is the number we expect to move)
       for (leader <- cluster.leadersOn(aboveParRack)) {
+        //ensure rack is still above par (could be optimised out as above)
         if (cluster.leaderFairness.aboveParRacks().contains(aboveParRack)) {
-          //check to see if the partition has repilca on low par racks
+          //check to see if the partition has a non-leader repilca on below par racks
           for (replica <- partitionsMap.get(leader).get.drop(1)) {
-            //if so, switch leadership
             if (cluster.brokersOn(cluster.leaderFairness.belowParRacks()).contains(replica)) {
+              //if so, switch leadership
               makeLeader(leader, replica, partitionsMap)
             }
           }
