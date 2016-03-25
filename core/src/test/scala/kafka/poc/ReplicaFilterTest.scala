@@ -17,7 +17,7 @@ class ReplicaFilterTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val topology = new ReplicaFilter(brokers, partitions).brokerTopologyByMostLoaded
+    val topology = new ReplicaFilter(brokers, partitions).brokerToReplicasByMostLoaded
 
     val expected = Map(
       new BrokerMetadata(101, Option("rack2")) -> Seq(new Replica(topic, 0, 101)),
@@ -51,19 +51,19 @@ class ReplicaFilterTest {
 
     //1 replica, 2 racks
     assertEquals(0, new ReplicaFilter(brokers, Map(
-      p(0) -> List(103))).rackFairValue.toInt)
+      p(0) -> List(103))).rackFairReplicaValue.toInt)
 
     //2 replicas, 2 racks
     assertEquals(1, new ReplicaFilter(brokers, Map(
-      p(0) -> List(103, 102))).rackFairValue.toInt)
+      p(0) -> List(103, 102))).rackFairReplicaValue.toInt)
 
     //3 replicas, 2 racks
     assertEquals(1, new ReplicaFilter(brokers, Map(
-      p(0) -> List(103, 102, 101))).rackFairValue.toInt)
+      p(0) -> List(103, 102, 101))).rackFairReplicaValue.toInt)
 
     //4 replicas, 2 racks
     assertEquals(2, new ReplicaFilter(brokers, Map(
-      p(0) -> List(103, 102, 101, 100))).rackFairValue.toInt)
+      p(0) -> List(103, 102, 101, 100))).rackFairReplicaValue.toInt)
 
   }
 

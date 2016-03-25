@@ -9,7 +9,14 @@ import scala.collection.mutable.LinkedHashMap
 
 class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) {
   val partitionsCopy = partitions
-  def brokerTopologyByMostLoaded = {
+
+  //Look up full broker metadata object for id
+  def bk(id: Int): BrokerMetadata = {
+    brokers.filter(_.id == id).last
+  }
+
+  //Map of BrokerMetadata -> Seq[Replicas]
+  def brokerToReplicasByMostLoaded = {
 
     //Group replicas by broker, sorting by the number of replicas (most loaded broker first)
     //... enriching with Replica & BrokerMetadata classes on the way
@@ -22,7 +29,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
         .toSeq
         .sortBy(_._2.size)
         : _*
-    ).map { case (k, v) => (brokers.filter(_.id == k).last, v) }
+    ).map { case (k, v) => (bk(k), v) }
 
 
     //Include empty brokers too, if there are any
@@ -43,9 +50,55 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokerToReplicas
   }
 
+  //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
+  def brokerToLeaderPartitionsByMostLoaded = {
+
+    //seems a bit obtuse. We should be able to remove thihs final map
+    //      .map{case(x,y)=>(x, y.)}
+
+
+    val existing = LinkedHashMap(
+      partitions
+        .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) } //convert map to list tuples
+        .values
+        .groupBy(_._2) //group by brokers
+        .toSeq
+        .sortBy(_._2.size)
+        : _*
+    ).map { case (x, y) => (x, y.map(x => x._1)) }
+
+
+    //Include empty brokers too, if there are any
+    val emptyBrokers = LinkedHashMap(
+      brokers
+        .filterNot(existing.keys.toSet)
+        .map(x => x -> Seq.empty[TopicAndPartition])
+        : _*)
+
+    //Merge the two lists so the empty brokers come before the most loaded list
+    //TODO there must be a better way of doing this. Concatanating works but Intelij doesn't like it :(
+    val brokersToLeaderPartitions = new LinkedHashMap[BrokerMetadata, Seq[TopicAndPartition]]()
+    for (kv <- emptyBrokers)
+      brokersToLeaderPartitions.put(kv._1, kv._2)
+    for (kv <- existing)
+      brokersToLeaderPartitions.put(kv._1, kv._2.toSeq)
+
+    println("brokersToLeaderPartitions: " + brokersToLeaderPartitions)
+
+    brokersToLeaderPartitions
+  }
+
   //Summarise the topology as BrokerMetadata -> ReplicaCount
   def brokerReplicaCounts() = LinkedHashMap(
-    brokerTopologyByMostLoaded
+    brokerToReplicasByMostLoaded
+      .map { case (x, y) => (x, y.size) }
+      .toSeq
+      .sortBy(_._2)
+      : _*
+  )
+
+  def brokerLeaderPartitionCounts() = LinkedHashMap(
+    brokerToLeaderPartitionsByMostLoaded
       .map { case (x, y) => (x, y.size) }
       .toSeq
       .sortBy(_._2)
@@ -53,12 +106,18 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   )
 
   //Define rackFairValue: floor(replica-count / rack-count) replicas
-  def rackFairValue() = Math.floor(
+  def rackFairReplicaValue() = Math.floor(
     brokerReplicaCounts.values.sum /
       brokerReplicaCounts
         .keys
         .map(_.rack)
         .toSeq.distinct.size
+  )
+
+  //Define rackFairLeaderValue: floor(leader-count / broker-count) leaders
+  def rackFairLeaderValue() = Math.floor(
+    partitions.size /
+      brokerToReplicasByMostLoaded.size
   )
 
 
@@ -71,7 +130,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def mostLoadedBrokers(): Iterable[Int] = {
-    brokerTopologyByMostLoaded.keySet.toSeq.map(_.id)
+    brokerToReplicasByMostLoaded.keySet.toSeq.map(_.id)
   }
 
   def mostLoadedBrokersDownrankingRacks(racks: Seq[String]): Iterable[Int] = {
@@ -89,7 +148,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     downranked ++ notDownranked
   }
 
-  private def brokersOn(racks: Seq[String]): scala.Seq[Int] = {
+  def brokersOn(racks: Seq[String]): scala.Seq[Int] = {
     brokers.filter(broker => racks.contains(broker.rack.get)).map(_.id)
   }
 
@@ -103,25 +162,78 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     brokerReplicaCounts
-      .filter(_._2 > rackFairValue)
+      .filter(_._2 > rackFairReplicaValue)
       .keys
       .map(_.rack.get)
       .toSeq.distinct
   }
 
+  object leaderFairness {
+    def aboveParRacks(): Seq[String] = {
+      println("brokerLeaderPartitionCounts: " + brokerLeaderPartitionCounts)
+      //todo clean this duplication up
+      brokerLeaderPartitionCounts
+        .filter(_._2 > rackFairLeaderValue)
+        .keys
+        .map(_.rack.get)
+        .toSeq
+        .distinct
+    }
+
+    def belowParRacks(): Seq[String] = {
+      println("brokerLeaderPartitionCounts: " + brokerLeaderPartitionCounts)
+      //todo clean this duplication up
+      brokerLeaderPartitionCounts
+        .filter(_._2 < rackFairLeaderValue)
+        .keys
+        .map(_.rack.get)
+        .toSeq
+        .distinct
+    }
+  }
+
   def belowParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
-    brokerReplicaCounts.filter(_._2 < rackFairValue).keys.map(_.rack.get).toSeq.distinct
+    brokerReplicaCounts
+      .filter(_._2 < rackFairReplicaValue)
+      .keys
+      .map(_.rack.get)
+      .toSeq
+      .distinct
+  }
+
+  def partitionsFor(rack: String): Seq[TopicAndPartition] = {
+    brokerToLeaderPartitionsByMostLoaded
+      .filter(_._1.rack == rack)
+      .values
+      .flatMap(x => x)
+      .toSeq
+  }
+
+  def partitionsFor(racks: Seq[String]): Seq[TopicAndPartition] = {
+    brokerToLeaderPartitionsByMostLoaded
+      .filter(x => racks.contains(x._1.rack))
+      .values
+      .flatMap(x => x)
+      .toSeq
+  }
+
+  def leadersOn(rack: String): Seq[TopicAndPartition] = {
+    brokerToLeaderPartitionsByMostLoaded
+      .filter(_._1.rack.get == rack)
+      .values
+      .flatMap(x => x)
+      .toSeq
   }
 
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
-    brokerTopologyByMostLoaded.filter(_._1.rack.get == rack).values.flatMap(x => x).toSeq
+    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).values.flatMap(x => x).toSeq
   }
 
   def replicaExists(replica: Any, rack: String): Boolean = {
-    brokerTopologyByMostLoaded.filter(_._1.rack.get == rack).values.size > 0
+    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).values.size > 0
   }
 }
 
