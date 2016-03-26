@@ -15,38 +15,25 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokers.filter(_.id == id).last
   }
 
-  //Map of BrokerMetadata -> Seq[Replicas]
-  def brokerToReplicasByMostLoaded = {
+  def brokerToReplicasByMostLoaded: Seq[(BrokerMetadata, Seq[Replica])] = {
 
-    //Convert TP -> [BrokerIds] to BrokerIds -> [Replicas] ordering by the replica count
-    val brokerIdsToReplicas = partitions
-      .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) }
+    val brokerToReplicasSet: Seq[(BrokerMetadata, Seq[Replica])] = partitions
+      .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) } //enrich replica object
       .values
-      .flatMap(replica => replica)
-      .groupBy(replica => replica.broker)
+      .flatMap(replica => replica) //list of all replicas
+      .groupBy(replica => replica.broker) //group by broker to create: broker->[Replica]
       .toSeq
-      .sortBy(_._2.size)
-
-    //convert to sorted map, enrichiing brokerId to BrokerMetadata
-    val brokerMetaToReplicasMap = LinkedHashMap(brokerIdsToReplicas: _*).map { case (k, v) => (bk(k), v) }
-
+      .sortBy(_._2.size) //sort by highest replica count
+      .map { x => (bk(x._1), x._2.toSeq) } //turn broker id into BrokerMetadata
 
     //Include empty brokers too, if there are any
-    val emptyBrokers = LinkedHashMap(
+    val emptyBrokers =
       brokers
-        .filterNot(brokerMetaToReplicasMap.keys.toSet)
-        .map(x => x -> Seq.empty[Replica])
-        : _*)
+        .filterNot(brokerToReplicasSet.map(_._1).toSet)
+        .map(x => (x,Seq.empty[Replica]))
 
-    //Merge the two lists so the empty brokers come before the most loaded list
-    //TODO there must be a better way of doing this. Concatanating works but Intelij doesn't like it :(
-    val brokerToReplicas = new LinkedHashMap[BrokerMetadata, Seq[Replica]]()
-    for (kv <- emptyBrokers)
-      brokerToReplicas.put(kv._1, kv._2)
-    for (kv <- brokerMetaToReplicasMap)
-      brokerToReplicas.put(kv._1, kv._2.toSeq)
 
-    brokerToReplicas
+    emptyBrokers ++ brokerToReplicasSet
   }
 
   //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
@@ -124,7 +111,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def mostLoadedBrokers(): Iterable[Int] = {
-    brokerToReplicasByMostLoaded.keySet.toSeq.map(_.id)
+    brokerToReplicasByMostLoaded.map(_._1.id)
   }
 
   def mostLoadedBrokersDownrankingRacks(racks: Seq[String]): Iterable[Int] = {
@@ -223,11 +210,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
-    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).values.flatMap(x => x).toSeq
+    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).map(_._2).flatMap(x => x)
   }
 
   def replicaExists(replica: Any, rack: String): Boolean = {
-    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).values.size > 0
+    brokerToReplicasByMostLoaded.filter(_._1.rack.get == rack).map(_._2).size > 0
   }
 }
 
