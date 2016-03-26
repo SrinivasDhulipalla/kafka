@@ -18,24 +18,23 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   //Map of BrokerMetadata -> Seq[Replicas]
   def brokerToReplicasByMostLoaded = {
 
-    //Group replicas by broker, sorting by the number of replicas (most loaded broker first)
-    //... enriching with Replica & BrokerMetadata classes on the way
-    val brokerToReplicaExistingReplicas = LinkedHashMap(
-      partitions
-        .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) }
-        .values
-        .flatMap(replica => replica)
-        .groupBy(replica => replica.broker)
-        .toSeq
-        .sortBy(_._2.size)
-        : _*
-    ).map { case (k, v) => (bk(k), v) }
+    //Convert TP -> [BrokerIds] to BrokerIds -> [Replicas] ordering by the replica count
+    val brokerIdsToReplicas = partitions
+      .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) }
+      .values
+      .flatMap(replica => replica)
+      .groupBy(replica => replica.broker)
+      .toSeq
+      .sortBy(_._2.size)
+
+    //convert to sorted map, enrichiing brokerId to BrokerMetadata
+    val brokerMetaToReplicasMap = LinkedHashMap(brokerIdsToReplicas: _*).map { case (k, v) => (bk(k), v) }
 
 
     //Include empty brokers too, if there are any
     val emptyBrokers = LinkedHashMap(
       brokers
-        .filterNot(brokerToReplicaExistingReplicas.keys.toSet)
+        .filterNot(brokerMetaToReplicasMap.keys.toSet)
         .map(x => x -> Seq.empty[Replica])
         : _*)
 
@@ -44,7 +43,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     val brokerToReplicas = new LinkedHashMap[BrokerMetadata, Seq[Replica]]()
     for (kv <- emptyBrokers)
       brokerToReplicas.put(kv._1, kv._2)
-    for (kv <- brokerToReplicaExistingReplicas)
+    for (kv <- brokerMetaToReplicasMap)
       brokerToReplicas.put(kv._1, kv._2.toSeq)
 
     brokerToReplicas
