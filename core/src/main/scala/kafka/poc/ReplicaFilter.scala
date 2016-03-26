@@ -8,14 +8,13 @@ import scala.collection.mutable.LinkedHashMap
 
 
 class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) {
-  val partitionsCopy = partitions
 
   //Look up full broker metadata object for id
   def bk(id: Int): BrokerMetadata = {
     brokers.filter(_.id == id).last
   }
 
-  def brokerToReplicas: Seq[(BrokerMetadata, Seq[Replica])] = {
+  def brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])] = {
     val existing = partitions
       .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) } //enrich replica object
       .values
@@ -31,8 +30,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     emptyBrokers ++ existing
   }
 
-  //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
-  def brokerToLeaderPartition: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
+  def brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
     val existing = partitions
         .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) }.values //convert to tuples: [TopicAndPartition,BrokerMetadata]
         .groupBy(_._2) //group by brokers to create: Broker -> [TopicAndPartition]
@@ -54,7 +52,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def mostLoadedBrokers(): Iterable[Int] = {
-    brokerToReplicas.map(_._1.id)
+    brokersToReplicas.map(_._1.id)
   }
 
   //find the most loaded brokers, but push those on the supplied racks to the bottom of the list.
@@ -85,22 +83,21 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     ).map(_.rack.get)
   }
 
-
   def partitionsFor(rack: String): Seq[TopicAndPartition] = {
-    brokerToLeaderPartition
+    brokersToLeaders
       .filter(_._1.rack.get == rack)
       .flatMap(x => x._2)
   }
 
   def partitionsFor(racks: Seq[String]): Seq[TopicAndPartition] = {
-    brokerToLeaderPartition
+    brokersToLeaders
       .filter(x => racks.contains(x._1.rack.get))
       .map(_._2)
       .flatMap(x => x)
   }
 
   def leadersOn(rack: String): Seq[TopicAndPartition] = {
-    brokerToLeaderPartition
+    brokersToLeaders
       .filter(_._1.rack.get == rack)
       .map(_._2)
       .flatMap(x => x)
@@ -109,17 +106,17 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
 
-    brokerToReplicas.filter(_._1.rack.get == rack).map(_._2).flatMap(x => x)
+    brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).flatMap(x => x)
   }
 
   def replicaExists(replica: Any, rack: String): Boolean = {
-    brokerToReplicas.filter(_._1.rack.get == rack).map(_._2).size > 0
+    brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).size > 0
   }
 
   object replicaFairness {
     //Summarise the topology as BrokerMetadata -> ReplicaCount
     def brokerReplicaCounts() = LinkedHashMap(
-      brokerToReplicas
+      brokersToReplicas
         .map { case (x, y) => (x, y.size) }
         .sortBy(_._2)
         : _*
@@ -157,14 +154,14 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
 
   object leaderFairness {
     def brokerLeaderPartitionCounts() = LinkedHashMap(
-      brokerToLeaderPartition
+      brokersToLeaders
         .map { case (x, y) => (x, y.size) }
         .sortBy(_._2)
         : _*
     )
 
     def rackFairLeaderValue() = {
-      Math.floor(partitions.size / brokerToReplicas.size)
+      Math.floor(partitions.size / brokersToReplicas.size)
     }
 
     def aboveParRacks(): Seq[String] = {

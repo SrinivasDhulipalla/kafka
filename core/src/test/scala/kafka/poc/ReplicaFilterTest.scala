@@ -17,7 +17,7 @@ class ReplicaFilterTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val topology = new ReplicaFilter(brokers, partitions).brokerToReplicas
+    val topology = new ReplicaFilter(brokers, partitions).brokersToReplicas
 
     val expected = Map(
       new BrokerMetadata(101, Option("rack2")) -> Seq(new Replica(topic, 0, 101)),
