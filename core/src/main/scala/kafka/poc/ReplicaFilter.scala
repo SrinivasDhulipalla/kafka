@@ -131,7 +131,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
           .toSeq.distinct.size
     )
 
-
     def aboveParRacks(): Seq[String] = {
       //return racks for brokers where replica count is over fair value
       brokerReplicaCounts
@@ -182,7 +181,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
         .distinct
     }
   }
-
 }
 
 
@@ -192,7 +190,6 @@ class Replica(val topic: String, val partition: Int, val broker: Int) {
   }
 
   override def toString = s"Replica[$topic:$partition:$broker]"
-
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[Replica]
 
