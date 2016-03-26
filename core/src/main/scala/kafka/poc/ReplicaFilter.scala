@@ -30,43 +30,29 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     val emptyBrokers =
       brokers
         .filterNot(brokerToReplicasSet.map(_._1).toSet)
-        .map(x => (x,Seq.empty[Replica]))
+        .map(x => (x, Seq.empty[Replica]))
 
 
     emptyBrokers ++ brokerToReplicasSet
   }
 
   //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
-  def brokerToLeaderPartitionsByMostLoaded = {
-    val existing = LinkedHashMap(
+  def brokerToLeaderPartitionsByMostLoaded: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
+    val existing: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] =
       partitions
-        .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) } //convert map to list tuples
-        .values
-        .groupBy(_._2) //group by brokers
+        .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) }.values //convert to tuples: [TopicAndPartition,BrokerMetadata]
+        .groupBy(_._2) //group by brokers to create: Broker -> [TopicAndPartition]
         .toSeq
         .sortBy(_._2.size)
-        : _*
-    ).map { case (x, y) => (x, y.map(x => x._1)) }
+        .map { case (x, y) => (x, y.map(x => x._1)) }
 
 
     //Include empty brokers too, if there are any
-    val emptyBrokers = LinkedHashMap(
-      brokers
-        .filterNot(existing.keys.toSet)
-        .map(x => x -> Seq.empty[TopicAndPartition])
-        : _*)
+    val emptyBrokers: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = brokers
+      .filterNot(existing.map(_._1).toSet)
+      .map(x => x -> Iterable.empty[TopicAndPartition])
 
-    //Merge the two lists so the empty brokers come before the most loaded list
-    //TODO there must be a better way of doing this. Concatanating works but Intelij doesn't like it :(
-    val brokersToLeaderPartitions = new LinkedHashMap[BrokerMetadata, Seq[TopicAndPartition]]()
-    for (kv <- emptyBrokers)
-      brokersToLeaderPartitions.put(kv._1, kv._2)
-    for (kv <- existing)
-      brokersToLeaderPartitions.put(kv._1, kv._2.toSeq)
-
-    println("brokersToLeaderPartitions: " + brokersToLeaderPartitions)
-
-    brokersToLeaderPartitions
+    emptyBrokers ++ existing
   }
 
   //Summarise the topology as BrokerMetadata -> ReplicaCount
@@ -185,26 +171,22 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
 
   def partitionsFor(rack: String): Seq[TopicAndPartition] = {
     brokerToLeaderPartitionsByMostLoaded
-      .filter(_._1.rack == rack)
-      .values
-      .flatMap(x => x)
-      .toSeq
+      .filter(_._1.rack.get == rack)
+      .flatMap(x => x._2)
   }
 
   def partitionsFor(racks: Seq[String]): Seq[TopicAndPartition] = {
     brokerToLeaderPartitionsByMostLoaded
-      .filter(x => racks.contains(x._1.rack))
-      .values
+      .filter(x => racks.contains(x._1.rack.get))
+      .map(_._2)
       .flatMap(x => x)
-      .toSeq
   }
 
   def leadersOn(rack: String): Seq[TopicAndPartition] = {
     brokerToLeaderPartitionsByMostLoaded
       .filter(_._1.rack.get == rack)
-      .values
+      .map(_._2)
       .flatMap(x => x)
-      .toSeq
   }
 
   def weightedReplicasFor(rack: String): Seq[Replica] = {
