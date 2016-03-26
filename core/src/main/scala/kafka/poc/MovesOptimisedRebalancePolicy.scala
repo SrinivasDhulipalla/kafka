@@ -25,9 +25,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
 
     // Step 2.1: Optimise for replica fairness across racks
-    for (aboveParRack <- cluster.aboveParRacks()) {
+    for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParRack)) {
-        for (belowParRack <- cluster.belowParRacks) {
+        for (belowParRack <- cluster.replicaFairness.belowParRacks) {
           for (belowParBroker <- cluster.leastLoadedBrokers(belowParRack)) {
             val partition = replicaToMove.topicAndPartition
             val brokerFrom: Int = replicaToMove.broker
