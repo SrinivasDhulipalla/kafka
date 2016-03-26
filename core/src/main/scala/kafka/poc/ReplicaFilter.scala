@@ -16,8 +16,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def brokerToReplicas: Seq[(BrokerMetadata, Seq[Replica])] = {
-
-    val brokerToReplicasSet: Seq[(BrokerMetadata, Seq[Replica])] = partitions
+    val existing = partitions
       .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) } //enrich replica object
       .values
       .flatMap(replica => replica) //list of all replicas
@@ -26,30 +25,22 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
       .sortBy(_._2.size) //sort by highest replica count
       .map { x => (bk(x._1), x._2.toSeq) } //turn broker id into BrokerMetadata
 
-    //Include empty brokers too, if there are any
-    val emptyBrokers =
-      brokers
-        .filterNot(brokerToReplicasSet.map(_._1).toSet)
+    val emptyBrokers = brokers.filterNot(existing.map(_._1).toSet)
         .map(x => (x, Seq.empty[Replica]))
 
-
-    emptyBrokers ++ brokerToReplicasSet
+    emptyBrokers ++ existing
   }
 
   //Map of BrokerMetadata (Broker) -> Seq[TopicPartitions aka Leaders]
   def brokerToLeaderPartition: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
-    val existing: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] =
-      partitions
+    val existing = partitions
         .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) }.values //convert to tuples: [TopicAndPartition,BrokerMetadata]
         .groupBy(_._2) //group by brokers to create: Broker -> [TopicAndPartition]
         .toSeq
         .sortBy(_._2.size)
         .map { case (x, y) => (x, y.map(x => x._1)) }
 
-
-    //Include empty brokers too, if there are any
-    val emptyBrokers: Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = brokers
-      .filterNot(existing.map(_._1).toSet)
+    val emptyBrokers = brokers.filterNot(existing.map(_._1).toSet)
       .map(x => x -> Iterable.empty[TopicAndPartition])
 
     emptyBrokers ++ existing
