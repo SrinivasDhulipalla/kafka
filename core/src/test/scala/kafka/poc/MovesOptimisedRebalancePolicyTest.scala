@@ -44,7 +44,7 @@ class MovesOptimisedRebalancePolicyTest {
     val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
 
     //then p[4] should have a new replica on broker 102 (the least loaded)
-    assertEquals(List(102, 101, 100), reassigned.get(p(4)).get)
+    assertEquals(List(101, 100, 102), reassigned.get(p(4)).get)
   }
 
   @Test
@@ -133,7 +133,49 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
   }
 
+  /**
+    * Step 3.1: Optimise for replica fairness across brokers
+    */
 
+  @Test
+  def shouldOptimiseForEvenReplicaPlacementAcrossBrokers(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
+    val partitions = Map(
+      p(0) -> List(100),
+      p(1) -> List(100))
+    val topics = Map("my-topic" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+
+    //Then should be one per rack
+    assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
+  }
+
+  /**
+    * Step 3.2: Optimise for leader fairness across brokers
+    */
+
+  @Test
+  def shouldOptimiseForLeaderFairnessAcrossBrokers(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101))
+    val topics = Map("my-topic" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+
+    //Then should be one per rack
+    assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
+  }
 
 
 }
