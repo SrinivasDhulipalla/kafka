@@ -79,10 +79,10 @@ class ReplicaFilterTest {
       p(4) -> List(100))
 
     //When
-    val mostLoaded = new ReplicaFilter(brokers, partitions).mostLoadedBrokers()
+    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokerIds()
 
     //Then
-    assertEquals(Seq(102, 101, 100), mostLoaded)
+    assertEquals(Seq(100, 101, 102), leastLoaded)
   }
 
   @Test
@@ -92,10 +92,10 @@ class ReplicaFilterTest {
     val partitions = Map(p(4) -> List(101))
 
     //When
-    val mostLoaded = new ReplicaFilter(brokers, partitions).mostLoadedBrokers()
+    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokerIds()
 
     //Then
-    assertEquals(Seq(100, 101), mostLoaded)
+    assertEquals(Seq(101, 100), leastLoaded)
   }
 
 
@@ -108,12 +108,6 @@ class ReplicaFilterTest {
       p(1) -> List(103, 102, 101),
       p(2) -> List(103, 102),
       p(3) -> List(103))
-
-    //When
-    val mostLoaded = new ReplicaFilter(brokers, partitions).mostLoadedBrokersDownrankingRacks(Seq("rack2"))
-
-    //Then most loaded would be 100, 101, 102, 103 but with down-ranking rack2 should get:
-    assertEquals(Seq(102, 103, 100, 101), mostLoaded)
 
     //When
     val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokersDownranking(Seq("rack1"))

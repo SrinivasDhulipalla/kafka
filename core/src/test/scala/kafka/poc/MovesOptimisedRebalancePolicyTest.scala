@@ -63,7 +63,6 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(List(100, 102), reassigned.get(p(0)).get)
   }
 
-
   @Test
   def shouldCreateMultipleReplicasPerPartitionIfNecessary(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -91,7 +90,6 @@ class MovesOptimisedRebalancePolicyTest {
   /**
     * Step 2.1: Optimise for replica fairness across racks
     */
-
   @Test
   def shouldOptimiseForEvenReplicaPlacementAcrossRacks(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -114,7 +112,6 @@ class MovesOptimisedRebalancePolicyTest {
   /**
     * Step 2.2: Optimise for leader fairness across racks
     */
-
   @Test
   def shouldOptimiseForLeaderFairnessAcrossRacks(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -136,7 +133,6 @@ class MovesOptimisedRebalancePolicyTest {
   /**
     * Step 3.1: Optimise for replica fairness across brokers
     */
-
   @Test
   def shouldOptimiseForEvenReplicaPlacementAcrossBrokers(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -158,7 +154,6 @@ class MovesOptimisedRebalancePolicyTest {
   /**
     * Step 3.2: Optimise for leader fairness across brokers
     */
-
   @Test
   def shouldOptimiseForLeaderFairnessAcrossBrokers(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -176,6 +171,4 @@ class MovesOptimisedRebalancePolicyTest {
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
   }
-
-
 }

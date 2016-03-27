@@ -29,7 +29,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParRack)) {
         for (belowParRack <- cluster.replicaFairness.belowParRacks) {
-          for (belowParBroker <- cluster.leastLoadedBrokers(belowParRack)) {
+          for (belowParBroker <- cluster.leastLoadedBrokerIds(belowParRack)) {
             val partition = replicaToMove.topicAndPartition
             val brokerFrom: Int = replicaToMove.broker
             val brokerTo: Int = belowParBroker

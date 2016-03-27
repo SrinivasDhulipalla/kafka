@@ -48,25 +48,23 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokersToReplicas.map(_._1.rack).distinct.size
   }
 
-  def leastLoadedBrokers() = mostLoadedBrokers().toSeq.reverse
-
-  def leastLoadedBrokers(rack: String): Seq[Int] = {
-    leastLoadedBrokers()
-      .filter(brokerId => brokers.find(_.id == brokerId).get.rack.get == rack)
+  def leastLoadedBrokerIds(): Seq[Int] = {
+    brokersToReplicas.map(_._1.id).reverse
   }
 
-  def mostLoadedBrokers(): Iterable[Int] = {
-    brokersToReplicas.map(_._1.id)
+  def leastLoadedBrokers(): Seq[BrokerMetadata] = {
+    brokersToReplicas.map(_._1).reverse
   }
 
-  //find the most loaded brokers, but push those on the supplied racks to the bottom of the list.
-  def mostLoadedBrokersDownrankingRacks(racks: Seq[String]): Iterable[Int] = {
-    downrank(brokersOn(racks), mostLoadedBrokers().toSeq)
+  def leastLoadedBrokerIds(rack: String): Seq[Int] = {
+    leastLoadedBrokers
+      .filter(broker => broker.rack.get == rack)
+      .map(_.id)
   }
 
   //find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
   def leastLoadedBrokersDownranking(racks: Seq[String]): Iterable[Int] = {
-    downrank(brokersOn(racks), leastLoadedBrokers())
+    downrank(brokersOn(racks), leastLoadedBrokerIds())
   }
 
   private def downrank(toDownrank: scala.Seq[Int], all: scala.Seq[Int]): scala.Seq[Int] = {
@@ -85,12 +83,6 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
       partitions.get(p).get
         .contains(broker.id)
     ).map(_.rack.get)
-  }
-
-  def partitionsFor(rack: String): Seq[TopicAndPartition] = {
-    brokersToLeaders
-      .filter(_._1.rack.get == rack)
-      .flatMap(x => x._2)
   }
 
   def partitionsFor(racks: Seq[String]): Seq[TopicAndPartition] = {
@@ -115,16 +107,13 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
 
   def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
-
     brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).flatMap(x => x)
   }
 
   def weightedReplicasFor(broker: BrokerMetadata): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
-
     brokersToReplicas.filter(_._1 == broker).map(_._2).flatMap(x => x)
   }
-
 
   def replicaExists(replica: Any, rack: String): Boolean = {
     brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).size > 0
@@ -235,14 +224,12 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     }
 
     def aboveParBrokers(): Seq[BrokerMetadata] = {
-      //return racks for brokers where replica count is over fair value
       brokerLeaderPartitionCounts
         .filter(_._2 > brokerFairLeaderValue)
         .keys.toSeq.distinct
     }
 
     def belowParBrokers(): Seq[BrokerMetadata] = {
-      //return racks for brokers where replica count is over fair value
       brokerLeaderPartitionCounts
         .filter(_._2 < brokerFairLeaderValue)
         .keys.toSeq.distinct
