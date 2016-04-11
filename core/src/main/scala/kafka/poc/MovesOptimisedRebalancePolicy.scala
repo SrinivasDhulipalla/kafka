@@ -9,10 +9,12 @@ import scala.collection._
 class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
-    val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy
+    val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
 
-    //Step 1: Ensure partitions are fully replicated
+    /**
+      * Step 1: Ensure partitions are fully replicated
+      */
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
@@ -25,7 +27,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    // Step 2.1: Optimise for replica fairness across racks
+    /**
+      * Step 2.1: Optimise for replica fairness across racks
+      */
     for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParRack)) {
         for (belowParRack <- cluster.replicaFairness.belowParRacks) {
@@ -39,8 +43,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    //Step 2.2: Optimise for leader fairness across racks
-
+    /**
+      * Step 2.2: Optimise for leader fairness across racks
+      */
     //consider leaders on above par racks
     for (aboveParRack <- cluster.leaderFairness.aboveParRacks()) {
       //for each leader (could be optimised to be for(n) where n is the number we expect to move)
@@ -58,7 +63,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    //Step 3.1: Optimise for replica fairness across brokers
+    /**
+      * Step 3.1: Optimise for replica fairness across brokers
+      */
     for (aboveParBroker <- cluster.replicaFairness.aboveParBrokers) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParBroker)) {
         for (belowParBroker <- cluster.replicaFairness.belowParBrokers) {
@@ -70,7 +77,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    //Step 3.2: Optimise for leader fairness across brokers
+    /**
+      * Step 3.2: Optimise for leader fairness across brokers
+      */
     //consider leaders on above par brokers
     for (aboveParBroker <- cluster.leaderFairness.aboveParBrokers()) {
       //for each leader (could be optimised to be for(n) where n is the number we expect to move)
@@ -96,7 +105,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     var currentLead = replicas(0)
     //remove old
     replicas = replicas.filter(_ != toPromote)
-    //put first
+    //push first
     replicas = Seq(toPromote) ++ replicas
     partitionsMap.put(tp, replicas)
     println(s"Leadership moved brokers: [$currentLead -> $toPromote] for partition $tp")
