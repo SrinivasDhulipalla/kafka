@@ -48,7 +48,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldConsiderRackConstraingWhenPickingLeastLoadedBrokerWhenReReplicatingUnderreplicatedPartitions(): Unit = {
+  def shouldConsiderRackConstraintWhenPickingLeastLoadedBrokerWhenReReplicatingUnderreplicatedPartitions(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
@@ -106,6 +106,28 @@ class MovesOptimisedRebalancePolicyTest {
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
+  }
+
+  @Test
+  def shouldOptimiseForEvenReplicaPlacementAcrossRacks2(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = (100 to 101).map(bk(_, "rack1"))
+
+    val partitions = Map(
+      p(0) -> List(100),
+      p(1) -> List(100),
+      p(2) -> List(100),
+      p(3) -> List(100)
+    )
+    val topics = Map("my-topic" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+
+    //Then should be one per rack
+    assertEquals(Map(p(0) -> List(100), p(1) -> List(101),p(2) -> List(100), p(3) -> List(101)), reassigned)
   }
 
 
