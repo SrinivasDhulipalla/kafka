@@ -216,6 +216,24 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
   }
 
+  @Test
+  def shouldNotOptimiseIfAlreadyFair(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(1001, 100))
+    val topics = Map("my-topic" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+
+    //Then should be one per rack
+    assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
+  }
+
   /**
     * Step 3.1: Optimise for replica fairness across brokers
     */
