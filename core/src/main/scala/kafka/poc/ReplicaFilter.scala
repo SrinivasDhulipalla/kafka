@@ -57,9 +57,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def leastLoadedBrokerIds(rack: String): Seq[Int] = {
-    leastLoadedBrokers
+    val foo = leastLoadedBrokers
       .filter(broker => broker.rack.get == rack)
       .map(_.id)
+    println("least loaded for rack "+ rack +" is "+ foo)
+    foo
   }
 
   //find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
@@ -150,6 +152,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
         brokerReplicaCounts
           .keys.toSeq.distinct.size
     )
+
+    def countFromPar(rack:String): Int ={
+      println(rack)
+      Math.abs(rackReplicaCounts.get(rack).get - rackFairReplicaValue.toInt)
+    }
 
     def aboveParRacks(): Seq[String] = {
       //return racks for brokers where replica count is over fair value

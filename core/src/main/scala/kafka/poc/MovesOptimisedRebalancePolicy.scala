@@ -30,18 +30,24 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     /**
       * Step 2.1: Optimise for replica fairness across racks
       */
-    for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
-      for (replicaToMove <- cluster.weightedReplicasFor(aboveParRack)) {
-        for (belowParRack <- cluster.replicaFairness.belowParRacks) {
-          for (belowParBroker <- cluster.leastLoadedBrokerIds(belowParRack)) {
-            val partition = replicaToMove.topicAndPartition
-            val brokerFrom: Int = replicaToMove.broker
-            val brokerTo: Int = belowParBroker
-            move(partition, brokerFrom, brokerTo, partitionsMap)
-          }
-        }
-      }
+    //Get the most loaded set of replicas from above par racks
+    val aboveParReplicas = cluster.replicaFairness.aboveParRacks()
+      .flatMap {rack => cluster.weightedReplicasFor(rack).take(
+          cluster.replicaFairness.countFromPar(rack))}
+
+    //get the least loaded brokers
+    val belowParOpenings = cluster.replicaFairness.belowParRacks()
+      .flatMap{rack => cluster.leastLoadedBrokerIds(rack).take(cluster.replicaFairness.countFromPar(rack))}
+
+    //only move if there is supply and demand
+    val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
+
+    for (i <- (0 to moves)) {
+      val brokerFrom: Int = aboveParReplicas(i).broker
+      val brokerTo: Int = belowParOpenings(i)
+      move(aboveParReplicas(i).topicAndPartition, brokerFrom, brokerTo, partitionsMap)
     }
+
 
     /**
       * Step 2.2: Optimise for leader fairness across racks
