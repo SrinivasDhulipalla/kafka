@@ -60,7 +60,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     val foo = leastLoadedBrokers
       .filter(broker => broker.rack.get == rack)
       .map(_.id)
-    println("least loaded for rack "+ rack +" is "+ foo)
+    println("least loaded for rack " + rack + " is " + foo)
     foo
   }
 
@@ -121,6 +121,13 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).size > 0
   }
 
+  def replicasFor(broker: BrokerMetadata): Seq[Replica] = {
+    brokersToReplicas.filter(_._1 == broker).seq(0)._2
+  }
+  def replicasFor(broker: Int): Seq[Replica] = {
+    brokersToReplicas.filter(_._1.id == broker).seq(0)._2
+  }
+
   object replicaFairness {
     //Summarise the topology as BrokerMetadata -> ReplicaCount
     def brokerReplicaCounts() = LinkedHashMap(
@@ -153,9 +160,12 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
           .keys.toSeq.distinct.size
     )
 
-    def countFromPar(rack:String): Int ={
-      println(rack)
+    def countFromPar(rack: String): Int = {
       Math.abs(rackReplicaCounts.get(rack).get - rackFairReplicaValue.toInt)
+    }
+
+    def countFromPar(broker: BrokerMetadata): Int = {
+      Math.abs(brokerReplicaCounts.get(broker).get - brokerFairReplicaValue.toInt)
     }
 
     def aboveParRacks(): Seq[String] = {

@@ -11,6 +11,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
+    println(partitionsMap)
+    println(cluster.brokersToReplicas.map{x=> "\n" + x._1.id + " : " + x._2.map("p"+_.partition)})
 
     /**
       * Step 1: Ensure partitions are fully replicated
@@ -32,12 +34,13 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       */
     //Get the most loaded set of replicas from above par racks
     val aboveParReplicas = cluster.replicaFairness.aboveParRacks()
-      .flatMap {rack => cluster.weightedReplicasFor(rack).take(
-          cluster.replicaFairness.countFromPar(rack))}
+      .flatMap { rack => cluster.weightedReplicasFor(rack).take(
+        cluster.replicaFairness.countFromPar(rack))
+      }
 
     //get the least loaded brokers
     val belowParOpenings = cluster.replicaFairness.belowParRacks()
-      .flatMap{rack => cluster.leastLoadedBrokerIds(rack).take(cluster.replicaFairness.countFromPar(rack))}
+      .flatMap { rack => cluster.leastLoadedBrokerIds(rack).take(cluster.replicaFairness.countFromPar(rack)) }
 
     //only move if there is supply and demand
     val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
@@ -72,16 +75,53 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     /**
       * Step 3.1: Optimise for replica fairness across brokers
       */
+    var moved = false
     for (aboveParBroker <- cluster.replicaFairness.aboveParBrokers) {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParBroker)) {
+        moved = false
         for (belowParBroker <- cluster.replicaFairness.belowParBrokers) {
           val partition = replicaToMove.topicAndPartition
           val brokerFrom: Int = replicaToMove.broker
           val brokerTo: Int = belowParBroker.id
-          move(partition, brokerFrom, brokerTo, partitionsMap)
+          //if obeys partition constraint
+          if (!cluster.replicasFor(brokerTo).map(_.topicAndPartition).contains(partition) && moved == false) {
+            //todo add maintains rack constraint
+            move(partition, brokerFrom, brokerTo, partitionsMap)
+            moved = true
+          }
         }
       }
     }
+
+
+
+    //    //Get the most loaded set of replicas from above par brokers
+    //    val abovePar = cluster.replicaFairness.aboveParBrokers()
+    //      .flatMap {broker => cluster.weightedReplicasFor(broker).take(
+    //        cluster.replicaFairness.countFromPar(broker))}
+    //    println("above par "+abovePar)
+    //
+    //    //get the least loaded brokers
+    //    val belowPar = cluster.replicaFairness.belowParBrokers()
+    //    println("below par "+belowPar)
+    //
+    //    //only move if there is supply and demand
+    //    var moves2 = Math.min(abovePar.size, belowPar.size)
+    //    var index = 0
+    //    while (index < moves2) {
+    //      val brokerFrom = abovePar(index).broker
+    //      val brokerTo = belowPar(index)
+    //      //for each partition on brokersFrom.
+    //      for(brokerTo <- belowPar){
+    //        if(!cluster.replicasFor(brokerTo).contains(brokerFrom)) {
+    //          move(abovePar(index).topicAndPartition, brokerFrom, brokerTo.id, partitionsMap)
+    //          moves2 -= 1
+    //        }
+    //      }
+    //
+    //      index += 1
+    //    }
+
 
     /**
       * Step 3.2: Optimise for leader fairness across brokers
