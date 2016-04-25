@@ -14,4 +14,8 @@ object Helper {
     new BrokerMetadata(id, Option(rack))
   }
 
+  def r(r: Int)={
+    Map("my-topic" -> r)
+  }
+
 }

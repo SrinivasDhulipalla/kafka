@@ -45,6 +45,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     //only move if there is supply and demand
     val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
 
+    //Move from above par to below par
     for (i <- (0 to moves)) {
       val brokerFrom: Int = aboveParReplicas(i).broker
       val brokerTo: Int = belowParOpenings(i)
@@ -85,42 +86,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
           val brokerTo: Int = belowParBroker.id
           //if obeys partition constraint
           if (!cluster.replicasFor(brokerTo).map(_.topicAndPartition).contains(partition) && moved == false) {
-            //todo add maintains rack constraint
-            move(partition, brokerFrom, brokerTo, partitionsMap)
-            moved = true
+            if(cluster.obeysRackConstraint(partition, brokerFrom, brokerTo, replicationFactors)) {
+              move(partition, brokerFrom, brokerTo, partitionsMap)
+              moved = true
+            }
           }
         }
       }
     }
-
-
-
-    //    //Get the most loaded set of replicas from above par brokers
-    //    val abovePar = cluster.replicaFairness.aboveParBrokers()
-    //      .flatMap {broker => cluster.weightedReplicasFor(broker).take(
-    //        cluster.replicaFairness.countFromPar(broker))}
-    //    println("above par "+abovePar)
-    //
-    //    //get the least loaded brokers
-    //    val belowPar = cluster.replicaFairness.belowParBrokers()
-    //    println("below par "+belowPar)
-    //
-    //    //only move if there is supply and demand
-    //    var moves2 = Math.min(abovePar.size, belowPar.size)
-    //    var index = 0
-    //    while (index < moves2) {
-    //      val brokerFrom = abovePar(index).broker
-    //      val brokerTo = belowPar(index)
-    //      //for each partition on brokersFrom.
-    //      for(brokerTo <- belowPar){
-    //        if(!cluster.replicasFor(brokerTo).contains(brokerFrom)) {
-    //          move(abovePar(index).topicAndPartition, brokerFrom, brokerTo.id, partitionsMap)
-    //          moves2 -= 1
-    //        }
-    //      }
-    //
-    //      index += 1
-    //    }
 
 
     /**

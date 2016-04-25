@@ -116,5 +116,40 @@ class ReplicaFilterTest {
     assertEquals(Seq(101, 100, 103, 102), leastLoaded)
   }
 
+  @Test
+  def shouldAllowReplicaMoveIfDoesNotBreakRackConstraint(): Unit ={
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 100)
+    )
+
+    //When
+    val brokerFrom: Int = 100
+    val brokerTo: Int = 101
+    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+
+    //Then
+    assertEquals(true, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+  }
+
+  @Test
+  def shouldFailIfPartitionMoveBreaksRackConstraint(): Unit ={
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101)
+    )
+
+    //When
+    val brokerFrom: Int = 100
+    val brokerTo: Int = 101
+    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+
+    //Then
+    assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+  }
 
 }

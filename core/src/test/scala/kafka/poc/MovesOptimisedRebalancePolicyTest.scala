@@ -323,6 +323,30 @@ class MovesOptimisedRebalancePolicyTest {
       p(3) -> Seq(103, 101))), sort(reassigned.toMap))
   }
 
+  @Test
+  def shouldNotMoveReplicaIfBreaksRackConstraint(): Unit ={
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"), bk(102, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(100, 101),
+      p(3) -> List(100, 101),
+      p(4) -> List(100, 101),
+      p(5) -> List(100, 101)
+    )
+    val topics = Map("my-topic" -> 2)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    println(reassigned)
+    //All replicas on 100 should remain there (i.e. on rack 1)
+    assertEquals(6, reassigned.values.flatten.filter(_ == 100).size)
+  }
+
+
   /**
     * Step 3.2: Optimise for leader fairness across brokers
     */
@@ -342,7 +366,6 @@ class MovesOptimisedRebalancePolicyTest {
 
     //Then should be one per broker
     val leaders = reassigned.values.map(_ (0))
-    println("Leaders are " + leaders)
     assertEquals(2, leaders.toSeq.distinct.size)
   }
 
@@ -351,21 +374,19 @@ class MovesOptimisedRebalancePolicyTest {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
-    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"), bk(103, "rack1"))
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"))
     val partitions = Map(
       p(0) -> List(100, 101, 102),
       p(1) -> List(100, 101, 102),
-      p(2) -> List(100, 101, 102),
       p(3) -> List(100, 101, 102))
-    val topics = Map("my-topic" -> 2)
+    val topics = Map("my-topic" -> 3)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
 
     //Then should be one per broker
     val leaders = reassigned.values.map(_ (0))
-    println("Leaders are " + leaders)
-    assertEquals(2, leaders.toSeq.distinct.size)
+    assertEquals(3, leaders.toSeq.distinct.size)
   }
 
   def sort(x: Map[TopicAndPartition, Seq[Int]]) = {

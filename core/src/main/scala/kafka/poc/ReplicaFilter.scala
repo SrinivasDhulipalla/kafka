@@ -57,11 +57,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def leastLoadedBrokerIds(rack: String): Seq[Int] = {
-    val foo = leastLoadedBrokers
+    val leastLoaded = leastLoadedBrokers
       .filter(broker => broker.rack.get == rack)
       .map(_.id)
-    println("least loaded for rack " + rack + " is " + foo)
-    foo
+    println("least loaded for rack " + rack + " is " + leastLoaded)
+    leastLoaded
   }
 
   //find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
@@ -253,7 +253,22 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     }
   }
 
+  def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
+    val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount)
+
+    //get replicas for partition, replacing brokerFrom with brokerTo
+    var proposedReplicas: scala.Seq[Int] = partitions.get(partition).get
+    val index: Int = proposedReplicas.indexOf(brokerFrom)
+    proposedReplicas = proposedReplicas.patch(index, Seq(brokerTo), 1)
+
+    //find how many racks are now spanned
+    val racksSpanned = proposedReplicas.map(bk(_)).map(_.rack).distinct.size
+
+    racksSpanned >= minRacksSpanned
+  }
+
 }
+
 
 
 class Replica(val topic: String, val partition: Int, val broker: Int) {
