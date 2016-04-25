@@ -100,7 +100,6 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals((100 to 102), reassigned.get(p(0)).get.sorted)
   }
 
-
   /**
     * Step 2.1: Optimise for replica fairness across racks
     */
@@ -292,7 +291,6 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(sort(Map(p(0) -> List(103), p(1) -> List(101), p(2) -> List(100), p(3) -> List(102))), sort(reassigned.toMap))
   }
 
-
   @Test
   def shouldMoveReplicasToLeastLoadedBroker(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -341,7 +339,6 @@ class MovesOptimisedRebalancePolicyTest {
     //All replicas on 100 should remain there (i.e. on rack 1)
     assertEquals(6, reassigned.values.flatten.filter(_ == 100).size)
   }
-
 
   /**
     * Step 3.2: Optimise for leader fairness across brokers
@@ -411,7 +408,7 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(3, leaders.toSeq.distinct.size)
   }
 
-  @Test //This test seems to lose a replica because it has a partition that brakes the partition cosntraint
+  @Test
   def shouldBalanceLeadersOverMultipleTopicsAndMultipleRack(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
@@ -473,7 +470,6 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(Seq(101, 100), partitions.get(p(0)).get)
   }
 
-
   @Test
   def shouldMakeLeaderDoNothingIfMakingExistingLeaderTheLeader(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -489,8 +485,6 @@ class MovesOptimisedRebalancePolicyTest {
     //Then
     assertEquals(Seq(100, 101), partitions.get(p(0)).get)
   }
-
-
 
   def sort(x: Map[TopicAndPartition, Seq[Int]]) = {
     x.toSeq.sortBy(_._1.partition)

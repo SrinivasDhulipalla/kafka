@@ -29,8 +29,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    println("Post 1 is: " + partitionsMap)
-
     /**
       * Step 2.1: Optimise for replica fairness across racks
       */
@@ -50,16 +48,15 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     //Move from above par to below par
     var i = moves
     while (i > 0) {
+      val partition = aboveParReplicas(i).topicAndPartition
       val brokerFrom: Int = aboveParReplicas(i).broker
       val brokerTo: Int = belowParOpenings(i)
       //check partition constraint is not violated
-      if(brokerFrom != brokerTo) {
-        move(aboveParReplicas(i).topicAndPartition, brokerFrom, brokerTo, partitionsMap)
+      if(cluster.obeysPartitionConstraint(partition, brokerTo)) {
+        move(partition, brokerFrom, brokerTo, partitionsMap)
         i -= 1
       }
     }
-
-    println("Post 2.1 is: " + partitionsMap)
 
     /**
       * Step 2.2: Optimise for leader fairness across racks
@@ -81,8 +78,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
-    println("Post 2.2 is: " + partitionsMap)
-
     /**
       * Step 3.1: Optimise for replica fairness across brokers
       */
@@ -103,8 +98,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         }
       }
     }
-
-    println("Post 3.1 is: " + partitionsMap)
 
     /**
       * Step 3.2: Optimise for leader fairness across brokers
