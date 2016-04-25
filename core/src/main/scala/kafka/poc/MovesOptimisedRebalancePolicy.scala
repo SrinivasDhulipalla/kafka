@@ -12,7 +12,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
     println(partitionsMap)
-    println(cluster.brokersToReplicas.map{x=> "\n" + x._1.id + " : " + x._2.map("p"+_.partition)})
+    println(cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) })
 
     /**
       * Step 1: Ensure partitions are fully replicated
@@ -28,6 +28,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         println(s"Additional replica was created on broker [$leastLoadedButNoExistingReplica] for under-replicated partition [$partition].")
       }
     }
+
+    println("Post 1 is: " + partitionsMap)
 
     /**
       * Step 2.1: Optimise for replica fairness across racks
@@ -46,12 +48,18 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
 
     //Move from above par to below par
-    for (i <- (0 to moves)) {
+    var i = moves
+    while (i > 0) {
       val brokerFrom: Int = aboveParReplicas(i).broker
       val brokerTo: Int = belowParOpenings(i)
-      move(aboveParReplicas(i).topicAndPartition, brokerFrom, brokerTo, partitionsMap)
+      //check partition constraint is not violated
+      if(brokerFrom != brokerTo) {
+        move(aboveParReplicas(i).topicAndPartition, brokerFrom, brokerTo, partitionsMap)
+        i -= 1
+      }
     }
 
+    println("Post 2.1 is: " + partitionsMap)
 
     /**
       * Step 2.2: Optimise for leader fairness across racks
@@ -73,6 +81,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
+    println("Post 2.2 is: " + partitionsMap)
+
     /**
       * Step 3.1: Optimise for replica fairness across brokers
       */
@@ -86,7 +96,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
           val brokerTo: Int = belowParBroker.id
           //if obeys partition constraint
           if (!cluster.replicasFor(brokerTo).map(_.topicAndPartition).contains(partition) && moved == false) {
-            if(cluster.obeysRackConstraint(partition, brokerFrom, brokerTo, replicationFactors)) {
+            if (cluster.obeysRackConstraint(partition, brokerFrom, brokerTo, replicationFactors)) {
               move(partition, brokerFrom, brokerTo, partitionsMap)
               moved = true
             }
@@ -95,6 +105,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
+    println("Post 3.1 is: " + partitionsMap)
 
     /**
       * Step 3.2: Optimise for leader fairness across brokers
@@ -116,6 +127,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       }
     }
 
+    println("Result is: " + partitionsMap)
     partitionsMap
   }
 
