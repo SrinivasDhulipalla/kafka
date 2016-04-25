@@ -152,4 +152,27 @@ class ReplicaFilterTest {
     assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
+  @Test
+  def shouldFailPartitionConstraintIfReplicaAlreadyExistsOnTargetForMove(): Unit ={
+    //Given
+    val brokers = List(bk(100, "rack1"))
+    val partitions = Map(
+      p(0) -> List(100)
+    )
+
+    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    assertEquals(false, cluster.obeysPartitionConstraint(p(0), 100))
+  }
+
+  @Test
+  def shouldPassPartitionConstraintIfReplicaAlreadyExistsOnTargetForMove(): Unit ={
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
+    val partitions = Map(
+      p(0) -> List(100)
+    )
+
+    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    assertEquals(true, cluster.obeysPartitionConstraint(p(0), 101))
+  }
 }
