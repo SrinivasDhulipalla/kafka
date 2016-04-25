@@ -486,6 +486,11 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(Seq(100, 101), partitions.get(p(0)).get)
   }
 
+  /**
+    * Test add broker, remove broker
+    */
+
+
   def sort(x: Map[TopicAndPartition, Seq[Int]]) = {
     x.toSeq.sortBy(_._1.partition)
   }

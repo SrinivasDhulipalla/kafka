@@ -49,8 +49,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     var i = moves
     while (i > 0) {
       val partition = aboveParReplicas(i).topicAndPartition
-      val brokerFrom: Int = aboveParReplicas(i).broker
-      val brokerTo: Int = belowParOpenings(i)
+      val brokerFrom = aboveParReplicas(i).broker
+      val brokerTo = belowParOpenings(i)
       //check partition constraint is not violated
       if(cluster.obeysPartitionConstraint(partition, brokerTo)) {
         move(partition, brokerFrom, brokerTo, partitionsMap)
@@ -80,6 +80,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
     /**
       * Step 3.1: Optimise for replica fairness across brokers
+      * TODO refactor this to take the approach used in 2.1 - get list of most loaded replicas & least loaded brokers and move incrementally and ensuring there is enough supply and demand
       */
     var moved = false
     for (aboveParBroker <- cluster.replicaFairness.aboveParBrokers) {
