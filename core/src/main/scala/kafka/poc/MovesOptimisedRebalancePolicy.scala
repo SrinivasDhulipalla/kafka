@@ -94,8 +94,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
           val partition = replicaToMove.topicAndPartition
           val brokerFrom: Int = replicaToMove.broker
           val brokerTo: Int = belowParBroker.id
-          //if obeys partition constraint
-          if (!cluster.replicasFor(brokerTo).map(_.topicAndPartition).contains(partition) && moved == false) {
+          if (cluster.obeysPartitionConstraint(partition, brokerTo) && moved == false) {
             if (cluster.obeysRackConstraint(partition, brokerFrom, brokerTo, replicationFactors)) {
               move(partition, brokerFrom, brokerTo, partitionsMap)
               moved = true

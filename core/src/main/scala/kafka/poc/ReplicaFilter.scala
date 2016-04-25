@@ -267,6 +267,10 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     racksSpanned >= minRacksSpanned
   }
 
+  def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo:Int): Boolean ={
+    !replicasFor(brokerMovingTo).map(_.topicAndPartition).contains(replica)
+  }
+
 }
 
 
