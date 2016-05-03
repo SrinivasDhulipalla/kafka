@@ -98,14 +98,19 @@ class MovesOptimisedRebalancePolicyTest {
     val brokers = (100 to 104).map(bk(_, "rack1"))
     val underreplicated = Map(
       p(0) -> List(100, 101, 102),
-      p(1) -> List(100))
-    val topics = Map("my-topic" -> 3)
+      p(1) -> List(100, 101),
+      p(2) -> List(100),
+      p(3) -> List.empty
+    )
+    val replicationFactor = 3
+    val topics = Map("my-topic" -> replicationFactor)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
 
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
-    assertEquals(List(100, 103, 104), reassigned.get(p(1)).get)
+    for(partitionId <- 0 to 3)
+      assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
   }
 
   @Test

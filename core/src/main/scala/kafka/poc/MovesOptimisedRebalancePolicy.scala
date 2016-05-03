@@ -13,8 +13,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
     println("\nBrokers: "+brokers.map{b=>"\n"+b})
-    println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
-    println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) } + "\n")
+    print(partitionsMap, cluster)
 
     ensureFullyReplicated(partitionsMap, cluster, replicationFactors)
 
@@ -24,7 +23,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     optimiseForReplicaFairnessAcrossBrokers(partitionsMap, cluster, replicationFactors)
     optimiseForLeaderFairnessAcrossBrokers(partitionsMap, cluster)
 
-    println("Result is: " + partitionsMap)
+    println("\nResult is:")
+    print(partitionsMap, cluster)
     partitionsMap
   }
 
@@ -155,5 +155,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     replicas = replicas :+ to
     partitionsMap.put(tp, replicas)
     println(s"Partition $tp was moved from broker [$from] to [$to]")
+  }
+
+  def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
+    println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
+    println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) } + "\n")
   }
 }
