@@ -36,11 +36,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
       //until fully replicated
       while (replicasForP.size < replicationFactor) {
-        //reeveluate least loaded brokers (todo this could move outside of inner loop if we make it an iterator)
+        //reeveluate least loaded brokers
         val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
-        val not: scala.Iterable[Int] = leastLoadedBrokers.filterNot(replicasForP.toSet)
         //pick least loaded
-        val leastLoadedButNoExistingReplica = not.head
+        val leastLoadedButNoExistingReplica = leastLoadedBrokers.filterNot(replicasForP.toSet).head
         partitionsMap.put(partition, replicasForP :+ leastLoadedButNoExistingReplica)
         println(s"Additional replica was created on broker [$leastLoadedButNoExistingReplica] for under-replicated partition [$partition].")
       }
