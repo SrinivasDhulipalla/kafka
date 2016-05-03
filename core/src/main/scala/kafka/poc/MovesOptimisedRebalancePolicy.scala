@@ -27,8 +27,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     partitionsMap
   }
 
-
-
   def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
