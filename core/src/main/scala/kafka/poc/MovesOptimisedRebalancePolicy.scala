@@ -34,14 +34,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
 
+      val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
+      val leastLoadedValidBrokers = leastLoadedBrokers.filterNot(replicasForP.toSet).iterator
+
       //until fully replicated
       while (replicasForP.size < replicationFactor) {
-        //reeveluate least loaded brokers
-        val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
-        //pick least loaded
-        val leastLoadedButNoExistingReplica = leastLoadedBrokers.filterNot(replicasForP.toSet).head
-        partitionsMap.put(partition, replicasForP :+ leastLoadedButNoExistingReplica)
-        println(s"Additional replica was created on broker [$leastLoadedButNoExistingReplica] for under-replicated partition [$partition].")
+        val leastLoaded = leastLoadedValidBrokers.next
+        partitionsMap.put(partition, replicasForP :+ leastLoaded)
+        println(s"Additional replica was created on broker [$leastLoaded] for under-replicated partition [$partition].")
       }
     }
   }
