@@ -2,6 +2,8 @@ package kafka.poc
 
 import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
+import org.hamcrest.core.IsCollectionContaining
+import org.hamcrest.core.IsCollectionContaining._
 import org.junit.Assert._
 import org.junit.Test
 
@@ -51,7 +53,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldConsiderRackConstraintWhenPickingLeastLoadedBrokerWhenReReplicatingUnderreplicatedPartitions(): Unit = {
+  def shouldFavourDifferentRackWhenReReplicatingUnderreplicatedPartitions(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
@@ -64,6 +66,28 @@ class MovesOptimisedRebalancePolicyTest {
 
     //Then it should be created on the broker on a different rack (102)
     assertEquals(List(100, 102), reassigned.get(p(0)).get)
+  }
+
+  @Test
+  def shouldPreferLeastLoadedBrokersOnOtherRacksWhenReReplicatingUnderreplicatedPartitions(): Unit ={
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given broker 100 is least loaded and p[4] is under-replicated
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"), bk(103, "rack2"))
+    val underreplicated = Map(
+      p(0) -> List(100, 101, 102), //102 has two replicas, 103 has 3, 101 has 4, 100 has 5
+      p(1) -> List(100, 102, 103),
+      p(2) -> List(100, 101, 103),
+      p(3) -> List(100, 101, 103),
+      p(4) -> List(100, 101))
+    val topics = Map("my-topic" -> 3)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+
+    //then p[4] should include a new replica. 102 is the least loaded,
+    //but we should have picked 103 as it's on a different rack
+    assertTrue("was: "+reassigned.get(p(4)), reassigned.get(p(4)).get.contains(103))
   }
 
   @Test

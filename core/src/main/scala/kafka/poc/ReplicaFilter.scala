@@ -64,9 +64,17 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     leastLoaded
   }
 
-  //find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
-  def leastLoadedBrokersDownranking(racks: Seq[String]): Iterable[Int] = {
-    downrank(brokersOn(racks), leastLoadedBrokerIds())
+  /**
+    * Find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
+    *
+    * Then least loaded would be 103, 102, 101, 100 (based on replica count with least loaded last)
+    * but rack1 (100, 101) should drop in priority so we should get:
+    *
+    * The least loaded broker will be returned first
+    *
+    */
+  def leastLoadedBrokersPreferringOtherRacks(racks: Seq[String]): Iterable[Int] = {
+    downrank(brokersOn(racks), leastLoadedBrokerIds()).reverse
   }
 
   private def downrank(toDownrank: scala.Seq[Int], all: scala.Seq[Int]): scala.Seq[Int] = {

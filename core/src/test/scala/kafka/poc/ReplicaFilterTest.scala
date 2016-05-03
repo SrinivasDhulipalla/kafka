@@ -100,7 +100,7 @@ class ReplicaFilterTest {
 
 
   @Test
-  def shouldDownrankRacksSoTheyAppearLast(): Unit = {
+  def shouldPreferRacksThatAreNotPassedSoTheyAppearLast(): Unit = {
     //Given
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
     val partitions = Map(
@@ -110,10 +110,11 @@ class ReplicaFilterTest {
       p(3) -> List(103))
 
     //When
-    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokersDownranking(Seq("rack1"))
+    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokersPreferringOtherRacks(Seq("rack1"))
 
-    //Then least loaded would be 103, 102, 101, 100 but with down-ranking rack1 should get:
-    assertEquals(Seq(101, 100, 103, 102), leastLoaded)
+    //Then least loaded would be 100, 101, 102, 103 (based purely on replica count, least loaded first)
+    //but rack1 (100, 101) should drop in priority so they appear last:
+    assertEquals(Seq(102, 103, 100, 101), leastLoaded)
   }
 
   @Test

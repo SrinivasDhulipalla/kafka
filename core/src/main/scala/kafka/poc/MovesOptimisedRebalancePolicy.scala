@@ -12,8 +12,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
-    println(partitionsMap)
-    println(cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) })
+    println("\nBrokers: "+brokers.map{b=>"\n"+b})
+    println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
+    println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) } + "\n")
 
     ensureFullyReplicated(partitionsMap, cluster, replicationFactors)
 
@@ -28,13 +29,18 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   }
 
   def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
+    //Consider all partitions
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
 
+      //until fully replicated
       while (replicasForP.size < replicationFactor) {
-        val leastLoadedBrokers = cluster.leastLoadedBrokersDownranking(cluster.racksFor(partition))
-        val leastLoadedButNoExistingReplica = leastLoadedBrokers.filterNot(replicasForP.toSet).last
+        //reeveluate least loaded brokers (todo this could move outside of inner loop if we make it an iterator)
+        val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
+        val not: scala.Iterable[Int] = leastLoadedBrokers.filterNot(replicasForP.toSet)
+        //pick least loaded
+        val leastLoadedButNoExistingReplica = not.head
         partitionsMap.put(partition, replicasForP :+ leastLoadedButNoExistingReplica)
         println(s"Additional replica was created on broker [$leastLoadedButNoExistingReplica] for under-replicated partition [$partition].")
       }
