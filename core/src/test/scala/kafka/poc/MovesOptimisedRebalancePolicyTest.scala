@@ -15,20 +15,43 @@ class MovesOptimisedRebalancePolicyTest {
     * Step 1: Ensure partitions are fully replicated
     */
   @Test
-  def shouldFullyReplicateUnderreplicatedPartitions(): Unit = {
+  def shouldReReplicateOneUnderreplicatedPartition(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
     val brokers = (100 to 104).map(bk(_, "rack1"))
     val underreplicated = Map(p(0) -> List(100, 101, 102))
-    val topics = Map("my-topic" -> 4)
+    val reps = replicationFactorOf(4)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
 
     //Then there should be four values. They should be on different Brokers
     assertEquals(4, reassigned.values.last.size)
     assertEquals(4, reassigned.values.last.distinct.size)
+  }
+
+  @Test
+  def shouldCreateMultipleReplicasPerPartitionIfNecessary(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given two partitions. One under-replicated by 2 replicas. 2 empty brokers 103/104
+    val brokers = (100 to 104).map(bk(_, "rack1"))
+    val underreplicated = Map(
+      p(0) -> List(100, 101, 102),
+      p(1) -> List(100, 101),
+      p(2) -> List(100),
+      p(3) -> List.empty
+    )
+    val replicationFactor = 3
+    val reps = replicationFactorOf(replicationFactor)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
+
+    //Then p1 should have two new replicas on the two empty brokers, 103, 104
+    for(partitionId <- 0 to 3)
+      assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
   }
 
   @Test
@@ -43,10 +66,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(100, 101, 103),
       p(3) -> List(100, 101, 103),
       p(4) -> List(100, 101))
-    val topics = Map("my-topic" -> 3)
+    val reps = replicationFactorOf(3)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
 
     //then p[4] should have a new replica on broker 102 (the least loaded)
     assertEquals(List(101, 100, 102), reassigned.get(p(4)).get)
@@ -59,10 +82,10 @@ class MovesOptimisedRebalancePolicyTest {
     //Given
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack1"))
     val underreplicated = Map(p(0) -> List(100))
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When we create a new replica for the under-replicated partition
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
 
     //Then it should be created on the broker on a different rack (102)
     assertEquals(List(100, 102), reassigned.get(p(0)).get)
@@ -80,50 +103,43 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(100, 101, 103),
       p(3) -> List(100, 101, 103),
       p(4) -> List(100, 101))
-    val topics = Map("my-topic" -> 3)
+    val reps = replicationFactorOf(3)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
 
     //then p[4] should include a new replica. 102 is the least loaded,
     //but we should have picked 103 as it's on a different rack
-    assertTrue("was: "+reassigned.get(p(4)), reassigned.get(p(4)).get.contains(103))
-  }
-
-  @Test
-  def shouldCreateMultipleReplicasPerPartitionIfNecessary(): Unit = {
-    val policy = new MovesOptimisedRebalancePolicy()
-
-    //Given two partitions. One under-replicated by 2 replicas. 2 empty brokers 103/104
-    val brokers = (100 to 104).map(bk(_, "rack1"))
-    val underreplicated = Map(
-      p(0) -> List(100, 101, 102),
-      p(1) -> List(100, 101),
-      p(2) -> List(100),
-      p(3) -> List.empty
-    )
-    val replicationFactor = 3
-    val topics = Map("my-topic" -> replicationFactor)
-
-    //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
-
-    //Then p1 should have two new replicas on the two empty brokers, 103, 104
-    for(partitionId <- 0 to 3)
-      assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
+    assertTrue(reassigned.get(p(4)).get.contains(103))
   }
 
   @Test
   def shouldNotReReplicateIfNoBrokerAvailableWithoutExistingReplica(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
-
-    //Given two partitions. One under-replicated by 2 replicas. 2 empty brokers 103/104
     val brokers = (100 to 102).map(bk(_, "rack1"))
-    val underreplicated = Map(p(0) -> List(100, 101, 102))
-    val topics = Map("my-topic" -> 3)
+
+    //Given
+    val topology = Map(p(0) -> List(100, 101, 102))
+    val reps = replicationFactorOf(3)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, topics)
+    val reassigned = policy.rebalancePartitions(brokers, topology, reps)
+
+    //Then nothing should have changed
+    assertEquals((100 to 102), reassigned.get(p(0)).get.sorted)
+  }
+
+  @Test
+  def shouldDoNothingIfMoreReplicasThanReplicationFactor(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+    val brokers = (100 to 102).map(bk(_, "rack1"))
+
+    //Given
+    val partitionWithThreeReplicas = Map(p(0) -> List(100, 101, 102))
+    val reps = replicationFactorOf(1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitionWithThreeReplicas, reps)
 
     //Then nothing should have changed
     assertEquals((100 to 102), reassigned.get(p(0)).get.sorted)
@@ -141,10 +157,10 @@ class MovesOptimisedRebalancePolicyTest {
     val partitions = Map(
       p(0) -> List(100),
       p(1) -> List(100))
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
@@ -162,10 +178,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(100),
       p(3) -> List(101)
     )
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should end evenly spread
     assertEquals((100 to 103).toSeq, reassigned.values.flatten.toSeq.sorted)
@@ -186,10 +202,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(5) -> List(101)
 
     )
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should end evenly spread one replica per broker and hence two per rack
     assertEquals((100 to 105).toSeq, reassigned.values.flatten.toSeq.sorted)
@@ -207,10 +223,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(101),
       p(3) -> List(101)
     )
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should end evenly spread one replica per broker and two replicas per rack
     assertEquals(Map(
@@ -232,10 +248,10 @@ class MovesOptimisedRebalancePolicyTest {
     val partitions = Map(
       p(0) -> List(100, 101),
       p(1) -> List(100, 101))
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
@@ -251,10 +267,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(0) -> List(100, 101),
       p(1) -> List(100, 102),
       p(2) -> List(101, 102))
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(102, 100), p(2) -> List(101, 102)), reassigned)
@@ -269,10 +285,10 @@ class MovesOptimisedRebalancePolicyTest {
     val partitions = Map(
       p(0) -> List(100, 101),
       p(1) -> List(101, 100))
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100, 101), p(1) -> List(101, 100)), reassigned)
@@ -290,10 +306,10 @@ class MovesOptimisedRebalancePolicyTest {
     val partitions = Map(
       p(0) -> List(100),
       p(1) -> List(100))
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
     assertEquals(Map(p(0) -> List(100), p(1) -> List(101)), reassigned)
@@ -311,10 +327,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(100),
       p(3) -> List(100)
     )
-    val topics = Map("my-topic" -> 1)
+    val reps = replicationFactorOf(1)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per broker
     assertEquals(sort(Map(p(0) -> List(103), p(1) -> List(101), p(2) -> List(100), p(3) -> List(102))), sort(reassigned.toMap))
@@ -333,10 +349,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(2) -> List(102, 101),
       p(3) -> List(103, 101)
     )
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should have moved one replica from 101 -> 103
     assertEquals(sort(Map(
@@ -360,10 +376,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(4) -> List(100, 101),
       p(5) -> List(100, 101)
     )
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
     println(reassigned)
     //All replicas on 100 should remain there (i.e. on rack 1)
     assertEquals(6, reassigned.values.flatten.filter(_ == 100).size)
@@ -381,10 +397,10 @@ class MovesOptimisedRebalancePolicyTest {
     val partitions = Map(
       p(0) -> List(100, 101),
       p(1) -> List(100, 101))
-    val topics = Map("my-topic" -> 2)
+    val reps = replicationFactorOf(2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per broker
     val leaders = reassigned.values.map(_ (0))
@@ -401,10 +417,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(0) -> List(100, 101, 102),
       p(1) -> List(100, 101, 102),
       p(3) -> List(100, 101, 102))
-    val topics = Map("my-topic" -> 3)
+    val reps = replicationFactorOf(3)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per broker
     val leaders = reassigned.values.map(_ (0))
@@ -412,7 +428,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   /**
-    * Tests for multiple topics
+    * Tests for multiple reps
     */
 
   @Test
@@ -425,12 +441,12 @@ class MovesOptimisedRebalancePolicyTest {
       p(0, "t1") -> List(100, 101, 102),
       p(0, "t2") -> List(100, 101, 102),
       p(0, "t3") -> List(100, 101, 102))
-    val topics = Map("t1" -> 3, "t2" -> 3, "t3" -> 3)
+    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3)
 
     assertEquals(1, partitions.values.map(_ (0)).toSeq.distinct.size)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one leader per broker
     val leaders = reassigned.values.map(_ (0))
@@ -448,10 +464,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(0, "t2") -> List(100, 101, 102),
       p(0, "t3") -> List(100, 101, 102),
       p(0, "t4") -> List(100, 101, 102))
-    val topics = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one leader per broker
     val leaders = reassigned.values.map(_ (0))
@@ -468,10 +484,10 @@ class MovesOptimisedRebalancePolicyTest {
       p(0, "t1") -> List(100, 101),
       p(0, "t2") -> List(100, 101),
       p(0, "t3") -> List(100, 101))
-    val topics = Map("t1" -> 2, "t2" -> 2, "t3" -> 2)
+    val reps = Map("t1" -> 2, "t2" -> 2, "t3" -> 2)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, topics)
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then
     val numberReplicasOn102 = reassigned.values.flatten.filter(_ == 102).size
@@ -522,5 +538,10 @@ class MovesOptimisedRebalancePolicyTest {
 
   def sort(x: Map[TopicAndPartition, Seq[Int]]) = {
     x.toSeq.sortBy(_._1.partition)
+  }
+
+
+  def replicationFactorOf(replicationFactor: Int): Map[String, Int] = {
+    Map("my-topic" -> replicationFactor)
   }
 }
