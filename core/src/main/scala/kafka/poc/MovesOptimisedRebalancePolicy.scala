@@ -28,17 +28,19 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     partitionsMap
   }
 
+  /**
+    * This method O(#under-replicated-partitions) with the cost being reevaluating the least loaded brokers for each one (could be optimised slightly but the
+    * code is a little simpler this way).
+    */
   def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
-    //Consider all partitions
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
 
-      val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
-      val leastLoadedValidBrokers = leastLoadedBrokers.filterNot(replicasForP.toSet).iterator
-
-      //until fully replicated
       while (replicasForP.size < replicationFactor) {
+        val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
+        val leastLoadedValidBrokers = leastLoadedBrokers.filterNot(replicasForP.toSet).iterator
+
         val leastLoaded = leastLoadedValidBrokers.next
         partitionsMap.put(partition, replicasForP :+ leastLoaded)
         println(s"Additional replica was created on broker [$leastLoaded] for under-replicated partition [$partition].")
