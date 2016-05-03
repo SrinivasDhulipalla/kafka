@@ -8,15 +8,28 @@ import scala.collection._
 
 class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
+
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
     println(partitionsMap)
     println(cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) })
 
-    /**
-      * Step 1: Ensure partitions are fully replicated
-      */
+    ensureFullyReplicated(partitionsMap, cluster, replicationFactors)
+
+    optimiseForReplicaFairnessAcrossRacks(partitionsMap, cluster)
+    optimiseForLeaderFairnessAcrossRacks(partitionsMap, cluster)
+
+    optimiseForReplicaFairnessAcrossBrokers(partitionsMap, cluster, replicationFactors)
+    optimiseForLeaderFairnessAcrossBrokers(partitionsMap, cluster)
+
+    println("Result is: " + partitionsMap)
+    partitionsMap
+  }
+
+
+
+  def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
@@ -28,10 +41,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         println(s"Additional replica was created on broker [$leastLoadedButNoExistingReplica] for under-replicated partition [$partition].")
       }
     }
+  }
 
-    /**
-      * Step 2.1: Optimise for replica fairness across racks
-      */
+  def optimiseForReplicaFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter) = {
     //Get the most loaded set of replicas from above par racks
     val aboveParReplicas = cluster.replicaFairness.aboveParRacks()
       .flatMap { rack => cluster.weightedReplicasFor(rack).take(
@@ -42,7 +54,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     val belowParOpenings = cluster.replicaFairness.belowParRacks()
       .flatMap { rack => cluster.leastLoadedBrokerIds(rack).take(cluster.replicaFairness.countFromPar(rack)) }
 
-    //only move if there is supply and demand
+    //only move if there is supply and demand (i.e. as many slots as replicas-to-move and vice versa)
     val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
 
     //Move from above par to below par
@@ -52,15 +64,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       val brokerFrom = aboveParReplicas(i).broker
       val brokerTo = belowParOpenings(i)
       //check partition constraint is not violated
-      if(cluster.obeysPartitionConstraint(partition, brokerTo)) {
+      if (cluster.obeysPartitionConstraint(partition, brokerTo)) {
         move(partition, brokerFrom, brokerTo, partitionsMap)
         i -= 1
       }
     }
+  }
 
-    /**
-      * Step 2.2: Optimise for leader fairness across racks
-      */
+  def optimiseForLeaderFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
     //consider leaders on above par racks
     for (aboveParRack <- cluster.leaderFairness.aboveParRacks()) {
       //for each leader (could be optimised to be for(n) where n is the number we expect to move)
@@ -77,9 +88,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         }
       }
     }
+  }
 
+  def optimiseForReplicaFairnessAcrossBrokers(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]) = {
     /**
-      * Step 3.1: Optimise for replica fairness across brokers
       * TODO refactor this to take the approach used in 2.1 - get list of most loaded replicas & least loaded brokers and move incrementally and ensuring there is enough supply and demand
       */
     var moved = false
@@ -99,10 +111,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         }
       }
     }
+  }
 
-    /**
-      * Step 3.2: Optimise for leader fairness across brokers
-      */
+  def optimiseForLeaderFairnessAcrossBrokers(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
     //consider leaders on above par brokers
     for (aboveParBroker <- cluster.leaderFairness.aboveParBrokers()) {
       //for each leader (could be optimised to be for(n) where n is the number we expect to move)
@@ -119,9 +130,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         }
       }
     }
-
-    println("Result is: " + partitionsMap)
-    partitionsMap
   }
 
   def makeLeader(tp: TopicAndPartition, toPromote: Int, partitionsMap: collection.mutable.Map[TopicAndPartition, Seq[Int]]): Unit = {
