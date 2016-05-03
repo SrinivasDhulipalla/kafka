@@ -276,19 +276,16 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   }
 
   def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo:Int): Boolean ={
-    !replicasFor(brokerMovingTo).map(_.topicAndPartition).contains(replica)
+    !replicasFor(brokerMovingTo).map(_.partition).contains(replica)
   }
-
 }
 
-
-
-class Replica(val topic: String, val partition: Int, val broker: Int) {
-  def topicAndPartition(): TopicAndPartition = {
-    new TopicAndPartition(topic, partition)
+class Replica(val topic: String, val partitionId: Int, val broker: Int) {
+  def partition(): TopicAndPartition = {
+    new TopicAndPartition(topic, partitionId)
   }
 
-  override def toString = s"Replica[$topic:$partition:$broker]"
+  override def toString = s"Replica[$topic:$partitionId:$broker]"
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[Replica]
 
@@ -296,13 +293,13 @@ class Replica(val topic: String, val partition: Int, val broker: Int) {
     case that: Replica =>
       (that canEqual this) &&
         topic == that.topic &&
-        partition == that.partition &&
+        partitionId == that.partitionId &&
         broker == that.broker
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(topic, partition, broker)
+    val state = Seq(topic, partitionId, broker)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

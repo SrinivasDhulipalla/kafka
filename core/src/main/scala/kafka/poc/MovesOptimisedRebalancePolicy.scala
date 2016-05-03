@@ -12,7 +12,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ReplicaFilter(brokers, partitionsMap)
-    println("\nBrokers: "+brokers.map{b=>"\n"+b})
+    println("\nBrokers: " + brokers.map { b => "\n" + b })
     print(partitionsMap, cluster)
 
     ensureFullyReplicated(partitionsMap, cluster, replicationFactors)
@@ -29,8 +29,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   }
 
   /**
-    * This method O(#under-replicated-partitions) with the cost being reevaluating the least loaded brokers for each one (could be optimised slightly but the
-    * code is a little simpler this way).
+    * This method O(#under-replicated-partitions * #parititions) as we reevaluate the least loaded brokers for each under-replicated one we find
+    * (could be optimised further but this seems a reasonable balance between simplicity and cost).
     */
   def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
@@ -48,30 +48,21 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
+  /**
+    * This method is O(#unfair * #partitions)
+    */
   def optimiseForReplicaFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter) = {
-    //Get the most loaded set of replicas from above par racks
-    val aboveParReplicas = cluster.replicaFairness.aboveParRacks()
-      .flatMap { rack => cluster.weightedReplicasFor(rack).take(
-        cluster.replicaFairness.countFromPar(rack))
-      }
-
-    //get the least loaded brokers
-    val belowParOpenings = cluster.replicaFairness.belowParRacks()
-      .flatMap { rack => cluster.leastLoadedBrokerIds(rack).take(cluster.replicaFairness.countFromPar(rack)) }
-
-    //only move if there is supply and demand (i.e. as many slots as replicas-to-move and vice versa)
-    val moves = Math.min(aboveParReplicas.size, belowParOpenings.size) - 1
-
-    //Move from above par to below par
-    var i = moves
-    while (i > 0) {
-      val partition = aboveParReplicas(i).topicAndPartition
-      val brokerFrom = aboveParReplicas(i).broker
-      val brokerTo = belowParOpenings(i)
-      //check partition constraint is not violated
-      if (cluster.obeysPartitionConstraint(partition, brokerTo)) {
-        move(partition, brokerFrom, brokerTo, partitionsMap)
-        i -= 1
+    for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
+      for (toMove <- cluster.weightedReplicasFor(aboveParRack)) {
+        var moved = false
+        for (belowParRack <- cluster.replicaFairness.belowParRacks) {
+          for (brokerTo <- cluster.leastLoadedBrokerIds(belowParRack).iterator) {
+            if (cluster.obeysPartitionConstraint(toMove.partition, brokerTo) && moved == false) {
+              move(toMove.partition, toMove.broker, brokerTo, partitionsMap)
+              moved = true
+            }
+          }
+        }
       }
     }
   }
@@ -104,7 +95,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
       for (replicaToMove <- cluster.weightedReplicasFor(aboveParBroker)) {
         moved = false
         for (belowParBroker <- cluster.replicaFairness.belowParBrokers) {
-          val partition = replicaToMove.topicAndPartition
+          val partition = replicaToMove.partition
           val brokerFrom: Int = replicaToMove.broker
           val brokerTo: Int = belowParBroker.id
           if (cluster.obeysPartitionConstraint(partition, brokerTo) && moved == false) {
@@ -160,6 +151,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
   def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
-    println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partition) } + "\n")
+    println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) } + "\n")
   }
 }
