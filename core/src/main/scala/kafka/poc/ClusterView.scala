@@ -8,7 +8,7 @@ trait ClusterView {
 
   def belowParBrokers(): scala.Seq[BrokerMetadata]
 
-  def aboveParLeaders(): scala.Seq[TopicAndPartition]
+  def brokersWithAboveParLeaders(): scala.Seq[TopicAndPartition]
 
   def brokersWithBelowParLeaders(): scala.Seq[Int]
 }

@@ -65,7 +65,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   }
 
   def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], view: ClusterView ): Unit = {
-    for (aboveParBroker <- view.aboveParLeaders) {//*1
+    for (aboveParBroker <- view.brokersWithAboveParLeaders) {//*1
       //check to see if the partition has a non-leader replica on below par racks
       for (replica <- partitions.get(aboveParBroker).get.drop(1)) {
         if (view.brokersWithBelowParLeaders.contains(replica)) {

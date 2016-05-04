@@ -190,28 +190,28 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals((100 to 105).toSeq, reassigned.values.flatten.toSeq.sorted)
   }
 
-//  @Test
-//  def shouldFindFairnessWhereBrokersPerRacksAreUneven(): Unit = {
-//    val policy = new MovesOptimisedRebalancePolicy()
-//
-//    //Given all replicas are on one (of 3) racks
-//    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
-//    val partitions = Map(
-//      p(0) -> List(100, 102),
-//      p(1) -> List(100, 102),
-//      p(2) -> List(101, 102),
-//      p(3) -> List(101, 102)
-//    )
-//    val reps = replicationFactorOf(2)
-//
-//    //When
-//    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-//
-//    //Then should leaders should be even across the three racks,
-//    //so to leaders on the single broker on rack2
-//    assertEquals(8, reassigned.values.flatten.toSeq.size)
-//    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
-//  }
+  @Test
+  def shouldFindFairnessWhereBrokersPerRacksAreUneven(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given all replicas are on one (of 3) racks
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 102),
+      p(1) -> List(100, 102),
+      p(2) -> List(101, 102),
+      p(3) -> List(101, 102)
+    )
+    val reps = replicationFactorOf(2)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should leaders should be even across the three racks,
+    //so to leaders on the single broker on rack2
+    assertEquals(8, reassigned.values.flatten.toSeq.size)
+    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+  }
 
 
 

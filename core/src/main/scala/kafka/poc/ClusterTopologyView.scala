@@ -18,7 +18,7 @@ class ClusterTopologyView(brokers: Seq[BrokerMetadata], partitions: Map[TopicAnd
 
     def belowParBrokers(): scala.Seq[BrokerMetadata] = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_))
 
-    def aboveParLeaders(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks().flatMap(leadersOn(_))
+    def brokersWithAboveParLeaders(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks().flatMap(leadersOn(_))
 
     def brokersWithBelowParLeaders(): scala.Seq[Int] = brokersOn(leaderFairness.belowParRacks())
   }
@@ -28,7 +28,7 @@ class ClusterTopologyView(brokers: Seq[BrokerMetadata], partitions: Map[TopicAnd
 
     def belowParBrokers(): scala.Seq[BrokerMetadata] = replicaFairness.belowParBrokers
 
-    def aboveParLeaders(): scala.Seq[TopicAndPartition] = leaderFairness.aboveParBrokers().flatMap(leadersOn(_))
+    def brokersWithAboveParLeaders(): scala.Seq[TopicAndPartition] = leaderFairness.aboveParBrokers().flatMap(leadersOn(_))
 
     def brokersWithBelowParLeaders(): scala.Seq[Int] = leaderFairness.belowParBrokers().map(_.id)
   }
