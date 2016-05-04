@@ -9,7 +9,7 @@ import org.junit.Test
 
 import scala.collection.Seq
 
-class ReplicaFilterTest {
+class ClusterTopologyViewTest {
 
   @Test
   def shouldCreateSimpleClusterTopologyOfBrokersToReplicas(): Unit = {
@@ -18,7 +18,7 @@ class ReplicaFilterTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val topology = new ReplicaFilter(brokers, partitions).brokersToReplicas
+    val topology = new ClusterTopologyView(brokers, partitions).brokersToReplicas
 
     val expected = Map(
       new BrokerMetadata(101, Option("rack2")) -> Seq(new Replica(topic, 0, 101)),
@@ -35,7 +35,7 @@ class ReplicaFilterTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val filter: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val filter: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
     val repFairness = new ReplicaFairness(filter.brokersToReplicas, filter.rackCount)
 
     val counts = repFairness.brokerReplicaCounts
@@ -55,19 +55,19 @@ class ReplicaFilterTest {
 
 
     //1 replica, 2 racks
-    assertEquals(0, new ReplicaFilter(brokers, Map(
+    assertEquals(0, new ClusterTopologyView(brokers, Map(
       p(0) -> List(103))).replicaFairness.rackFairReplicaValue.toInt)
 
     //2 replicas, 2 racks
-    assertEquals(1, new ReplicaFilter(brokers, Map(
+    assertEquals(1, new ClusterTopologyView(brokers, Map(
       p(0) -> List(103, 102))).replicaFairness.rackFairReplicaValue.toInt)
 
     //3 replicas, 2 racks
-    assertEquals(1, new ReplicaFilter(brokers, Map(
+    assertEquals(1, new ClusterTopologyView(brokers, Map(
       p(0) -> List(103, 102, 101))).replicaFairness.rackFairReplicaValue.toInt)
 
     //4 replicas, 2 racks
-    assertEquals(2, new ReplicaFilter(brokers, Map(
+    assertEquals(2, new ClusterTopologyView(brokers, Map(
       p(0) -> List(103, 102, 101, 100))).replicaFairness.rackFairReplicaValue.toInt)
 
   }
@@ -84,7 +84,7 @@ class ReplicaFilterTest {
       p(4) -> List(100))
 
     //When
-    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokerIds()
+    val leastLoaded = new ClusterTopologyView(brokers, partitions).leastLoadedBrokerIds()
 
     //Then
     assertEquals(Seq(100, 101, 102), leastLoaded)
@@ -97,7 +97,7 @@ class ReplicaFilterTest {
     val partitions = Map(p(4) -> List(101))
 
     //When
-    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokerIds()
+    val leastLoaded = new ClusterTopologyView(brokers, partitions).leastLoadedBrokerIds()
 
     //Then
     assertEquals(Seq(101, 100), leastLoaded)
@@ -115,7 +115,7 @@ class ReplicaFilterTest {
       p(3) -> List(103))
 
     //When
-    val leastLoaded = new ReplicaFilter(brokers, partitions).leastLoadedBrokersPreferringOtherRacks(Seq("rack1"))
+    val leastLoaded = new ClusterTopologyView(brokers, partitions).leastLoadedBrokersPreferringOtherRacks(Seq("rack1"))
 
     //Then least loaded would be 100, 101, 102, 103 (based purely on replica count, least loaded first)
     //but rack1 (100, 101) should drop in priority so they appear last:
@@ -134,7 +134,7 @@ class ReplicaFilterTest {
     //When
     val brokerFrom: Int = 100
     val brokerTo: Int = 101
-    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
 
     //Then
     assertEquals(true, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
@@ -152,7 +152,7 @@ class ReplicaFilterTest {
     //When
     val brokerFrom: Int = 100
     val brokerTo: Int = 101
-    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
 
     //Then
     assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
@@ -166,7 +166,7 @@ class ReplicaFilterTest {
       p(0) -> List(100)
     )
 
-    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
     assertEquals(false, cluster.obeysPartitionConstraint(p(0), 100))
   }
 
@@ -178,7 +178,7 @@ class ReplicaFilterTest {
       p(0) -> List(100)
     )
 
-    val cluster: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
     assertEquals(true, cluster.obeysPartitionConstraint(p(0), 101))
   }
 }

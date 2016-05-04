@@ -10,7 +10,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
-    val cluster = new ReplicaFilter(brokers, partitions)
+    val cluster = new ClusterTopologyView(brokers, partitions)
     println("\nBrokers: " + brokers.map { b => "\n" + b })
     print(partitions, cluster)
     val byRack = cluster.byRack
@@ -36,7 +36,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     * This method O(#under-replicated-partitions * #parititions) as we reevaluate the least loaded brokers for each under-replicated one we find
     * (could be optimised further but this seems a reasonable balance between simplicity and cost).
     */
-  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
+  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
@@ -53,7 +53,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   }
 
 
-  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int], replicasFrom: scala.Seq[Replica], belowParBrokers: () => scala.Seq[BrokerMetadata]) = {
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int], replicasFrom: scala.Seq[Replica], belowParBrokers: () => scala.Seq[BrokerMetadata]) = {
     for (replicaFrom <- replicasFrom) {
       var moved = false
       for (brokerTo <- belowParBrokers()) {
@@ -67,7 +67,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
-  def leaderFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, aboveParBrokers: Seq[TopicAndPartition], belowParBrokers: () => scala.Seq[Int]): Unit = {
+  def leaderFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, aboveParBrokers: Seq[TopicAndPartition], belowParBrokers: () => scala.Seq[Int]): Unit = {
     for (leader <- aboveParBrokers) {
       //*1
       //check to see if the partition has a non-leader replica on below par racks
@@ -103,7 +103,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     println(s"Partition $tp was moved from broker [$from] to [$to]")
   }
 
-  def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
+  def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView): Unit = {
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
     println("\nBrokers to partitions: " + cluster.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) } + "\n")
   }
