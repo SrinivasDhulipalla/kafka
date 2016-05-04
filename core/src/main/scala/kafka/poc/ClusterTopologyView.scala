@@ -75,22 +75,24 @@ class ClusterTopologyView(brokers: Seq[BrokerMetadata], partitions: Map[TopicAnd
     brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).size > 0
   }
 
-  def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
-    val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount)
+  object constraints extends RebalanceConstraints {
+    def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
+      val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount)
 
-    //get replicas for partition, replacing brokerFrom with brokerTo
-    var proposedReplicas: scala.Seq[Int] = partitions.get(partition).get
-    val index: Int = proposedReplicas.indexOf(brokerFrom)
-    proposedReplicas = proposedReplicas.patch(index, Seq(brokerTo), 1)
+      //get replicas for partition, replacing brokerFrom with brokerTo
+      var proposedReplicas: scala.Seq[Int] = partitions.get(partition).get
+      val index: Int = proposedReplicas.indexOf(brokerFrom)
+      proposedReplicas = proposedReplicas.patch(index, Seq(brokerTo), 1)
 
-    //find how many racks are now spanned
-    val racksSpanned = proposedReplicas.map(bk(_)).map(_.rack).distinct.size
+      //find how many racks are now spanned
+      val racksSpanned = proposedReplicas.map(bk(_)).map(_.rack).distinct.size
 
-    racksSpanned >= minRacksSpanned
-  }
+      racksSpanned >= minRacksSpanned
+    }
 
-  def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo: Int): Boolean = {
-    !replicasFor(brokerMovingTo).map(_.partition).contains(replica)
+    def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo: Int): Boolean = {
+      !replicasFor(brokerMovingTo).map(_.partition).contains(replica)
+    }
   }
 
   /**

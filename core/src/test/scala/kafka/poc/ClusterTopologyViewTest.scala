@@ -137,7 +137,7 @@ class ClusterTopologyViewTest {
     val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
 
     //Then
-    assertEquals(true, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+    assertEquals(true, cluster.constraints.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
   @Test
@@ -155,7 +155,7 @@ class ClusterTopologyViewTest {
     val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
 
     //Then
-    assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+    assertEquals(false, cluster.constraints.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
   @Test
@@ -167,7 +167,7 @@ class ClusterTopologyViewTest {
     )
 
     val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
-    assertEquals(false, cluster.obeysPartitionConstraint(p(0), 100))
+    assertEquals(false, cluster.constraints.obeysPartitionConstraint(p(0), 100))
   }
 
   @Test
@@ -179,6 +179,6 @@ class ClusterTopologyViewTest {
     )
 
     val cluster: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
-    assertEquals(true, cluster.obeysPartitionConstraint(p(0), 101))
+    assertEquals(true, cluster.constraints.obeysPartitionConstraint(p(0), 101))
   }
 }

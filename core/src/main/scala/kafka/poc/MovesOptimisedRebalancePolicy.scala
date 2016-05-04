@@ -20,12 +20,12 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     fullyReplicated(partitions, cluster, replicationFactors)
 
     //Optimise Racks
-    replicaFairness(partitions, cluster, replicationFactors, byRack.aboveParReplicas, byRack.belowParBrokers)
-    leaderFairness(partitions, cluster, byRack.aboveParLeaders, byRack.brokersWithBelowParLeaders)
+    replicaFairness(partitions, cluster.constraints, replicationFactors, byRack.aboveParReplicas, byRack.belowParBrokers)
+    leaderFairness(partitions, byRack.aboveParLeaders, byRack.brokersWithBelowParLeaders)
 
     //Optimise brokers on each byRack
-    replicaFairness(partitions, cluster, replicationFactors, byBroker.aboveParReplicas, byBroker.belowParBrokers)
-    leaderFairness(partitions, cluster, byBroker.aboveParLeaders, byBroker.brokersWithBelowParLeaders)
+    replicaFairness(partitions, cluster.constraints, replicationFactors, byBroker.aboveParReplicas, byBroker.belowParBrokers)
+    leaderFairness(partitions, byBroker.aboveParLeaders, byBroker.brokersWithBelowParLeaders)
 
     println("\nResult is:")
     print(partitions, cluster)
@@ -52,13 +52,12 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
-
-  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int], replicasFrom: scala.Seq[Replica], belowParBrokers: () => scala.Seq[BrokerMetadata]) = {
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], replicasFrom: scala.Seq[Replica], belowParBrokers: () => scala.Seq[BrokerMetadata]) = {
     for (replicaFrom <- replicasFrom) {
       var moved = false
       for (brokerTo <- belowParBrokers()) {
-        if (cluster.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id) && moved == false) {
-          if (cluster.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)) {
+        if (constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id) && moved == false) {
+          if (constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)) {
             move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
             moved = true
           }
@@ -67,18 +66,16 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
-  def leaderFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, aboveParBrokers: Seq[TopicAndPartition], belowParBrokers: () => scala.Seq[Int]): Unit = {
-    for (leader <- aboveParBrokers) {
-      //*1
+  def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], aboveParBrokers: Seq[TopicAndPartition], belowParBrokers: () => scala.Seq[Int]): Unit = {
+    for (leader <- aboveParBrokers) {//*1
       //check to see if the partition has a non-leader replica on below par racks
-      for (replica <- partitionsMap.get(leader).get.drop(1)) {
+      for (replica <- partitions.get(leader).get.drop(1)) {
         if (belowParBrokers().contains(replica)) {
           //if so, switch leadership
-          makeLeader(leader, replica, partitionsMap)
+          makeLeader(leader, replica, partitions)
         }
       }
     }
-
     //*1 do we need: if (cluster.leaderFairness.aboveParRacks().contains(aboveParRack)) {
   }
 
