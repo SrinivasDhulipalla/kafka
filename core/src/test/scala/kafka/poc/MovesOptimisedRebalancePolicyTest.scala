@@ -217,25 +217,25 @@ class MovesOptimisedRebalancePolicyTest {
       p(3) -> List(102)), reassigned)
   }
 
-//  @Test
-//  def shouldAchiveFairnessAcrossRacksWithMultipleTopics(): Unit = {
-//    val policy = new MovesOptimisedRebalancePolicy()
-//
-//    //Given
-//    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
-//    val partitions = Map(
-//      p(0, "sales") -> List(100),
-//      p(1, "sales") -> List(100),
-//      p(0, "orders") -> List(100),
-//      p(1, "orders") -> List(100))
-//    val reps = replicationFactorOf(1)
-//
-//    //When
-//    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-//
-//    //Then should be one per rack
-//    reassigned.values.map{replicaAssignment => assertEquals(1, replicaAssignment.size)}
-//  }
+  @Test
+  def shouldAchieveFairnessAcrossRacksWithMultipleTopics(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0, "sales") -> List(100),
+      p(1, "sales") -> List(100),
+      p(0, "orders") -> List(100),
+      p(1, "orders") -> List(100))
+    val reps =  Map("sales" -> 1, "orders" -> 1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should be one per rack
+    reassigned.values.map{replicaAssignment => assertEquals(1, replicaAssignment.size)}
+  }
 
   /**
     * Step 2.2: Optimise for leader fairness across racks

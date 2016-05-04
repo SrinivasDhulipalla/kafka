@@ -11,19 +11,19 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val cluster = new ClusterTopologyView(brokers, partitions)
-    println("\nBrokers: " + brokers.map { b => "\n" + b })
-    print(partitions, cluster)
     val byRack = cluster.byRack
     val byBroker = cluster.byBroker
+    println("\nBrokers: " + brokers.map { b => "\n" + b })
+    print(partitions, cluster)
 
-    //Ensure no under-replicated partitions
+    //1. Ensure no under-replicated partitions
     fullyReplicated(partitions, cluster, replicationFactors)
 
-    //Optimise Racks
+    //2. Optimise Racks
     replicaFairness(partitions, cluster.constraints, replicationFactors, byRack.aboveParReplicas, byRack.belowParBrokers)
     leaderFairness(partitions, byRack.aboveParLeaders, byRack.brokersWithBelowParLeaders)
 
-    //Optimise brokers on each byRack
+    //3. Optimise brokers on each byRack
     replicaFairness(partitions, cluster.constraints, replicationFactors, byBroker.aboveParReplicas, byBroker.belowParBrokers)
     leaderFairness(partitions, byBroker.aboveParLeaders, byBroker.brokersWithBelowParLeaders)
 
@@ -36,7 +36,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     * This method O(#under-replicated-partitions * #parititions) as we reevaluate the least loaded brokers for each under-replicated one we find
     * (could be optimised further but this seems a reasonable balance between simplicity and cost).
     */
-  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int]): Unit = {
+  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
