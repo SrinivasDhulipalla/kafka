@@ -49,14 +49,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
   }
 
   /**
-    * This method is O(#unfair * #partitions)
+    * This method is O(#unfair * #partitions) - this is now incorrect but does make me wonder how much faster the old way must have been!
     */
   def optimiseForReplicaFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter) = {
-    for (aboveParRack <- cluster.replicaFairness.aboveParRacks()) {
+    for (aboveParRack <- cluster.replicaFairness.aboveParRacks) {
       for (toMove <- cluster.weightedReplicasFor(aboveParRack)) {
         var moved = false
         for (belowParRack <- cluster.replicaFairness.belowParRacks) {
-          for (brokerTo <- cluster.leastLoadedBrokerIds(belowParRack).iterator) {
+          for (brokerTo <- cluster.leastLoadedBrokerIds(belowParRack)) {
             if (cluster.obeysPartitionConstraint(toMove.partition, brokerTo) && moved == false) {
               move(toMove.partition, toMove.broker, brokerTo, partitionsMap)
               moved = true

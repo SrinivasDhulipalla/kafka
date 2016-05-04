@@ -50,7 +50,7 @@ class MovesOptimisedRebalancePolicyTest {
     val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
 
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
-    for(partitionId <- 0 to 3)
+    for (partitionId <- 0 to 3)
       assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
   }
 
@@ -92,7 +92,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldPreferLeastLoadedBrokersOnOtherRacksWhenReReplicatingUnderreplicatedPartitions(): Unit ={
+  def shouldPreferLeastLoadedBrokersOnOtherRacksWhenReReplicatingUnderreplicatedPartitions(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given broker 100 is least loaded and p[4] is under-replicated
@@ -208,7 +208,8 @@ class MovesOptimisedRebalancePolicyTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then broker 102 should end up with two partitions (to obey rack fariness)
+    //Then broker 102 (the only broker on rack2) should end up with
+    //two partitions (to obey rack fairness)
     assertEquals(Map(
       p(0) -> List(100),
       p(1) -> List(101),
@@ -216,10 +217,25 @@ class MovesOptimisedRebalancePolicyTest {
       p(3) -> List(102)), reassigned)
   }
 
-  @Test
-  def shouldOptimiseForEvenReplicaPlacementWhereThereAreMoreBelowParOpeningsThanThereAreAboveParReplicas(): Unit = {
-  ///??? do we really need this??
-  }
+//  @Test
+//  def shouldAchiveFairnessAcrossRacksWithMultipleTopics(): Unit = {
+//    val policy = new MovesOptimisedRebalancePolicy()
+//
+//    //Given
+//    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+//    val partitions = Map(
+//      p(0, "sales") -> List(100),
+//      p(1, "sales") -> List(100),
+//      p(0, "orders") -> List(100),
+//      p(1, "orders") -> List(100))
+//    val reps = replicationFactorOf(1)
+//
+//    //When
+//    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+//
+//    //Then should be one per rack
+//    reassigned.values.map{replicaAssignment => assertEquals(1, replicaAssignment.size)}
+//  }
 
   /**
     * Step 2.2: Optimise for leader fairness across racks
