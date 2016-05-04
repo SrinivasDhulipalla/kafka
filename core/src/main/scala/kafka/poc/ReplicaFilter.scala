@@ -2,6 +2,7 @@ package kafka.poc
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
+import kafka.poc.fairness.Fairness
 
 import scala.collection._
 import scala.collection.mutable.LinkedHashMap
@@ -56,10 +57,9 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     brokersToReplicas.map(_._1).reverse
   }
 
-  def leastLoadedBrokerIds(rack: String): Seq[Int] = {
+  def leastLoadedBrokerIds(rack: String): Seq[BrokerMetadata] = {
     val leastLoaded = leastLoadedBrokers
       .filter(broker => broker.rack.get == rack)
-      .map(_.id)
     println("least loaded for rack " + rack + " is " + leastLoaded)
     leastLoaded
   }
@@ -132,11 +132,13 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
   def replicasFor(broker: BrokerMetadata): Seq[Replica] = {
     brokersToReplicas.filter(_._1 == broker).seq(0)._2
   }
+
   def replicasFor(broker: Int): Seq[Replica] = {
     brokersToReplicas.filter(_._1.id == broker).seq(0)._2
   }
 
-  object replicaFairness {
+
+  object replicaFairness extends Fairness {
     //Summarise the topology as BrokerMetadata -> ReplicaCount
     def brokerReplicaCounts() = LinkedHashMap(
       brokersToReplicas
@@ -145,7 +147,7 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
         : _*
     )
 
-    def rackReplicaCounts() = LinkedHashMap(
+    private def rackReplicaCounts() = LinkedHashMap(
       brokersToReplicas
         .map { case (x, y) => (x, y.size) }
         .groupBy(_._1.rack.get)
@@ -162,17 +164,17 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     )
 
     //Define  floor(replica-count / broker-count) replicas
-    def brokerFairReplicaValue() = Math.floor(
+    private def brokerFairReplicaValue() = Math.floor(
       brokerReplicaCounts.values.sum /
         brokerReplicaCounts
           .keys.toSeq.distinct.size
     )
 
-    def countFromPar(rack: String): Int = {
+    private def countFromPar(rack: String): Int = {
       Math.abs(rackReplicaCounts.get(rack).get - rackFairReplicaValue.toInt)
     }
 
-    def countFromPar(broker: BrokerMetadata): Int = {
+    private def countFromPar(broker: BrokerMetadata): Int = {
       Math.abs(brokerReplicaCounts.get(broker).get - brokerFairReplicaValue.toInt)
     }
 
@@ -208,15 +210,15 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     }
   }
 
-  object leaderFairness {
-    def brokerLeaderPartitionCounts() = LinkedHashMap(
+  object leaderFairness extends Fairness {
+    private def brokerLeaderPartitionCounts() = LinkedHashMap(
       brokersToLeaders
         .map { case (x, y) => (x, y.size) }
         .sortBy(_._2)
         : _*
     )
 
-    def rackLeaderPartitionCounts: Map[String, Int] = {
+    private def rackLeaderPartitionCounts: Map[String, Int] = {
       brokersToLeaders
         .map { case (x, y) => (x, y.size) }
         .groupBy(_._1.rack.get)
@@ -224,11 +226,11 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     }
 
 
-    def rackFairLeaderValue() = {
+    private def rackFairLeaderValue() = {
       Math.floor(partitions.size / rackCount)
     }
 
-    def brokerFairLeaderValue() = {
+    private def brokerFairLeaderValue() = {
       Math.floor(partitions.size / brokersToReplicas.size)
     }
 
@@ -261,6 +263,28 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     }
   }
 
+
+  object byRack {
+    def aboveParReplicas(): scala.Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_))
+
+    def belowParBrokers() = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_))
+
+    def aboveParLeaders(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks().flatMap(leadersOn(_))
+
+    def brokersWithBelowParLeaders(): scala.Seq[Int] = brokersOn(leaderFairness.belowParRacks())
+
+  }
+  object byBroker {
+    def aboveParReplicas(): scala.Seq[Replica] = replicaFairness.aboveParBrokers.flatMap(weightedReplicasFor(_))
+
+    def belowParBrokers(): scala.Seq[BrokerMetadata] = replicaFairness.belowParBrokers
+
+    def aboveParLeaders(): scala.Seq[TopicAndPartition] = leaderFairness.aboveParBrokers().flatMap(leadersOn(_))
+
+    def brokersWithBelowParLeaders(): scala.Seq[Int] = leaderFairness.belowParBrokers().map(_.id)
+  }
+
+
   def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
     val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount)
 
@@ -275,31 +299,8 @@ class ReplicaFilter(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartit
     racksSpanned >= minRacksSpanned
   }
 
-  def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo:Int): Boolean ={
+  def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo: Int): Boolean = {
     !replicasFor(brokerMovingTo).map(_.partition).contains(replica)
   }
 }
 
-class Replica(val topic: String, val partitionId: Int, val broker: Int) {
-  def partition(): TopicAndPartition = {
-    new TopicAndPartition(topic, partitionId)
-  }
-
-  override def toString = s"Replica[$topic:$partitionId:$broker]"
-
-  def canEqual(other: Any): Boolean = other.isInstanceOf[Replica]
-
-  override def equals(other: Any): Boolean = other match {
-    case that: Replica =>
-      (that canEqual this) &&
-        topic == that.topic &&
-        partitionId == that.partitionId &&
-        broker == that.broker
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    val state = Seq(topic, partitionId, broker)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
-  }
-}

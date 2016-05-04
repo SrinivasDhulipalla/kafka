@@ -8,31 +8,35 @@ import scala.collection._
 
 class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
-
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
-    val partitionsMap = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
-    val cluster = new ReplicaFilter(brokers, partitionsMap)
+    val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
+    val cluster = new ReplicaFilter(brokers, partitions)
     println("\nBrokers: " + brokers.map { b => "\n" + b })
-    print(partitionsMap, cluster)
+    print(partitions, cluster)
+    val byRack = cluster.byRack
+    val byBroker = cluster.byBroker
 
-    ensureFullyReplicated(partitionsMap, cluster, replicationFactors)
+    //Ensure no under-replicated partitions
+    fullyReplicated(partitions, cluster, replicationFactors)
 
-    optimiseForReplicaFairnessAcrossRacks(partitionsMap, cluster)
-    optimiseForLeaderFairnessAcrossRacks(partitionsMap, cluster)
+    //Optimise Racks
+    replicaFairness(partitions, cluster, replicationFactors, byRack.aboveParReplicas, byRack.belowParBrokers)
+    leaderFairness(partitions, cluster, byRack.aboveParLeaders, byRack.brokersWithBelowParLeaders)
 
-    optimiseForReplicaFairnessAcrossBrokers(partitionsMap, cluster, replicationFactors)
-    optimiseForLeaderFairnessAcrossBrokers(partitionsMap, cluster)
+    //Optimise brokers on each byRack
+    replicaFairness(partitions, cluster, replicationFactors, byBroker.aboveParReplicas, byBroker.belowParBrokers)
+    leaderFairness(partitions, cluster, byBroker.aboveParLeaders, byBroker.brokersWithBelowParLeaders)
 
     println("\nResult is:")
-    print(partitionsMap, cluster)
-    partitionsMap
+    print(partitions, cluster)
+    partitions
   }
 
   /**
     * This method O(#under-replicated-partitions * #parititions) as we reevaluate the least loaded brokers for each under-replicated one we find
     * (could be optimised further but this seems a reasonable balance between simplicity and cost).
     */
-  def ensureFullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
+  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]): Unit = {
     for (partition <- partitionsMap.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
       def replicasForP = partitionsMap.get(partition).get
@@ -48,84 +52,34 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
-  /**
-    * This method is O(#unfair * #partitions) - this is now incorrect but does make me wonder how much faster the old way must have been!
-    */
-  def optimiseForReplicaFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter) = {
-    for (aboveParRack <- cluster.replicaFairness.aboveParRacks) {
-      for (toMove <- cluster.weightedReplicasFor(aboveParRack)) {
-        var moved = false
-        for (belowParRack <- cluster.replicaFairness.belowParRacks) {
-          for (brokerTo <- cluster.leastLoadedBrokerIds(belowParRack)) {
-            if (cluster.obeysPartitionConstraint(toMove.partition, brokerTo) && moved == false) {
-              move(toMove.partition, toMove.broker, brokerTo, partitionsMap)
-              moved = true
-            }
+
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int], replicasFrom: scala.Seq[Replica], belowParBrokers: () => scala.Seq[BrokerMetadata]) = {
+    for (replicaFrom <- replicasFrom) {
+      var moved = false
+      for (brokerTo <- belowParBrokers()) {
+        if (cluster.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id) && moved == false) {
+          if (cluster.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)) {
+            move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
+            moved = true
           }
         }
       }
     }
   }
 
-  def optimiseForLeaderFairnessAcrossRacks(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
-    //consider leaders on above par racks
-    for (aboveParRack <- cluster.leaderFairness.aboveParRacks()) {
-      //for each leader (could be optimised to be for(n) where n is the number we expect to move)
-      for (leader <- cluster.leadersOn(aboveParRack)) {
-        //ensure rack is still above par (could be optimised out as above)
-        if (cluster.leaderFairness.aboveParRacks().contains(aboveParRack)) {
-          //check to see if the partition has a non-leader replica on below par racks
-          for (replica <- partitionsMap.get(leader).get.drop(1)) {
-            if (cluster.brokersOn(cluster.leaderFairness.belowParRacks()).contains(replica)) {
-              //if so, switch leadership
-              makeLeader(leader, replica, partitionsMap)
-            }
-          }
+  def leaderFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, aboveParBrokers: Seq[TopicAndPartition], belowParBrokers: () => scala.Seq[Int]): Unit = {
+    for (leader <- aboveParBrokers) {
+      //*1
+      //check to see if the partition has a non-leader replica on below par racks
+      for (replica <- partitionsMap.get(leader).get.drop(1)) {
+        if (belowParBrokers().contains(replica)) {
+          //if so, switch leadership
+          makeLeader(leader, replica, partitionsMap)
         }
       }
     }
-  }
 
-  def optimiseForReplicaFairnessAcrossBrokers(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter, replicationFactors: Map[String, Int]) = {
-    /**
-      * TODO refactor this to take the approach used in 2.1 - get list of most loaded replicas & least loaded brokers and move incrementally and ensuring there is enough supply and demand
-      */
-    var moved = false
-    for (aboveParBroker <- cluster.replicaFairness.aboveParBrokers) {
-      for (replicaToMove <- cluster.weightedReplicasFor(aboveParBroker)) {
-        moved = false
-        for (belowParBroker <- cluster.replicaFairness.belowParBrokers) {
-          val partition = replicaToMove.partition
-          val brokerFrom: Int = replicaToMove.broker
-          val brokerTo: Int = belowParBroker.id
-          if (cluster.obeysPartitionConstraint(partition, brokerTo) && moved == false) {
-            if (cluster.obeysRackConstraint(partition, brokerFrom, brokerTo, replicationFactors)) {
-              move(partition, brokerFrom, brokerTo, partitionsMap)
-              moved = true
-            }
-          }
-        }
-      }
-    }
-  }
-
-  def optimiseForLeaderFairnessAcrossBrokers(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], cluster: ReplicaFilter): Unit = {
-    //consider leaders on above par brokers
-    for (aboveParBroker <- cluster.leaderFairness.aboveParBrokers()) {
-      //for each leader (could be optimised to be for(n) where n is the number we expect to move)
-      for (leader <- cluster.leadersOn(aboveParBroker)) {
-        //ensure broker is still above par (could be optimised out as above)
-        if (cluster.leaderFairness.aboveParBrokers().contains(aboveParBroker)) {
-          //check to see if the partition has a non-leader replica on below par brokers
-          for (replica <- partitionsMap.get(leader).get.drop(1)) {
-            if (cluster.leaderFairness.belowParBrokers().map(_.id).contains(replica)) {
-              //if so, switch leadership
-              makeLeader(leader, replica, partitionsMap)
-            }
-          }
-        }
-      }
-    }
+    //*1 do we need: if (cluster.leaderFairness.aboveParRacks().contains(aboveParRack)) {
   }
 
   def makeLeader(tp: TopicAndPartition, toPromote: Int, partitionsMap: collection.mutable.Map[TopicAndPartition, Seq[Int]]): Unit = {

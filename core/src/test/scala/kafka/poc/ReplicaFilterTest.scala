@@ -3,6 +3,7 @@ package kafka.poc
 
 import kafka.admin.BrokerMetadata
 import kafka.poc.Helper._
+import kafka.poc.fairness.ReplicaFairness
 import org.junit.Assert._
 import org.junit.Test
 
@@ -34,7 +35,10 @@ class ReplicaFilterTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val counts = new ReplicaFilter(brokers, partitions).replicaFairness.brokerReplicaCounts
+    val filter: ReplicaFilter = new ReplicaFilter(brokers, partitions)
+    val repFairness = new ReplicaFairness(filter.brokersToReplicas, filter.rackCount)
+
+    val counts = repFairness.brokerReplicaCounts
 
     val expected = Map(
       new BrokerMetadata(101, Option("rack2")) -> 1,
@@ -48,6 +52,7 @@ class ReplicaFilterTest {
   @Test
   def shouldCalculateRackFairValue(): Unit ={
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+
 
     //1 replica, 2 racks
     assertEquals(0, new ReplicaFilter(brokers, Map(
