@@ -62,11 +62,11 @@ class ClusterTopologyViewTest {
     )
 
     val filter: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
-    val leaderCounts = filter.brokersToLeadersMap()
+    val leaderCounts = filter.brokersToLeaders.toMap
 
     println(leaderCounts)
-    assertEquals(2, leaderCounts.toMap.get(bk(100, "rack1")).get.size)
-    assertEquals(3, leaderCounts.toMap.get(bk(101, "rack2")).get.size)
+    assertEquals(2, leaderCounts.get(bk(100, "rack1")).get.size)
+    assertEquals(3, leaderCounts.get(bk(101, "rack2")).get.size)
   }
 
 
