@@ -201,7 +201,7 @@ class MovesOptimisedRebalancePolicyTest {
     * each only has one replcia to play with
     */
   @Test
-  def providesPotentiallyUnexpectedResult(): Unit = {
+  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given replicas are on one (of 3) racks
@@ -219,16 +219,15 @@ class MovesOptimisedRebalancePolicyTest {
 
     //Then should leaders should be even across the three racks,
     //so two leaders on the single broker on rack2 but this doesn't work as we only
-    //have replciation factor 2 and the other replicas are on the other rack
-
-    //TODO we could  run replica rebalancing again at a rack level to fix this????
+    //have replication factor 2 and the other replicas are on the other rack
+    //note this dies't work as expected as the way replicas are fed in their is no option for the rebalance at a broker level.
     assertEquals(8, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 100, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
 
   @Test
-  def shouldFindFairnessWhereBrokersPerRacksAreUneven(): Unit = {
+  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithThreeReplias(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given replicas are on one (of 3) racks

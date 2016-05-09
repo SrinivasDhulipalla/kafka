@@ -228,12 +228,14 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
 
   private def weightedReplicasFor(rack: String): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
-    brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).flatMap(x => x) //todo flatten?
+    //TODO2 we need to interleave these results by broker see MovesOptimisedRebalancePolicyTest.providesPotentiallyUnexpectedResult
+    brokersToReplicas.filter(_._1.rack.get == rack).sortBy(_._2.size).map(_._2).flatten
   }
 
   private def weightedReplicasFor(broker: BrokerMetadata): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
-    brokersToReplicas.filter(_._1 == broker).map(_._2).flatMap(x => x) //todo flatten?
+    //TODO2 we need to interleave these results by broker see MovesOptimisedRebalancePolicyTest.providesPotentiallyUnexpectedResult to
+    brokersToReplicas.filter(_._1 == broker).sortBy(_._2.size).map(_._2).flatten
   }
 
   private def replicasFor(broker: Int): Seq[Replica] = {
