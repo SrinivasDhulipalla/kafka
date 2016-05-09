@@ -2,6 +2,7 @@ package kafka.poc
 
 
 import kafka.admin.BrokerMetadata
+import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
 import kafka.poc.fairness.ReplicaFairness
 import org.junit.Assert._
@@ -46,6 +47,26 @@ class ClusterTopologyViewTest {
     )
 
     assertEquals(expected.toString(), counts.toMap.toString()) //TODO how do a do deep comparision without toString?
+  }
+
+
+  @Test
+  def shouldSummariseLeaderCounts(): Unit = {
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(101, 100),
+      p(3) -> List(101, 100),
+      p(4) -> List(101, 100)
+    )
+
+    val filter: ClusterTopologyView = new ClusterTopologyView(brokers, partitions)
+    val leaderCounts = filter.brokersToLeadersMap()
+
+    println(leaderCounts)
+    assertEquals(2, leaderCounts.toMap.get(bk(100, "rack1")).get.size)
+    assertEquals(3, leaderCounts.toMap.get(bk(101, "rack2")).get.size)
   }
 
 

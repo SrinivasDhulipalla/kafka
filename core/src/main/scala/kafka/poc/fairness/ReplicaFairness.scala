@@ -5,7 +5,7 @@ import kafka.poc.Replica
 
 import scala.collection.{mutable, Seq}
 
-class ReplicaFairness(brokersToReplicas: () => Seq[(BrokerMetadata, Seq[Replica])], rackCount: Int) extends Fairness {
+class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], rackCount: Int) extends Fairness {
 
   def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
@@ -25,7 +25,7 @@ class ReplicaFairness(brokersToReplicas: () => Seq[(BrokerMetadata, Seq[Replica]
   }
 
   def aboveParBrokers(): Seq[BrokerMetadata] = {
-    //return racks for brokers where replica count is over fair value
+    //return brokers where replica count is over fair value
     brokerReplicaCounts
       .filter(_._2 > brokerFairReplicaValue)
       .keys.toSeq.distinct
@@ -33,21 +33,25 @@ class ReplicaFairness(brokersToReplicas: () => Seq[(BrokerMetadata, Seq[Replica]
 
   def belowParBrokers(): Seq[BrokerMetadata] = {
     //return racks for brokers where replica count is over fair value
-    brokerReplicaCounts
+    println("belowParBrokers, brokerReplicaCounts: "+brokerReplicaCounts)
+    println("belowParBrokers, brokerFairReplicaValue: "+brokerFairReplicaValue)
+    val x = brokerReplicaCounts
       .filter(_._2 < brokerFairReplicaValue)
       .keys.toSeq.distinct
+//    println("aboveParBrokers: "+x)
+    x
   }
 
   //Summarise the topology as BrokerMetadata -> ReplicaCount
   def brokerReplicaCounts() = mutable.LinkedHashMap(
-    brokersToReplicas()
+    brokersToReplicas
       .map { case (x, y) => (x, y.size) }
       .sortBy(_._2)
       : _*
   )
 
   private def rackReplicaCounts() = mutable.LinkedHashMap(
-    brokersToReplicas()
+    brokersToReplicas
       .map { case (x, y) => (x, y.size) }
       .groupBy(_._1.rack.get)
       .mapValues(_.map(_._2).sum)

@@ -2,14 +2,16 @@ package kafka.poc.fairness
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
-import kafka.poc.Replica
 
 import scala.collection.{Iterable, mutable, Map, Seq}
 
-class LeaderFairness(brokersToLeaders: () => Seq[(BrokerMetadata, Iterable[TopicAndPartition])], partitionCount: Int, brokerCount: Int, rackCount: Int) extends Fairness {
+class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) extends Fairness {
+
+  println("initialised leaderfairness with brokerToLeaders " + brokersToLeaders)
 
   def aboveParRacks(): Seq[String] = {
-    rackLeaderPartitionCounts
+    //    println("Rack fair value is "+rackFairLeaderValue)
+    rackLeaderCounts
       .filter(_._2 > rackFairLeaderValue)
       .keys
       .toSeq
@@ -17,7 +19,7 @@ class LeaderFairness(brokersToLeaders: () => Seq[(BrokerMetadata, Iterable[Topic
   }
 
   def belowParRacks(): Seq[String] = {
-    rackLeaderPartitionCounts
+    rackLeaderCounts
       .filter(_._2 < rackFairLeaderValue)
       .keys
       .toSeq
@@ -25,36 +27,58 @@ class LeaderFairness(brokersToLeaders: () => Seq[(BrokerMetadata, Iterable[Topic
   }
 
   def aboveParBrokers(): Seq[BrokerMetadata] = {
-    brokerLeaderPartitionCounts
+    val vals = brokerLeaderCounts
       .filter(_._2 > brokerFairLeaderValue)
       .keys.toSeq.distinct
+    println("brokerLeaderPartitionCounts: " + brokerLeaderCounts)
+    println("brokerFairLeaderVal: " + brokerFairLeaderValue)
+    vals
   }
 
   def belowParBrokers(): Seq[BrokerMetadata] = {
-    brokerLeaderPartitionCounts
+    brokerLeaderCounts
       .filter(_._2 < brokerFairLeaderValue)
       .keys.toSeq.distinct
   }
 
-  private def brokerLeaderPartitionCounts() = mutable.LinkedHashMap(
-    brokersToLeaders()
+  private def brokerLeaderCounts() = mutable.LinkedHashMap(
+    brokersToLeaders
       .map { case (x, y) => (x, y.size) }
       .sortBy(_._2)
       : _*
   )
 
-  private def rackLeaderPartitionCounts: Map[String, Int] = {
-    brokersToLeaders()
+  private def rackLeaderCounts: Map[String, Int] = {
+    brokersToLeaders
       .map { case (x, y) => (x, y.size) }
       .groupBy(_._1.rack.get)
       .mapValues(_.map(_._2).sum)
   }
 
+  private def leaderCount(): Int = {
+    brokersToLeaders
+      .map { case (x, y) => y.size }
+      .sum
+  }
+
+  private def brokerCount(): Int = {
+    brokersToLeaders.map(_._1).distinct.size
+  }
+
+  private def rackCount(): Int = {
+    brokersToLeaders.map(_._1.rack.get).distinct.size
+  }
+
+
   private def rackFairLeaderValue() = {
-    Math.floor(partitionCount / rackCount)
+    Math.floor(leaderCount / rackCount)
   }
 
   private def brokerFairLeaderValue() = {
-    Math.floor(partitionCount / brokerCount)
+    println("brokerFairLeaderValue: partitionCount/brokercount... " + brokerLeaderCounts().values.sum + " / " + brokerCount)
+    println("brokersToLeaders " + brokersToLeaders) //this is broken - it includes all partitions not just leaders
+    println("brokerLeaderCounts " + brokerLeaderCounts()) //this is broken - it includes all partitions not just leaders
+
+    Math.floor(leaderCount / brokerCount)
   }
 }

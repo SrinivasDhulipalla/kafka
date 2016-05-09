@@ -190,17 +190,27 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals((100 to 105).toSeq, reassigned.values.flatten.toSeq.sorted)
   }
 
+  /**
+    * This gives an example of a possibly unexpected result showing the
+    * limits of this approach.
+    * The problem is we spit the brokers over the two racks so
+    * they have four replicas each. This means each partiion has
+    * a replica on a different rack.
+    * Then when we optimise for leader fairness, because we do it
+    * at a rack level, there is no way to swap leaders around as
+    * each only has one replcia to play with
+    */
   @Test
-  def shouldFindFairnessWhereBrokersPerRacksAreUneven(): Unit = {
+  def providesPotentiallyUnexpectedResult(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
-    //Given all replicas are on one (of 3) racks
+    //Given replicas are on one (of 3) racks
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
     val partitions = Map(
-      p(0) -> List(100, 102),
-      p(1) -> List(100, 102),
-      p(2) -> List(101, 102),
-      p(3) -> List(101, 102)
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(100, 101),
+      p(3) -> List(100, 101)
     )
     val reps = replicationFactorOf(2)
 
@@ -208,12 +218,41 @@ class MovesOptimisedRebalancePolicyTest {
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should leaders should be even across the three racks,
-    //so to leaders on the single broker on rack2
+    //so two leaders on the single broker on rack2 but this doesn't work as we only
+    //have replciation factor 2 and the other replicas are on the other rack
+
+    //TODO we could  run replica rebalancing again at a rack level to fix this????
     assertEquals(8, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+    assertEquals(List(100, 100, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
 
+  @Test
+  def shouldFindFairnessWhereBrokersPerRacksAreUneven(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given replicas are on one (of 3) racks
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101, 102),
+      p(1) -> List(100, 101, 102),
+      p(2) -> List(100, 101, 102),
+      p(3) -> List(100, 101, 102)
+    )
+    val reps = replicationFactorOf(3)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should leaders should be even across the three racks,
+    //so two leaders on the single broker on rack2
+    assertEquals(12, reassigned.values.flatten.toSeq.size)
+    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+  }
+
+//todo test should optimise leaders independently on different racks
+//todo test should work where brokers don't have any racks specified
+  // todo test that should take a sample cluster and increase the replication factor
 
   @Test
   def shouldObeyRackFairnessStrictlyEvenAtTheCostOfReplicaFairnessAcrossBrokers(): Unit = {
