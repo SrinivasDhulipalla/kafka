@@ -10,7 +10,6 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
   println("initialised leaderfairness with brokerToLeaders " + brokersToLeaders)
 
   def aboveParRacks(): Seq[String] = {
-    //    println("Rack fair value is "+rackFairLeaderValue)
     rackLeaderCounts
       .filter(_._2 > rackFairLeaderValue)
       .keys
@@ -30,8 +29,6 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
     val vals = brokerLeaderCounts
       .filter(_._2 > brokerFairLeaderValue)
       .keys.toSeq.distinct
-    println("brokerLeaderPartitionCounts: " + brokerLeaderCounts)
-    println("brokerFairLeaderVal: " + brokerFairLeaderValue)
     vals
   }
 
@@ -75,10 +72,6 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
   }
 
   private def brokerFairLeaderValue() = {
-    println("brokerFairLeaderValue: partitionCount/brokercount... " + brokerLeaderCounts().values.sum + " / " + brokerCount)
-    println("brokersToLeaders " + brokersToLeaders) //this is broken - it includes all partitions not just leaders
-    println("brokerLeaderCounts " + brokerLeaderCounts()) //this is broken - it includes all partitions not just leaders
-
     Math.floor(leaderCount / brokerCount)
   }
 }

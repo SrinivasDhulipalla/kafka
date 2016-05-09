@@ -5,62 +5,47 @@ import kafka.common.TopicAndPartition
 import kafka.poc.fairness.{LeaderFairness, ReplicaFairness, Fairness}
 
 import scala.collection._
-import scala.collection.mutable.LinkedHashMap
+import collection.mutable.LinkedHashMap
 
 
-class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[Int]]) {
+class ClusterTopologyView(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartition, Seq[Int]], rack: String){
 
-  var partitions: Map[TopicAndPartition, Seq[Int]] = p
-  var brokers = b
-  var rack = ""
-  var brokersToReplicas = brokersToReplicasRun(b,b,p)
-  var brokersToLeaders = brokersToLeadersRun(b,b,p)
-
-  def setRack(r: String) = {
-    rack = r
-    refreshPartitionsView(b, p, r)
+  def this(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartition, Seq[Int]]) {
+    this(allBrokers, allPartitions, null)
   }
+  var partitions: Map[TopicAndPartition, Seq[Int]] = allPartitions
+  var brokersToReplicas = createBrokersToReplicas(allBrokers, allBrokers, allPartitions)
+  var brokersToLeaders = createBrokersToLeaders(allBrokers, allBrokers, allPartitions)
 
-  def refreshPartitionsView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[Int]], rack: String): Unit = {
-    println("refreshed partition view with new partitions " + p)
+  var replicaFairness = new ReplicaFairness(brokersToReplicas, rackCount)
+  var leaderFairness = new LeaderFairness(brokersToLeaders)
+  val byRack = new ByRack()
+  val byBroker = new ByBroker()
 
+  refreshView(allPartitions, rack)
 
-    if (rack.length > 0) {
-      println("refreshing racks to rack " + rack)
-      brokers = b.filter(_.rack.get == rack)
-      partitions = filter(rack, b, p)
+  def refreshView(p: Map[TopicAndPartition, Seq[Int]], rack: String): Unit = {
+    var brokers = allBrokers
+    if (rack != null) {
+      brokers = allBrokers.filter(_.rack.get == rack)
+      partitions = filter(rack, allBrokers, p)
 
-      brokersToReplicas = brokersToReplicasRun(b,brokers, p).filter(_._1.rack.get == rack)
-      brokersToLeaders = brokersToLeadersRun(b, brokers,p).filter(_._1.rack.get == rack)
-    }else{
-      brokersToReplicas = brokersToReplicasRun(b, b,p)
-      brokersToLeaders = brokersToLeadersRun(b,b, p)
+      brokersToReplicas = createBrokersToReplicas(allBrokers, brokers, p).filter(_._1.rack.get == rack)
+      brokersToLeaders = createBrokersToLeaders(allBrokers, brokers, p).filter(_._1.rack.get == rack)
+    } else {
+      brokersToReplicas = createBrokersToReplicas(allBrokers, allBrokers, p)
+      brokersToLeaders = createBrokersToLeaders(allBrokers, allBrokers, p)
     }
 
     replicaFairness = new ReplicaFairness(brokersToReplicas, rackCount)
     leaderFairness = new LeaderFairness(brokersToLeaders)
-
-
-    println("paritions " + partitions)
-
-    //could be that this doesn't work because partitions can have replicas spread on brokers on different racks making fair value off.
-
-
-    println("upper level broker leader counts " + brokersToLeaders)
   }
 
 
-  def filter(rack: String, brokers: scala.Seq[BrokerMetadata], partitions: Map[TopicAndPartition, scala.Seq[Int]]): Map[TopicAndPartition, scala.Seq[Int]] = {
-    def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
 
-    val foo = partitions.map { case (p, replicas) => (p, replicas.filter(bk(_).rack.get == rack)) }
-      .filter { case (p, replicas) => replicas.size > 0 }
-    foo
-  }
+  def createBrokersToReplicas(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
-  def brokersToReplicasRun(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
-
-    def bk(id: Int): BrokerMetadata =  allBrokers.filter(_.id == id).last
+    def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
 
     val existing = partitions
       .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) } //enrich replica object
@@ -77,14 +62,14 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
     emptyBrokers ++ existing
   }
 
-  def brokersToLeadersRun(allBrokers: Seq[BrokerMetadata],relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
+  def createBrokersToLeaders(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
 
-    def bk(id: Int): BrokerMetadata =  {
+    def bk(id: Int): BrokerMetadata = {
       allBrokers.filter(_.id == id).last
     }
 
     val existing = partitions
-        .filter(_._2.size > 0)
+      .filter(_._2.size > 0)
       .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) }.values //convert to tuples: [TopicAndPartition,BrokerMetadata]
       .groupBy(_._2) //group by brokers to create: Broker -> [TopicAndPartition]
       .toSeq
@@ -97,49 +82,44 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
     emptyBrokers ++ existing
   }
 
+
+
+  def filter(rack: String, brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Map[TopicAndPartition, Seq[Int]] = {
+    def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
+
+    partitions.map { case (p, replicas) => (p, replicas.filter(bk(_).rack.get == rack)) }
+      .filter { case (p, replicas) => replicas.size > 0 }
+  }
+
+
   def brokersToLeadersMap(): Map[BrokerMetadata, Iterable[TopicAndPartition]] = {
     brokersToLeaders.toMap
   }
 
 
-  var replicaFairness = new ReplicaFairness(brokersToReplicas, rackCount)
-  var leaderFairness = new LeaderFairness(brokersToLeaders)
-  val byRack = new ByRack()
-  val byBroker = new ByBroker()
+  class ByRack() extends ClusterView {
+    def aboveParReplicas(): Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_))
 
-  class ByRack extends ClusterView {
-    def aboveParReplicas(): scala.Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_))
+    def belowParBrokers(): Seq[BrokerMetadata] = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_))
 
-    def belowParBrokers(): scala.Seq[BrokerMetadata] = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_))
+    def aboveParPartitions(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks.flatMap(leadersOn(_))
 
-    def aboveParPartitions(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks().flatMap(leadersOn(_))
+    def brokersWithBelowParLeaders(): Seq[Int] = brokersOn(leaderFairness.belowParRacks)
 
-    def brokersWithBelowParLeaders(): scala.Seq[Int] = brokersOn(leaderFairness.belowParRacks())
-
-    def refresh(pNew: Map[TopicAndPartition, Seq[Int]]): Unit = {
-      refreshPartitionsView(b, pNew, rack)
-    }
+    def refresh(newPartitions: Map[TopicAndPartition, Seq[Int]]) = refreshView(newPartitions, rack)
   }
 
-  class ByBroker extends ClusterView {
-    def aboveParReplicas(): scala.Seq[Replica] = {
-      val foo = replicaFairness.aboveParBrokers.flatMap(weightedReplicasFor(_))
-      println("replicaFairness.aboveParBrokers " + replicaFairness.aboveParBrokers)
-      println("aboveParReplicas: " + foo)
-      foo
-    }
+  class ByBroker() extends ClusterView {
+    def aboveParReplicas(): Seq[Replica] = replicaFairness.aboveParBrokers.flatMap(weightedReplicasFor(_))
 
-    def belowParBrokers(): scala.Seq[BrokerMetadata] = replicaFairness.belowParBrokers
+    def belowParBrokers(): Seq[BrokerMetadata] = replicaFairness.belowParBrokers
 
-    def aboveParPartitions(): scala.Seq[TopicAndPartition] = leaderFairness.aboveParBrokers().flatMap(leadersOn(_))
+    def aboveParPartitions(): Seq[TopicAndPartition] = leaderFairness.aboveParBrokers.flatMap(leadersOn(_))
 
-    def brokersWithBelowParLeaders(): scala.Seq[Int] = leaderFairness.belowParBrokers().map(_.id)
+    def brokersWithBelowParLeaders(): Seq[Int] = leaderFairness.belowParBrokers.map(_.id)
 
-    def refresh(pNew: Map[TopicAndPartition, Seq[Int]]): Unit = {
-      refreshPartitionsView(b, pNew, rack)
-    }
+    def refresh(newPartitions: Map[TopicAndPartition, Seq[Int]]) = refreshView(newPartitions, rack)
   }
-
 
   def rackCount: Int = {
     brokersToReplicas.map(_._1.rack).distinct.size
@@ -162,7 +142,7 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
       val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount)
 
       //get replicas for partition, replacing brokerFrom with brokerTo
-      var proposedReplicas: scala.Seq[Int] = partitions.get(partition).get
+      var proposedReplicas: Seq[Int] = partitions.get(partition).get
       val index: Int = proposedReplicas.indexOf(brokerFrom)
       proposedReplicas = proposedReplicas.patch(index, Seq(brokerTo), 1)
 
@@ -191,7 +171,7 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
   }
 
   def racksFor(p: TopicAndPartition): Seq[String] = {
-    brokers.filter(broker =>
+    allBrokers.filter(broker =>
       partitions.get(p).get
         .contains(broker.id)
     ).map(_.rack.get)
@@ -202,15 +182,15 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
       .filter(broker => broker.rack.get == rack)
   }
 
-  private def downrank(toDownrank: scala.Seq[Int], all: scala.Seq[Int]): scala.Seq[Int] = {
+  private def downrank(toDownrank: Seq[Int], all: Seq[Int]): Seq[Int] = {
     val notDownranked = all.filterNot(toDownrank.toSet)
     val downranked = all.filter(toDownrank.toSet)
 
     downranked ++ notDownranked
   }
 
-  private def brokersOn(racks: Seq[String]): scala.Seq[Int] = {
-    brokers.filter(broker => racks.contains(broker.rack.get)).map(_.id)
+  private def brokersOn(racks: Seq[String]): Seq[Int] = {
+    allBrokers.filter(broker => racks.contains(broker.rack.get)).map(_.id)
   }
 
   private def leadersOn(rack: String): Seq[TopicAndPartition] = {
@@ -244,7 +224,7 @@ class ClusterTopologyView(b: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[
 
   private def bk(id: Int): BrokerMetadata = {
     //    println("id:"+id)
-    brokers.filter(_.id == id).last
+    allBrokers.filter(_.id == id).last
   }
 }
 

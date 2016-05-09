@@ -32,14 +32,9 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], ra
   }
 
   def belowParBrokers(): Seq[BrokerMetadata] = {
-    //return racks for brokers where replica count is over fair value
-    println("belowParBrokers, brokerReplicaCounts: "+brokerReplicaCounts)
-    println("belowParBrokers, brokerFairReplicaValue: "+brokerFairReplicaValue)
-    val x = brokerReplicaCounts
+    brokerReplicaCounts
       .filter(_._2 < brokerFairReplicaValue)
       .keys.toSeq.distinct
-//    println("aboveParBrokers: "+x)
-    x
   }
 
   //Summarise the topology as BrokerMetadata -> ReplicaCount
@@ -80,7 +75,6 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], ra
   private def countFromPar(broker: BrokerMetadata): Int = {
     Math.abs(brokerReplicaCounts.get(broker).get - brokerFairReplicaValue.toInt)
   }
-
 }
 
 

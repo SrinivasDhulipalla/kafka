@@ -9,14 +9,6 @@ import scala.collection._
 class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
 
-
-  /**
-    * Euston we have a problem:
-    * We need to optimise broker on each rack individually. The tempting approach here
-    * is to simply divide the cluster up at a 'parititions' input stage. This might work
-    * but i'm worried if we chop the cluster up we'll get odd results as some replicas will
-    * be in other racks. This might not matter. check constraints etc.
-    */
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     println("\nBrokers: " + brokers.map { b => "\n" + b })
@@ -40,10 +32,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     print(partitions, brokers)
 
     //3. Optimise brokers on each byRack
-    val brokerView = new ClusterTopologyView(brokers, partitions)
     for (rack <- cluster.racks) {
+
+      val brokerView = new ClusterTopologyView(brokers, partitions, rack)
       println("\nOptimising Replica Fairness over brokers for rack "+rack+ "\n")
-      brokerView.setRack(rack)
       print(partitions, brokers)
       replicaFairness(partitions, cluster.constraints, replicationFactors, brokerView.byBroker)
       println("\nOptimising Leader Fairness over brokers for rack "+rack+ "\n")
