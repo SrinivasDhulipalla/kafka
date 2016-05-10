@@ -5,58 +5,6 @@ import kafka.common.TopicAndPartition
 
 import scala.collection.{Iterable, Map, Seq}
 
-class BaseSomething {
+abstract class BaseSomething {
 
-  def createBrokersToReplicas(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
-
-    def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
-
-    val existing = partitions
-      .map { case (tp, replicas) => (tp, replicas.map(new Replica(tp.topic, tp.partition, _))) } //enrich replica object
-      .values
-      .flatMap(replica => replica) //list of all replicas
-      .groupBy(replica => replica.broker) //group by broker to create: broker->[Replica]
-      .toSeq
-      .sortBy(_._2.size) //sort by highest replica count
-      .map { x => (bk(x._1), x._2.toSeq) } //turn broker id into BrokerMetadata
-
-    val emptyBrokers = relevantBrokers.filterNot(existing.map(_._1).toSet)
-      .map(x => (x, Seq.empty[Replica]))
-
-    emptyBrokers ++ existing
-  }
-
-  def createBrokersToLeaders(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
-
-    def bk(id: Int): BrokerMetadata = {
-      allBrokers.filter(_.id == id).last
-    }
-
-    val existing = partitions
-      .filter(_._2.size > 0)
-      .map { case (tp, replicas) => (tp, (tp, bk(replicas(0)))) }.values //convert to tuples: [TopicAndPartition,BrokerMetadata]
-      .groupBy(_._2) //group by brokers to create: Broker -> [TopicAndPartition]
-      .toSeq
-      .sortBy(_._2.size)
-      .map { case (x, y) => (x, y.map(x => x._1)) }
-
-    val emptyBrokers = relevantBrokers.filterNot(existing.map(_._1).toSet)
-      .map(x => x -> Iterable.empty[TopicAndPartition])
-
-    emptyBrokers ++ existing
-  }
-
-  def filter(rack: String, brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Map[TopicAndPartition, Seq[Int]] = {
-    def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
-
-    partitions.map { case (p, replicas) => (p, replicas.filter(bk(_).rack.get == rack)) }
-      .filter { case (p, replicas) => replicas.size > 0 }
-  }
-
-  protected def downrank(toDownrank: Seq[Int], all: Seq[Int]): Seq[Int] = {
-    val notDownranked = all.filterNot(toDownrank.toSet)
-    val downranked = all.filter(toDownrank.toSet)
-
-    downranked ++ notDownranked
-  }
 }

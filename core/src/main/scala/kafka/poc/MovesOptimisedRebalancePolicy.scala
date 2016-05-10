@@ -6,41 +6,49 @@ import kafka.common.TopicAndPartition
 import scala.collection._
 
 
-class MovesOptimisedRebalancePolicy extends RabalancePolicy {
+class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper with TopologyFactory {
 
 
-  override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
+  /**
+    * Plan:
+    * Push fullyReplicated to use it's own dedicated view??
+    * Push byRack and byBroker refreshable where byBroker takes a rack as arguemnt and byRack doesn't. That sorts out the constructor problem.
+    */
+
+  override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]]  = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     println("\nBrokers: " + brokers.map { b => "\n" + b })
-    val cluster = new ClusterTopologyView(brokers, partitions)
+    val cluster = new Constraints(brokers, partitions)
     print(partitions, brokers)
 
+
+
+
     //1. Ensure no under-replicated partitions
-    fullyReplicated(partitions, cluster, replicationFactors)
+    fullyReplicated(partitions, cluster, replicationFactors, brokers)
 
     //2. Optimise Racks
     println("\nOptimising replica fairness over racks\n")
-    replicaFairness(partitions, cluster.constraints, replicationFactors, cluster.byRack)
+    replicaFairness(partitions, cluster.constraints, replicationFactors, new ByRack(brokers, partitions))
 
     println("\nEarly-Result is:")
     print(partitions, brokers)
 
     println("\nOptimising leader fairness over racks\n")
-    leaderFairness(partitions, cluster.byRack)
+    leaderFairness(partitions, new ByRack(brokers, partitions))
 
     println("\nMid-Result is:")
     print(partitions, brokers)
 
     //3. Optimise brokers on each byRack
-    for (rack <- cluster.racks) {
+    for (rack <- racks(brokers)) {
 
-      val brokerView = new ClusterTopologyView(brokers, partitions, rack)
       println("\nOptimising Replica Fairness over brokers for rack "+rack+ "\n")
       print(partitions, brokers)
-      replicaFairness(partitions, cluster.constraints, replicationFactors, brokerView.byBroker)
+      replicaFairness(partitions, cluster.constraints, replicationFactors, new ByBroker(brokers, partitions, rack))
       println("\nOptimising Leader Fairness over brokers for rack "+rack+ "\n")
       print(partitions, brokers)
-      leaderFairness(partitions, brokerView.byBroker)
+      leaderFairness(partitions, new ByBroker(brokers, partitions, rack))
     }
 
     println("\nResult is:")
@@ -52,23 +60,29 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     * This method O(#under-replicated-partitions * #parititions) as we reevaluate the least loaded brokers for each under-replicated one we find
     * (could be optimised further but this seems a reasonable balance between simplicity and cost).
     */
-  def fullyReplicated(partitionsMap: mutable.Map[TopicAndPartition, Seq[Int]], cluster: ClusterTopologyView, replicationFactors: Map[String, Int]): Unit = {
-    for (partition <- partitionsMap.keys) {
+  def fullyReplicated(partitions: mutable.Map[TopicAndPartition, Seq[Int]], cluster: Constraints, replicationFactors: Map[String, Int], brokers: Seq[BrokerMetadata]): Unit = {
+    val brokersToReplicas: scala.Seq[(BrokerMetadata, scala.Seq[Replica])] = createBrokersToReplicas(brokers, brokers, partitions)
+
+    for (partition <- partitions.keys) {
       def replicationFactor = replicationFactors.get(partition.topic).get
-      def replicasForP = partitionsMap.get(partition).get
+      def replicasForP = partitions.get(partition).get
+      val racks = racksFor(partition, brokers, partitions)
 
       while (replicasForP.size < replicationFactor) {
-        val leastLoadedBrokers = cluster.leastLoadedBrokersPreferringOtherRacks(cluster.racksFor(partition))
+        val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, brokers, racks)
         val leastLoadedValidBrokers = leastLoadedBrokers.filterNot(replicasForP.toSet).iterator
 
         val leastLoaded = leastLoadedValidBrokers.next
-        partitionsMap.put(partition, replicasForP :+ leastLoaded)
+        partitions.put(partition, replicasForP :+ leastLoaded)
         println(s"Additional replica was created on broker [$leastLoaded] for under-replicated partition [$partition].")
       }
     }
   }
 
-  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], view: ClusterView) = {
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], v: ClusterView) = {
+
+    var view = v
+
     val aboveParReplicas: scala.Seq[Replica] = view.aboveParReplicas //looks like this is only returning replicas from 101?
     println("aboveParReplicas-main: " + aboveParReplicas)
     for (replicaFrom <- aboveParReplicas) {
@@ -79,7 +93,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
         if (constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id) && moved == false) {
           if (constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)) {
             move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
-            view.refresh(partitionsMap)
+            view = view.refresh(partitionsMap)
             moved = true
           }
         }
@@ -87,8 +101,11 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
     }
   }
 
-  def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], view: ClusterView): Unit = {
-    val abParParts: scala.Seq[TopicAndPartition] = view.aboveParPartitions
+  def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], v: ClusterView): Unit = {
+
+    var view = v
+
+    val abParParts = view.aboveParPartitions
     println("abParParts: "+abParParts)
     for (aboveParPartition <- abParParts) {
       //not sure if i need this...
@@ -98,7 +115,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
           if (view.brokersWithBelowParLeaders.contains(nonLeadReplicas)) {
             //if so, switch leadership
             makeLeader(aboveParPartition, nonLeadReplicas, partitions)
-            view.refresh(partitions)
+            view = view.refresh(partitions)
           }
         }
       }
@@ -130,7 +147,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy {
 
   def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], brokers: Seq[BrokerMetadata]): Unit = {
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
-    val view: ClusterTopologyView = new ClusterTopologyView(brokers, partitionsMap)
+    val view = new ByRack(brokers, partitionsMap)
     println("\nBrokers to replicas: " + view.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) } + "\n")
     println("\nBrokers to leaders: " + view.brokersToLeaders.map { x => "\n" + x._1.id + " - size:" + x._2.size } + "\n")
   }

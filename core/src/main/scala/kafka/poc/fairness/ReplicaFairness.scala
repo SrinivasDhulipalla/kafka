@@ -5,7 +5,7 @@ import kafka.poc.Replica
 
 import scala.collection.{mutable, Seq}
 
-class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], rackCount: Int) extends Fairness {
+class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) extends Fairness {
 
   def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
@@ -60,6 +60,8 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], ra
     brokerReplicaCounts.values.sum /
       rackCount
   )
+
+  def rackCount: Int = brokersToReplicas.map(_._1.rack).distinct.size
 
   //Define  floor(replica-count / broker-count) replicas
   private def brokerFairReplicaValue() = Math.floor(

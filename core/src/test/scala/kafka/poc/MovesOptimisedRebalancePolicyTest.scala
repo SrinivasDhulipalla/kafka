@@ -199,6 +199,8 @@ class MovesOptimisedRebalancePolicyTest {
     * Then when we optimise for leader fairness, because we do it
     * at a rack level, there is no way to swap leaders around as
     * each only has one replcia to play with
+    *
+    * TODO we should investigate if this is fixable
     */
   @Test
   def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
@@ -222,7 +224,7 @@ class MovesOptimisedRebalancePolicyTest {
     //have replication factor 2 and the other replicas are on the other rack
     //note this dies't work as expected as the way replicas are fed in their is no option for the rebalance at a broker level.
     assertEquals(8, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+    assertEquals(List(100, 100, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
 

@@ -14,6 +14,6 @@ trait ClusterView {
 
   def brokersWithBelowParLeaders(): scala.Seq[Int]
 
-  def refresh(p: Map[TopicAndPartition, Seq[Int]]): Unit
+  def refresh(partitionMap: Map[TopicAndPartition, Seq[Int]]): ClusterView
 }
 
