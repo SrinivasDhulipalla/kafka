@@ -520,7 +520,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   /**
-    * Tests for multiple reps
+    * Tests for multiple topics
     */
 
   @Test
@@ -585,6 +585,55 @@ class MovesOptimisedRebalancePolicyTest {
     val numberReplicasOn102 = reassigned.values.flatten.filter(_ == 102).size
     assertEquals(2, numberReplicasOn102)
   }
+
+  @Test
+  def shouldBalanceReplicasOverMultipleTopicsAndMultipleRack(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+    val partitions = Map(
+      p(0, "t1") -> List(100, 101, 102),
+      p(0, "t2") -> List(100, 101, 102),
+      p(0, "t3") -> List(100, 101, 102),
+      p(0, "t4") -> List(100, 101, 102))
+    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should be one leader per broker
+    for(brokerId <- 100 to 103)
+      assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
+  }
+
+  @Test
+  def shouldBalanceReplicasOverMultipleTopicsWithMultipleReplicationFactors(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+    val partitions = Map(
+      p(0, "t1") -> List(100, 101, 102, 103),
+      p(0, "t2") -> List(100, 101, 102, 103),
+      p(0, "t3") -> List(100, 101),
+      p(0, "t4") -> List(100, 102))
+    val reps = Map("t1" -> 4, "t2" -> 4, "t3" -> 2, "t4" -> 2)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should be one leader per broker
+    for(brokerId <- 100 to 103)
+      assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
+  }
+
+
+  /**
+    * Brace tests
+    */
+
+
 
 
   /**
