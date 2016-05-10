@@ -407,24 +407,25 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldOptimiseForEvenReplicaPlacementAcrossBrokers(): Unit = {
+  def shouldOptimiseForEvenReplicaPlacementAcrossBrokersOnSingleRack(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"), bk(103, "rack1"))
     val partitions = Map(
-      p(0) -> List(100),
-      p(1) -> List(100),
-      p(2) -> List(100),
-      p(3) -> List(100)
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(100, 101),
+      p(3) -> List(100, 101)
     )
-    val reps = replicationFactorOf(1)
+    val reps = replicationFactorOf(2)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then should be one per broker
-    assertEquals(sort(Map(p(0) -> List(103), p(1) -> List(101), p(2) -> List(100), p(3) -> List(102))), sort(reassigned.toMap))
+    //Then should be two per broker
+    for (brokerId <- 100 to 103)
+      assertEquals(2, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
   @Test

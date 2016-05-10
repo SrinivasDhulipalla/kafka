@@ -31,8 +31,6 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
 
   def obeysPartitionConstraint(replica: TopicAndPartition, brokerMovingTo: Int): Boolean = {
     val replicas = brokersToReplicas.filter(_._1.id == brokerMovingTo).seq(0)._2
-    println(s"checking partition constraint for move $replica to $brokerMovingTo with target replicas found as $replicas")
-
     !replicas.map(_.partition).contains(replica)
   }
 

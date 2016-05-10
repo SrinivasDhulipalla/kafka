@@ -30,7 +30,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     //2. Optimise Racks
     println("\nOptimising replica fairness over racks\n")
     val view: ByRack = new ByRack(brokers, partitions)
-    replicaFairness(partitions, view.constraints, replicationFactors, view)
+    replicaFairness(partitions, replicationFactors, view)
 
     println("\nEarly-Result is:")
     print(partitions, brokers)
@@ -46,7 +46,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       println("\nOptimising Replica Fairness over brokers for rack " + rack + "\n")
       print(partitions, brokers)
       val view: ByBroker = new ByBroker(brokers, partitions, rack)
-      replicaFairness(partitions, view.constraints, replicationFactors, view)
+      replicaFairness(partitions, replicationFactors, view)
       println("\nOptimising Leader Fairness over brokers for rack " + rack + "\n")
       print(partitions, brokers)
       leaderFairness(partitions, new ByBroker(brokers, partitions, rack))
@@ -80,7 +80,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     }
   }
 
-  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], v: ClusterView): Unit = {
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], replicationFactors: Map[String, Int], v: ClusterView): Unit = {
 
     var view = v
     val aboveParReplicas = v.aboveParReplicas
@@ -90,15 +90,14 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       val belowParBrokers: scala.Seq[BrokerMetadata] = view.belowParBrokers
       println("belowParBrokers-main: " + belowParBrokers)
       for (brokerTo <- belowParBrokers) {
-        val obeysPartition: Boolean = constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id)
-        val obeysRack: Boolean = constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)
-        if (obeysPartition && obeysRack && moved == false) {
+        val obeysPartition: Boolean = view.constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id)
+        val obeysRack: Boolean = view.constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)
+        if (!moved && obeysPartition && obeysRack) {
           move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
           view = view.refresh(partitionsMap)
           moved = true
-        } else
+        } else if (!moved)
           println(s"Failed to move ${replicaFrom.partition} [${replicaFrom.broker}] => [${brokerTo.id}] due to rack[${obeysRack}] or partition [${obeysPartition}] constraint")
-
       }
     }
   }
