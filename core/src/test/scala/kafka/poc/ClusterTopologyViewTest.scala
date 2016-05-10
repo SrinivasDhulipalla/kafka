@@ -116,7 +116,7 @@ class ClusterTopologyViewTest {
     val cluster: Constraints = new Constraints(brokers, partitions)
 
     //Then
-    assertEquals(true, cluster.constraints.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+    assertEquals(true, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
   @Test
@@ -134,7 +134,7 @@ class ClusterTopologyViewTest {
     val cluster: Constraints = new Constraints(brokers, partitions)
 
     //Then
-    assertEquals(false, cluster.constraints.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+    assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
   @Test
@@ -146,11 +146,11 @@ class ClusterTopologyViewTest {
     )
 
     val cluster: Constraints = new Constraints(brokers, partitions)
-    assertEquals(false, cluster.constraints.obeysPartitionConstraint(p(0), 100))
+    assertEquals(false, cluster.obeysPartitionConstraint(p(0), 100))
   }
 
   @Test
-  def shouldPassPartitionConstraintIfReplicaAlreadyExistsOnTargetForMove(): Unit ={
+  def shouldPassPartitionConstraintIfReplicaDoesntExistsOnTargetForMove(): Unit ={
     //Given
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
     val partitions = Map(
@@ -158,6 +158,6 @@ class ClusterTopologyViewTest {
     )
 
     val cluster: Constraints = new Constraints(brokers, partitions)
-    assertEquals(true, cluster.constraints.obeysPartitionConstraint(p(0), 101))
+    assertEquals(true, cluster.obeysPartitionConstraint(p(0), 101))
   }
 }

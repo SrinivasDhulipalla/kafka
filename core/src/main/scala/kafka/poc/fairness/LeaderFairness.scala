@@ -7,8 +7,6 @@ import scala.collection.{Iterable, mutable, Map, Seq}
 
 class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) extends Fairness {
 
-  println("initialised leaderfairness with brokerToLeaders " + brokersToLeaders)
-
   def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
       .filter(_._2 > rackFairLeaderValue)

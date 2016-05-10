@@ -15,21 +15,22 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * Push byRack and byBroker refreshable where byBroker takes a rack as arguemnt and byRack doesn't. That sorts out the constructor problem.
     */
 
-  override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]]  = {
+  override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     println("\nBrokers: " + brokers.map { b => "\n" + b })
-    val cluster = new Constraints(brokers, partitions)
     print(partitions, brokers)
 
 
 
 
     //1. Ensure no under-replicated partitions
-    fullyReplicated(partitions, cluster, replicationFactors, brokers)
+    val constraints: Constraints = new Constraints(brokers, partitions)
+    fullyReplicated(partitions, constraints, replicationFactors, brokers)
 
     //2. Optimise Racks
     println("\nOptimising replica fairness over racks\n")
-    replicaFairness(partitions, cluster.constraints, replicationFactors, new ByRack(brokers, partitions))
+    val view: ByRack = new ByRack(brokers, partitions)
+    replicaFairness(partitions, view.constraints, replicationFactors, view)
 
     println("\nEarly-Result is:")
     print(partitions, brokers)
@@ -42,11 +43,11 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
     //3. Optimise brokers on each byRack
     for (rack <- racks(brokers)) {
-
-      println("\nOptimising Replica Fairness over brokers for rack "+rack+ "\n")
+      println("\nOptimising Replica Fairness over brokers for rack " + rack + "\n")
       print(partitions, brokers)
-      replicaFairness(partitions, cluster.constraints, replicationFactors, new ByBroker(brokers, partitions, rack))
-      println("\nOptimising Leader Fairness over brokers for rack "+rack+ "\n")
+      val view: ByBroker = new ByBroker(brokers, partitions, rack)
+      replicaFairness(partitions, view.constraints, replicationFactors, view)
+      println("\nOptimising Leader Fairness over brokers for rack " + rack + "\n")
       print(partitions, brokers)
       leaderFairness(partitions, new ByBroker(brokers, partitions, rack))
     }
@@ -79,24 +80,25 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     }
   }
 
-  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], v: ClusterView) = {
+  def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], constraints: RebalanceConstraints, replicationFactors: Map[String, Int], v: ClusterView): Unit = {
 
     var view = v
-
-    val aboveParReplicas: scala.Seq[Replica] = view.aboveParReplicas //looks like this is only returning replicas from 101?
+    val aboveParReplicas = v.aboveParReplicas
     println("aboveParReplicas-main: " + aboveParReplicas)
     for (replicaFrom <- aboveParReplicas) {
       var moved = false
       val belowParBrokers: scala.Seq[BrokerMetadata] = view.belowParBrokers
       println("belowParBrokers-main: " + belowParBrokers)
       for (brokerTo <- belowParBrokers) {
-        if (constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id) && moved == false) {
-          if (constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)) {
-            move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
-            view = view.refresh(partitionsMap)
-            moved = true
-          }
-        }
+        val obeysPartition: Boolean = constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id)
+        val obeysRack: Boolean = constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)
+        if (obeysPartition && obeysRack && moved == false) {
+          move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
+          view = view.refresh(partitionsMap)
+          moved = true
+        } else
+          println(s"Failed to move ${replicaFrom.partition} [${replicaFrom.broker}] => [${brokerTo.id}] due to rack[${obeysRack}] or partition [${obeysPartition}] constraint")
+
       }
     }
   }
@@ -106,7 +108,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     var view = v
 
     val abParParts = view.aboveParPartitions
-    println("abParParts: "+abParParts)
+    println("abParParts: " + abParParts)
     for (aboveParPartition <- abParParts) {
       //not sure if i need this...
       if (view.aboveParPartitions().contains(aboveParPartition)) {
@@ -134,12 +136,12 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   }
 
   def move(tp: TopicAndPartition, from: Int, to: Int, partitionsMap: collection.mutable.Map[TopicAndPartition, Seq[Int]]): Unit = {
-    def replaceFirst[A](a : Seq[A], repl : A, replwith : A) : List[A] = a match {
+    def replaceFirst[A](a: Seq[A], repl: A, replwith: A): List[A] = a match {
       case Nil => Nil
-      case head :: tail => if(head == repl) replwith :: tail else head :: replaceFirst(tail, repl, replwith)
+      case head :: tail => if (head == repl) replwith :: tail else head :: replaceFirst(tail, repl, replwith)
     }
 
-    val replicas = replaceFirst( partitionsMap.get(tp).get, from, to)
+    val replicas = replaceFirst(partitionsMap.get(tp).get, from, to)
 
     partitionsMap.put(tp, replicas)
     println(s"Partition $tp was moved from broker [$from] to [$to]")
@@ -151,4 +153,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     println("\nBrokers to replicas: " + view.brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) } + "\n")
     println("\nBrokers to leaders: " + view.brokersToLeaders.map { x => "\n" + x._1.id + " - size:" + x._2.size } + "\n")
   }
+
+  def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]]): Unit = {
+    println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
+  }
+
 }

@@ -8,6 +8,7 @@ import scala.collection.{Iterable, Seq, Map}
 
 class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[Int]], rack: String) extends ClusterView  with TopologyFactory with TopologyHelper {
 
+  val constraints = new Constraints(allBrokers, p)
   val brokers = allBrokers.filter(_.rack.get == rack)
   val partitions = filter(rack, allBrokers, p)
   val brokersToReplicas = createBrokersToReplicas(allBrokers, brokers, p).filter(_._1.rack.get == rack)

@@ -190,6 +190,32 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals((100 to 105).toSeq, reassigned.values.flatten.toSeq.sorted)
   }
 
+  @Test
+  def shouldOptimiseForEvenReplicaPlacementWithinAndAcrossRacks(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given all replicas are on one (of 3) racks
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"), bk(103, "rack2"), bk(104, "rack2"), bk(105, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(100, 101),
+      p(3) -> List(100, 101),
+      p(4) -> List(100, 101),
+      p(5) -> List(100, 101)
+
+    )
+    val reps = replicationFactorOf(2)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should end evenly spread one replica per broker and hence two per rack
+    for (brokerId <- 100 to 105)
+      assertEquals(2, reassigned.values.flatten.toSeq.filter(_ == brokerId).size)
+  }
+
+
   /**
     * This gives an example of a possibly unexpected result showing the
     * limits of this approach.
@@ -224,12 +250,12 @@ class MovesOptimisedRebalancePolicyTest {
     //have replication factor 2 and the other replicas are on the other rack
     //note this dies't work as expected as the way replicas are fed in their is no option for the rebalance at a broker level.
     assertEquals(8, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 100, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
 
   @Test
-  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithThreeReplias(): Unit = {
+  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithThreeReplicas(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given replicas are on one (of 3) racks
@@ -251,8 +277,8 @@ class MovesOptimisedRebalancePolicyTest {
     assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
-//todo test should optimise leaders independently on different racks
-//todo test should work where brokers don't have any racks specified
+  //todo test should optimise leaders independently on different racks
+  //todo test should work where brokers don't have any racks specified
   // todo test that should take a sample cluster and increase the replication factor
 
   @Test
@@ -292,13 +318,13 @@ class MovesOptimisedRebalancePolicyTest {
       p(1, "sales") -> List(100),
       p(0, "orders") -> List(100),
       p(1, "orders") -> List(100))
-    val reps =  Map("sales" -> 1, "orders" -> 1)
+    val reps = Map("sales" -> 1, "orders" -> 1)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one per rack
-    reassigned.values.map{replicaAssignment => assertEquals(1, replicaAssignment.size)}
+    reassigned.values.map { replicaAssignment => assertEquals(1, replicaAssignment.size) }
   }
 
   /**

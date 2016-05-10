@@ -11,8 +11,6 @@ trait TopologyHelper {
 
   def replicaExists(btr: Seq[(BrokerMetadata, Seq[Replica])], replica: Any, rack: String): Boolean = btr.filter(_._1.rack.get == rack).map(_._2).size > 0
 
-  def replicasFor(btr: Seq[(BrokerMetadata, Seq[Replica])], broker: Int): Seq[Replica] = btr.filter(_._1.id == broker).seq(0)._2
-
   /**
     * Find the least loaded brokers, but push those on the supplied racks to the bottom of the list.
     *
