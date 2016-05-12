@@ -11,7 +11,7 @@ import scala.collection.mutable
 class RebalancingAcceptanceTest {
 
   @Test
-  def simpleBraceTest(): Unit = {
+  def shouldRebalanceAwkwardlyArrangedCluster(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given 2 topics, with rep-factor 2 and 2 topics with rep-factor 3, all with 100 partitions loaded on first few brokers

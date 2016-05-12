@@ -669,55 +669,59 @@ class RebalacingTest {
       assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
+  @Test
+  def shouldAddBrokerToCluster(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100, 101, 102),
+      p(1) -> List(100, 101, 102),
+      p(2) -> List(100, 101, 102),
+      p(3) -> List(100, 101, 102))
+    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then should be thre replicas per broker
+    for (brokerId <- 100 to 103)
+      assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
+    //Then should be one leader per broker
+    for (brokerId <- 100 to 103)
+      assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
+  }
+// TODO 
+//  @Test
+//  def shouldRemoveBrokerFromCluster(): Unit = {
+//    val policy = new MovesOptimisedRebalancePolicy()
+//
+//    //Given
+//    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
+//    val partitions = Map(
+//      p(0) -> List(100, 101, 102),
+//      p(1) -> List(100, 101, 102),
+//      p(2) -> List(100, 101, 102),
+//      p(3) -> List(100, 101, 102))
+//    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+//
+//    //When
+//    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+//
+//    //Then should be three replicas per broker
+//    for (brokerId <- 100 to 101)
+//      assertEquals(6, reassigned.values.flatten.filter(_ == brokerId).size)
+//    //Then should be one leader per broker
+//    for (brokerId <- 100 to 101)
+//      assertEquals(2, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
+//  }
+
 
   def assertWithinTollerance(expected: Int, actual: Int, tollerance: Int) = {
     assertTrue(s"Expected [$expected] within tollerance [$tollerance] but got [$actual]", expected >= actual - tollerance && expected <= actual + tollerance)
   }
 
-  /**
-    * Brace tests
-    */
-
-
-  @Test
-  def simpleBraceTest(): Unit = {
-    val policy = new MovesOptimisedRebalancePolicy()
-
-    //Given 2 topics, with rep-factor 2 and 2 topics with rep-factor 3, all with 100 partitions loaded on first few brokers
-    val brokerCount = 10
-    val partitionCount = 10
-    val replicas = Seq(100, 101, 102)
-    val topics = Seq("t1", "t2", "t3", "t4")
-    val replicaCount = replicas.size
-
-    val reps = topics.map((_, replicaCount)).toMap
-    val brokers = (100 until (100 + brokerCount / 2)).map(bk(_, "rack1")) ++ ((100 + brokerCount/2) until (100 + brokerCount)).map(bk(_, "rack2"))
-
-    val partitions = ((0 until partitionCount).map(p(_, "t1") -> replicas).toMap
-      ++ (0 until partitionCount).map(p(_, "t2") -> replicas).toMap
-      ++ (0 until partitionCount).map(p(_, "t3") -> replicas).toMap
-      ++ (0 until partitionCount).map(p(_, "t4") -> replicas).toMap)
-
-    val mutablePartitions = collection.mutable.Map(partitions.toSeq: _*)
-
-    //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-
-    assertEquals(topics.size * partitionCount, reassigned.size)
-    assertEquals(topics.size * partitionCount * replicaCount, reassigned.values.flatten.size)
-
-    //Then replicas should be evenly spread
-    for (brokerId <- 100 until (100 + brokerCount)) {
-      val expected: Int = topics.size * partitionCount * replicaCount / brokerCount
-      assertWithinTollerance(expected, reassigned.values.flatten.filter(_ == brokerId).size, expected/10)
-    }
-
-    //Then leaders should be evenly spread
-    for (brokerId <- 100 until (100 + brokerCount)) {
-      val expected: Int = partitionCount * topics.size / brokerCount
-      assertWithinTollerance(expected, reassigned.values.map(_ (0)).filter(_ == brokerId).size, expected/10)
-    }
-  }
 
 //TODO add test to ensure a complex output never breaks partition constraint or rack constraint.
   /**
