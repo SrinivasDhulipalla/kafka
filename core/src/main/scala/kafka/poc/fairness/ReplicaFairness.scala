@@ -54,5 +54,3 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
     Math.abs(brokerReplicaCounts.get(broker).get - brokerFairValue)
   }
 }
-
-

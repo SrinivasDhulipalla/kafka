@@ -8,7 +8,6 @@ import scala.collection._
 
 class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper with TopologyFactory {
 
-
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val constraints: Constraints = new Constraints(brokers, partitions)
@@ -62,6 +61,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       for (brokerTo <- view.brokersWithBelowParReplicaCount) {
         val obeysPartition = view.constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id)
         val obeysRack = view.constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)
+
         if (!moved && obeysRack && obeysPartition) {
           move(replicaFrom.partition, replicaFrom.broker, brokerTo.id, partitionsMap)
           view = view.refresh(partitionsMap)
@@ -95,9 +95,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
         for (broker <- view.brokersWithBelowParLeaderCount) {
           val followerReplicasOnBelowParBrokers = view.nonLeadReplicasFor(broker)
           for (belowParFollowerReplica <- followerReplicasOnBelowParBrokers) {
-
-            val obeysPartitionOut: Boolean = view.constraints.obeysPartitionConstraint(aboveParLeaderPartition, belowParFollowerReplica.broker)
-            val obeysPartitionBack: Boolean = view.constraints.obeysPartitionConstraint(belowParFollowerReplica.partition, aboveParLeaderBroker)
+            val obeysPartitionOut = view.constraints.obeysPartitionConstraint(aboveParLeaderPartition, belowParFollowerReplica.broker)
+            val obeysPartitionBack = view.constraints.obeysPartitionConstraint(belowParFollowerReplica.partition, aboveParLeaderBroker)
 
             if (!moved && obeysPartitionOut && obeysPartitionOut) {
               move(aboveParLeaderPartition, aboveParLeaderBroker, belowParFollowerReplica.broker, partitions)
@@ -116,9 +115,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     var currentLead = replicas(0)
 
     if (toPromote != currentLead) {
-      //remove old
       replicas = replicas.filter(_ != toPromote)
-      //push first
       replicas = Seq(toPromote) ++ replicas
       partitionsMap.put(tp, replicas)
       println(s"Leadership moved brokers: [$currentLead -> $toPromote] for partition $tp")
@@ -155,6 +152,4 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]]): Unit = {
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
   }
-
-
 }

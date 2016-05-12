@@ -33,4 +33,3 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
     !replicas.map(_.partition).contains(partition)
   }
 }
-

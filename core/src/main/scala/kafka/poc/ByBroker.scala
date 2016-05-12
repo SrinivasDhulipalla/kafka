@@ -28,11 +28,5 @@ class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[In
 
   def refresh(newPartitionsMap: Map[TopicAndPartition, Seq[Int]]): ClusterView = new ByBroker(allBrokers, newPartitionsMap, rack)
 
-  //TODO - really need to make brokersToReplicas a map not a list!
   def nonLeadReplicasFor(broker: BrokerMetadata): Seq[Replica] = brokersToNonLeaders.filter(_._1.id == broker.id).last._2
-
 }
-
-
-
-
