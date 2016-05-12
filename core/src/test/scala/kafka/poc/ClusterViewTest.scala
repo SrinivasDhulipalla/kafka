@@ -10,7 +10,7 @@ import org.junit.Test
 
 import scala.collection.Seq
 
-class ClusterTopologyViewTest {
+class ClusterViewTest {
 
   @Test
   def shouldCreateSimpleClusterTopologyOfBrokersToReplicas(): Unit = {

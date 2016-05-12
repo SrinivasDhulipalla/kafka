@@ -17,12 +17,12 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     //1. Ensure no under-replicated partitions
     fullyReplicated(partitions, constraints, replicationFactors, brokers)
 
-    //2. Optimise Racks
+    //2. Optimise across racks
     val view = new ByRack(brokers, partitions)
     replicaFairness(partitions, replicationFactors, view)
     leaderFairness(partitions, view)
 
-    //3. Optimise brokers on each byRack
+    //3. Optimise brokers on each rack separately
     for (rack <- racks(brokers)) {
       val view = new ByBroker(brokers, partitions, rack)
       replicaFairness(partitions, replicationFactors, view)

@@ -1,12 +1,8 @@
 package kafka.poc
 
-import kafka.admin.BrokerMetadata
-import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
 import org.junit.Assert._
 import org.junit.Test
-
-import scala.collection.mutable
 
 class RebalancingAcceptanceTest {
 
@@ -33,6 +29,7 @@ class RebalancingAcceptanceTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
+    //Then counts shoudl match
     assertEquals(topics.size * partitionCount, reassigned.size)
     assertEquals(topics.size * partitionCount * replicaCount, reassigned.values.flatten.size)
 
@@ -48,5 +45,4 @@ class RebalancingAcceptanceTest {
       assertEquals(expected, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
     }
   }
-
 }

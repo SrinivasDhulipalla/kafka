@@ -8,7 +8,7 @@ import scala.collection._
 import collection.mutable.LinkedHashMap
 
 
-class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends BaseSomething with TopologyHelper with TopologyFactory with RebalanceConstraints {
+class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends TopologyHelper with TopologyFactory with RebalanceConstraints {
 
   private val brokersToReplicas = createBrokersToReplicas(allBrokers, allBrokers, partitions)
 
@@ -28,11 +28,9 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
     racksSpanned >= minRacksSpanned
   }
 
-
   def obeysPartitionConstraint(partition: TopicAndPartition, brokerMovingTo: Int): Boolean = {
     val replicas = brokersToReplicas.filter(_._1.id == brokerMovingTo).seq(0)._2
     !replicas.map(_.partition).contains(partition)
   }
-
 }
 

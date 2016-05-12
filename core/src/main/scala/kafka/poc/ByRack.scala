@@ -6,7 +6,7 @@ import kafka.poc.fairness.{LeaderFairness, ReplicaFairness}
 
 import scala.collection.{Iterable, Seq, Map}
 
-class ByRack(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartition, Seq[Int]]) extends BaseSomething with ClusterView with TopologyFactory with TopologyHelper {
+class ByRack(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartition, Seq[Int]]) extends ClusterView with TopologyFactory with TopologyHelper {
 
   val constraints = new Constraints(allBrokers, allPartitions)
 

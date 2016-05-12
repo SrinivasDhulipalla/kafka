@@ -12,6 +12,12 @@ import scala.collection.mutable
 
 class RebalacingTest {
 
+  //TODO add test to ensure a complex output never breaks partition constraint or rack constraint.
+  //TODO test should optimise leaders independently on different racks
+  //TODO test should work where brokers don't have any racks specified
+  //TODO test that should take a sample cluster and increase the replication factor
+  //TODO tests that test number of moves is minimised (we should mock the move and make leader commands)
+
   /**
     * Step 1: Ensure partitions are fully replicated
     */
@@ -223,19 +229,6 @@ class RebalacingTest {
 
   }
 
-
-  /**
-    * This gives an example of a possibly unexpected result showing the
-    * limits of this approach.
-    * The problem is we spit the brokers over the two racks so
-    * they have four replicas each. This means each partiion has
-    * a replica on a different rack.
-    * Then when we optimise for leader fairness, because we do it
-    * at a rack level, there is no way to swap leaders around as
-    * each only has one replcia to play with
-    *
-    * TODO we should investigate if this is fixable
-    */
   @Test
   def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -252,15 +245,9 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-
-    //Then should leaders should be even across the three racks,
-    //so two leaders on the single broker on rack2 but this doesn't work as we only
-    //have replication factor 2 and the other replicas are on the other rack
-    //note this dies't work as expected as the way replicas are fed in their is no option for the rebalance at a broker level.
     assertEquals(8, reassigned.values.flatten.toSeq.size)
     assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
-
 
   @Test
   def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithThreeReplicas(): Unit = {
@@ -285,9 +272,6 @@ class RebalacingTest {
     assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
 
-  //todo test should optimise leaders independently on different racks
-  //todo test should work where brokers don't have any racks specified
-  // todo test that should take a sample cluster and increase the replication factor
 
   @Test
   def shouldObeyRackFairnessStrictlyEvenAtTheCostOfReplicaFairnessAcrossBrokers(): Unit = {
@@ -436,10 +420,7 @@ class RebalacingTest {
       assertEquals(2, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
-
-  //TODO tests that test number of moves is minimised (shoudl just mock the move and make leader commands
-
-  @Test //TODO is this test redundent?
+  @Test //TODO is this test redundant?
   def shouldMoveReplicasToLeastLoadedBroker(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
@@ -480,8 +461,8 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-    println(reassigned)
-    //All replicas on 100 should remain there (i.e. on rack 1)
+
+    //Then All replicas on 100 should remain there (i.e. on rack 1)
     assertEquals(6, reassigned.values.flatten.filter(_ == 100).size)
   }
 
@@ -548,12 +529,13 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-    println(reassigned)
 
     //rack2 should get 6 replicas
     assertEquals(6, reassigned.values.flatten.filter(getBroker(_).rack.get == "rack2").size)
+
     //rack2 should have 3 leaders
     assertEquals(3, reassigned.values.map(_ (0)).filter(getBroker(_).rack.get == "rack2").size)
+
     //They should not be all on one broker
     assertFalse(reassigned.values.map(_ (0)).filter(_ == 101).size == 0)
     assertFalse(reassigned.values.map(_ (0)).filter(_ == 102).size == 0)
@@ -692,33 +674,9 @@ class RebalacingTest {
     for (brokerId <- 100 to 103)
       assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
   }
-// TODO
-//  @Test
-//  def shouldRemoveBrokerFromCluster(): Unit = {
-//    val policy = new MovesOptimisedRebalancePolicy()
-//
-//    //Given
-//    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
-//    val partitions = Map(
-//      p(0) -> List(100, 101, 102),
-//      p(1) -> List(100, 101, 102),
-//      p(2) -> List(100, 101, 102),
-//      p(3) -> List(100, 101, 102))
-//    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
-//
-//    //When
-//    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-//
-//    //Then should be three replicas per broker
-//    for (brokerId <- 100 to 101)
-//      assertEquals(6, reassigned.values.flatten.filter(_ == brokerId).size)
-//    //Then should be one leader per broker
-//    for (brokerId <- 100 to 101)
-//      assertEquals(2, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
-//  }
 
 
-//TODO add test to ensure a complex output never breaks partition constraint or rack constraint.
+
   /**
     * Test Move & Leader Functions
     */
@@ -755,14 +713,30 @@ class RebalacingTest {
     assertEquals(Seq(100, 101), partitions.get(p(0)).get)
   }
 
-  /**
-    * Test add broker, remove broker
-    */
-
-
-  def sort(x: Map[TopicAndPartition, Seq[Int]]) = {
-    x.toSeq.sortBy(_._1.partition)
-  }
+  // TODO
+  //  @Test
+  //  def shouldRemoveBrokerFromCluster(): Unit = {
+  //    val policy = new MovesOptimisedRebalancePolicy()
+  //
+  //    //Given
+  //    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
+  //    val partitions = Map(
+  //      p(0) -> List(100, 101, 102),
+  //      p(1) -> List(100, 101, 102),
+  //      p(2) -> List(100, 101, 102),
+  //      p(3) -> List(100, 101, 102))
+  //    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+  //
+  //    //When
+  //    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+  //
+  //    //Then should be three replicas per broker
+  //    for (brokerId <- 100 to 101)
+  //      assertEquals(6, reassigned.values.flatten.filter(_ == brokerId).size)
+  //    //Then should be one leader per broker
+  //    for (brokerId <- 100 to 101)
+  //      assertEquals(2, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
+  //  }
 
 
   def replicationFactorOf(replicationFactor: Int): Map[String, Int] = {
