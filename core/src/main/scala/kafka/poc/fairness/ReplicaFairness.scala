@@ -3,7 +3,7 @@ package kafka.poc.fairness
 import kafka.admin.BrokerMetadata
 import kafka.poc.{TopologyHelper, Replica}
 
-import scala.collection.{mutable, Seq}
+import scala.collection.{Seq}
 
 class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], allBrokers: Seq[BrokerMetadata]) extends Fairness with TopologyHelper {
 

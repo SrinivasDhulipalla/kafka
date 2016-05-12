@@ -4,13 +4,14 @@ import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 import kafka.poc.TopologyHelper
 
-import scala.collection.{Iterable, mutable, Map, Seq}
+import scala.collection.immutable.ListMap
+import scala.collection.{Iterable, Map, Seq}
 
 class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])], allBrokers: Seq[BrokerMetadata]) extends Fairness with TopologyHelper {
 
   private val rackCount = allBrokers.map(_.rack.get).distinct.size
   private val rackLeaderCounts: Map[String, Int] = getRackLeaderCounts(brokersToLeaders)
-  private val brokerLeaderCounts: mutable.LinkedHashMap[BrokerMetadata, Int] = getBrokerLeaderCounts(brokersToLeaders)
+  private val brokerLeaderCounts: ListMap[BrokerMetadata, Int] = getBrokerLeaderCounts(brokersToLeaders)
   val brokerFairValue = Math.ceil(leaderCount.toFloat / allBrokers.size).toInt
   val rackFairValue = Math.ceil(leaderCount.toFloat / rackCount).toInt
 

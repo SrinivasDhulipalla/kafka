@@ -3,6 +3,7 @@ package kafka.poc
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 
+import scala.collection.immutable.ListMap
 import scala.collection.{mutable, Map, Iterable, Seq}
 import scala.util.Random
 
@@ -91,7 +92,7 @@ trait TopologyHelper {
   }
 
   //duplicate
-  def getBrokerLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) = mutable.LinkedHashMap(
+  def getBrokerLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) = ListMap(
     brokersToLeaders
       .map { case (x, y) => (x, y.size) }
       .sortBy(_._2)
@@ -99,7 +100,7 @@ trait TopologyHelper {
   )
 
   //duplicate
-  def getBrokerReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = mutable.LinkedHashMap(
+  def getBrokerReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = ListMap(
     brokersToReplicas
       .map { case (x, y) => (x, y.size) }
       .sortBy(_._2)
@@ -107,7 +108,7 @@ trait TopologyHelper {
   )
 
   //duplicate
-  def getRackReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = mutable.LinkedHashMap(
+  def getRackReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = ListMap(
     brokersToReplicas
       .map { case (x, y) => (x, y.size) }
       .groupBy(_._1.rack.get)

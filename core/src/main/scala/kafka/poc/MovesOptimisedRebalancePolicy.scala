@@ -12,7 +12,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val constraints: Constraints = new Constraints(brokers, partitions)
-
     print(partitions, brokers)
 
     //1. Ensure no under-replicated partitions
