@@ -7,7 +7,7 @@ import scala.collection.{Iterable, Map, Seq}
 
 trait TopologyFactory {
 
-  //TODO remove the duplicate brokers arg
+  //TODO Consolidate
   def createBrokersToReplicas(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
     def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
@@ -27,6 +27,7 @@ trait TopologyFactory {
     emptyBrokers ++ existing
   }
 
+  //TODO Consolidate
   def createBrokersToLeaders(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
 
     def bk(id: Int): BrokerMetadata = {
@@ -47,7 +48,7 @@ trait TopologyFactory {
     emptyBrokers ++ existing
   }
 
-  //TODO This is a copy and paste of createBrokersToReplicas, other than the added drop(0) - refactor
+  //TODO Consolidate
   def createBrokersToNonLeaders(allBrokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
     def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last

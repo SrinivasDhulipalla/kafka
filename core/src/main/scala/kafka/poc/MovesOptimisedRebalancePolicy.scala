@@ -147,49 +147,15 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
     println("\nBrokers to replicas: " + brokersToReplicas.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) } + "\n")
     println("\nBrokers to leaders: " + brokersToLeaders.map { x => "\n" + x._1.id + " - size:" + x._2.size } + "\n")
-    println("\nRacks to replica Counts " + rackReplicaCounts(brokersToReplicas))
-    println("\nRacks to leader Counts " + rackLeaderCounts(brokersToLeaders))
-    println("\nBroker to replica Counts " + brokerReplicaCounts(brokersToReplicas).map { case (k, v) => (k.id, v) })
-    println("\nBroker to leader Counts " + brokerLeaderCounts(brokersToLeaders))
+    println("\nRacks to replica Counts " + getRackReplicaCounts(brokersToReplicas))
+    println("\nRacks to leader Counts " + getRackLeaderCounts(brokersToLeaders))
+    println("\nBroker to replica Counts " + getBrokerReplicaCounts(brokersToReplicas).map { case (k, v) => (k.id, v) })
+    println("\nBroker to leader Counts " + getBrokerLeaderCounts(brokersToLeaders))
   }
 
   def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]]): Unit = {
     println("\nPartitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)
   }
 
-  //duplicate
-  private def rackLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]): Map[String, Int] = {
-    brokersToLeaders
-      .map { case (x, y) => (x, y.size) }
-      .groupBy(_._1.rack.get)
-      .mapValues(_.map(_._2).sum)
-  }
-
-  //duplicate
-  private def brokerLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) = mutable.LinkedHashMap(
-    brokersToLeaders
-      .map { case (x, y) => (x, y.size) }
-      .sortBy(_._2)
-      : _*
-  )
-
-  //duplicate
-  def brokerReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = mutable.LinkedHashMap(
-    brokersToReplicas
-      .map { case (x, y) => (x, y.size) }
-      .sortBy(_._2)
-      : _*
-  )
-
-  //duplicate
-  private def rackReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = mutable.LinkedHashMap(
-    brokersToReplicas
-      .map { case (x, y) => (x, y.size) }
-      .groupBy(_._1.rack.get)
-      .mapValues(_.map(_._2).sum)
-      .toSeq
-      .sortBy(_._2)
-      : _*
-  )
 
 }

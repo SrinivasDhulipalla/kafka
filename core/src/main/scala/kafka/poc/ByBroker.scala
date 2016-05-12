@@ -17,7 +17,6 @@ class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[In
   val brokersToNonLeaders = createBrokersToNonLeaders(allBrokers, brokers, p).filter(_._1.rack.get == rack)
   val replicaFairness = new ReplicaFairness(brokersToReplicas, brokers)
   val leaderFairness = new LeaderFairness(brokersToLeaders, brokers)
-  val leaderCounts = leaderFairness.brokerLeaderCounts.map{case (broker, count)=>(broker.id, count)}.toMap
 
   def replicasOnAboveParBrokers(): Seq[Replica] = replicaFairness.aboveParBrokers.flatMap(weightedReplicasFor(_, brokersToReplicas))
 
@@ -32,9 +31,6 @@ class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[In
   //TODO - really need to make brokersToReplicas a map not a list!
   def nonLeadReplicasFor(broker: BrokerMetadata): Seq[Replica] = brokersToNonLeaders.filter(_._1.id == broker.id).last._2
 
-  def printBrokerToLeaderMap(): Unit ={
-    println(leaderCounts)
-  }
 }
 
 

@@ -6,8 +6,6 @@ import kafka.common.TopicAndPartition
 import scala.collection.{Seq, Map}
 
 trait ClusterView {
-  def printBrokerToLeaderMap()
-
 
   def replicasOnAboveParBrokers(): scala.Seq[Replica]
 

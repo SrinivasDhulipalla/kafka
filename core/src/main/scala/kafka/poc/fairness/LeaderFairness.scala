@@ -2,10 +2,17 @@ package kafka.poc.fairness
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
+import kafka.poc.TopologyHelper
 
 import scala.collection.{Iterable, mutable, Map, Seq}
 
-class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])], allBrokers: Seq[BrokerMetadata]) extends Fairness {
+class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])], allBrokers: Seq[BrokerMetadata]) extends Fairness with TopologyHelper {
+
+  private val rackCount = allBrokers.map(_.rack.get).distinct.size
+  private val rackLeaderCounts: Map[String, Int] = getRackLeaderCounts(brokersToLeaders)
+  private val brokerLeaderCounts: mutable.LinkedHashMap[BrokerMetadata, Int] = getBrokerLeaderCounts(brokersToLeaders)
+  val brokerFairValue = Math.ceil(leaderCount.toFloat / allBrokers.size).toInt
+  val rackFairValue = Math.ceil(leaderCount.toFloat / rackCount).toInt
 
   def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
@@ -24,10 +31,9 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
   }
 
   def aboveParBrokers(): Seq[BrokerMetadata] = {
-    val vals = brokerLeaderCounts
+    brokerLeaderCounts
       .filter(_._2 > brokerFairValue)
       .keys.toSeq.distinct
-    vals
   }
 
   def belowParBrokers(): Seq[BrokerMetadata] = {
@@ -36,33 +42,10 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
       .keys.toSeq.distinct
   }
 
-  def brokerLeaderCounts() = mutable.LinkedHashMap(
-    brokersToLeaders
-      .map { case (x, y) => (x, y.size) }
-      .sortBy(_._2)
-      : _*
-  )
-
-  private def rackLeaderCounts: Map[String, Int] = {
-    brokersToLeaders
-      .map { case (x, y) => (x, y.size) }
-      .groupBy(_._1.rack.get)
-      .mapValues(_.map(_._2).sum)
-  }
-
   private def leaderCount(): Int = {
     brokersToLeaders
       .map { case (x, y) => y.size }
       .sum
   }
-
-  private def brokerCount(): Int = allBrokers.size
-
-  private def rackCount: Int = allBrokers.map(_.rack.get).distinct.size
-
-  def rackFairValue() = Math.ceil(leaderCount.toFloat / rackCount).toInt
-
-
-  def brokerFairValue() = Math.ceil(leaderCount.toFloat / brokerCount).toInt
 
 }

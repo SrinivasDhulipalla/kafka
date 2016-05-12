@@ -27,8 +27,5 @@ class ByRack(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartiti
   def refresh(newPartitionsMap: Map[TopicAndPartition, Seq[Int]]): ClusterView = new ByRack(allBrokers, newPartitionsMap)
 
   def nonLeadReplicasFor(brokerMetadata: BrokerMetadata): scala.Seq[Replica] =  Seq()
-
-  def printBrokerToLeaderMap(): Unit ={
-  }
 }
 
