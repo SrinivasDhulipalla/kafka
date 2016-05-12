@@ -5,11 +5,11 @@ import kafka.common.TopicAndPartition
 
 import scala.collection.{Iterable, mutable, Map, Seq}
 
-class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) extends Fairness {
+class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])], allBrokers: Seq[BrokerMetadata]) extends Fairness {
 
   def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 > rackFairLeaderValue)
+      .filter(_._2 > rackFairValue)
       .keys
       .toSeq
       .distinct
@@ -17,7 +17,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   def belowParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 < rackFairLeaderValue)
+      .filter(_._2 < rackFairValue)
       .keys
       .toSeq
       .distinct
@@ -25,18 +25,18 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   def aboveParBrokers(): Seq[BrokerMetadata] = {
     val vals = brokerLeaderCounts
-      .filter(_._2 > brokerFairLeaderValue)
+      .filter(_._2 > brokerFairValue)
       .keys.toSeq.distinct
     vals
   }
 
   def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
-      .filter(_._2 < brokerFairLeaderValue)
+      .filter(_._2 < brokerFairValue)
       .keys.toSeq.distinct
   }
 
-  private def brokerLeaderCounts() = mutable.LinkedHashMap(
+  def brokerLeaderCounts() = mutable.LinkedHashMap(
     brokersToLeaders
       .map { case (x, y) => (x, y.size) }
       .sortBy(_._2)
@@ -56,20 +56,13 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
       .sum
   }
 
-  private def brokerCount(): Int = {
-    brokersToLeaders.map(_._1).distinct.size
-  }
+  private def brokerCount(): Int = allBrokers.size
 
-  private def rackCount(): Int = {
-    brokersToLeaders.map(_._1.rack.get).distinct.size
-  }
+  private def rackCount: Int = allBrokers.map(_.rack.get).distinct.size
+
+  def rackFairValue() = Math.ceil(leaderCount.toFloat / rackCount).toInt
 
 
-  private def rackFairLeaderValue() = {
-    Math.floor(leaderCount / rackCount)
-  }
+  def brokerFairValue() = Math.ceil(leaderCount.toFloat / brokerCount).toInt
 
-  private def brokerFairLeaderValue() = {
-    Math.floor(leaderCount / brokerCount)
-  }
 }

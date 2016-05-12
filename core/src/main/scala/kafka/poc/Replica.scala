@@ -8,7 +8,7 @@ class Replica(val topic: String, val partitionId: Int, val broker: Int) {
     new TopicAndPartition(topic, partitionId)
   }
 
-  override def toString = s"Replica[$topic:$partitionId:$broker]"
+  override def toString = s"r[$topic:$partitionId:$broker]"
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[Replica]
 

@@ -1,5 +1,6 @@
 package kafka.poc
 
+import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
 import org.hamcrest.core.IsCollectionContaining
@@ -9,7 +10,7 @@ import org.junit.Test
 
 import scala.collection.mutable
 
-class MovesOptimisedRebalancePolicyTest {
+class RebalacingTest {
 
   /**
     * Step 1: Ensure partitions are fully replicated
@@ -60,19 +61,21 @@ class MovesOptimisedRebalancePolicyTest {
 
     //Given broker 102 is least loaded and p[4] is under-replicated
     val brokers = (100 to 103).map(bk(_, "rack1"))
-    val underreplicated = Map(
-      p(0) -> List(100, 101, 102), //102 has two replicas, 103 has 3, 101 has 4, 100 has 5
-      p(1) -> List(100, 102, 103),
-      p(2) -> List(100, 101, 103),
-      p(3) -> List(100, 101, 103),
-      p(4) -> List(100, 101))
+    val underreplicated = mutable.Map(
+      p(0) -> Seq(100, 101, 102), //102 has two replicas, 103 has 3, 101 has 4, 100 has 5
+      p(1) -> Seq(100, 102, 103),
+      p(2) -> Seq(100, 101, 103),
+      p(3) -> Seq(100, 101, 103),
+      p(4) -> Seq(100, 101))
     val reps = replicationFactorOf(3)
+    val constraints: Constraints = new Constraints(brokers, underreplicated)
 
     //When
-    val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
+    policy.fullyReplicated(underreplicated, constraints, reps, brokers)
 
     //then p[4] should have a new replica on broker 102 (the least loaded)
-    assertEquals(List(101, 100, 102), reassigned.get(p(4)).get)
+    assertEquals(3, underreplicated.get(p(4)).get.size)
+    assertTrue(underreplicated.get(p(4)).get.contains(102))
   }
 
   @Test
@@ -191,28 +194,33 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldOptimiseForEvenReplicaPlacementWithinAndAcrossRacks(): Unit = {
+  def shouldOptimiseForFairnessWithinAndAcrossRacks(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given all replicas are on one (of 3) racks
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack1"), bk(103, "rack2"), bk(104, "rack2"), bk(105, "rack2"))
     val partitions = Map(
-      p(0) -> List(100, 101),
-      p(1) -> List(100, 101),
-      p(2) -> List(100, 101),
-      p(3) -> List(100, 101),
-      p(4) -> List(100, 101),
-      p(5) -> List(100, 101)
+      p(0) -> List(100, 101, 102),
+      p(1) -> List(100, 101, 102),
+      p(2) -> List(100, 101, 102),
+      p(3) -> List(100, 101, 102),
+      p(4) -> List(100, 101, 102),
+      p(5) -> List(100, 101, 102)
 
     )
-    val reps = replicationFactorOf(2)
+    val reps = replicationFactorOf(3)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should end evenly spread one replica per broker and hence two per rack
     for (brokerId <- 100 to 105)
-      assertEquals(2, reassigned.values.flatten.toSeq.filter(_ == brokerId).size)
+      assertEquals(3, reassigned.values.flatten.toSeq.filter(_ == brokerId).size)
+
+    //Should have one leaders each
+    for (brokerId <- 100 to 105)
+      assertEquals(1, reassigned.values.map(_ (0)).toSeq.filter(_ == brokerId).size)
+
   }
 
 
@@ -428,7 +436,10 @@ class MovesOptimisedRebalancePolicyTest {
       assertEquals(2, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
-  @Test
+
+  //TODO tests that test number of moves is minimised (shoudl just mock the move and make leader commands
+
+  @Test //TODO is this test redundent?
   def shouldMoveReplicasToLeastLoadedBroker(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
@@ -446,12 +457,9 @@ class MovesOptimisedRebalancePolicyTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then should have moved one replica from 101 -> 103
-    assertEquals(sort(Map(
-      p(0) -> Seq(100, 103),
-      p(1) -> Seq(100, 102),
-      p(2) -> Seq(102, 101),
-      p(3) -> Seq(103, 101))), sort(reassigned.toMap))
+    //Then should have moved one replica from 101 -> 100
+    for (brokerId <- 100 to 103)
+      assertEquals(2, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
   @Test
@@ -517,6 +525,39 @@ class MovesOptimisedRebalancePolicyTest {
     //Then should be one per broker
     val leaders = reassigned.values.map(_ (0))
     assertEquals(3, leaders.toSeq.distinct.size)
+  }
+
+
+  @Test //genuinely broker
+  def shouldOptimiseLeaderFairnessWithinRacks(): Unit = {
+
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"), bk(102, "rack2"))
+    def getBroker(it: Int): BrokerMetadata = brokers.filter(_.id == it).last
+    val partitions = Map(
+      p(0) -> List(100, 101),
+      p(1) -> List(100, 101),
+      p(2) -> List(100, 101),
+      p(3) -> List(100, 101),
+      p(4) -> List(100, 101),
+      p(5) -> List(100, 101)
+    )
+    val reps = replicationFactorOf(2)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+    println(reassigned)
+
+    //rack2 should get 6 replicas
+    assertEquals(6, reassigned.values.flatten.filter(getBroker(_).rack.get == "rack2").size)
+    //rack2 should have 3 leaders
+    assertEquals(3, reassigned.values.map(_ (0)).filter(getBroker(_).rack.get == "rack2").size)
+    //They should not be all on one broker
+    assertFalse(reassigned.values.map(_ (0)).filter(_ == 101).size == 0)
+    assertFalse(reassigned.values.map(_ (0)).filter(_ == 102).size == 0)
+
   }
 
   /**
@@ -587,7 +628,7 @@ class MovesOptimisedRebalancePolicyTest {
   }
 
   @Test
-  def shouldBalanceReplicasOverMultipleTopicsAndMultipleRack(): Unit = {
+  def shouldBalanceReplicasOverMultipleTopicsAndMultipleRacks(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given
@@ -603,7 +644,7 @@ class MovesOptimisedRebalancePolicyTest {
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one leader per broker
-    for(brokerId <- 100 to 103)
+    for (brokerId <- 100 to 103)
       assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
@@ -615,27 +656,70 @@ class MovesOptimisedRebalancePolicyTest {
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"), bk(103, "rack2"))
     val partitions = Map(
       p(0, "t1") -> List(100, 101, 102, 103),
-      p(0, "t2") -> List(100, 101, 102, 103),
-      p(0, "t3") -> List(100, 101),
-      p(0, "t4") -> List(100, 102))
+      p(1, "t2") -> List(100, 101, 102, 103),
+      p(2, "t3") -> List(100, 101),
+      p(3, "t4") -> List(100, 102))
     val reps = Map("t1" -> 4, "t2" -> 4, "t3" -> 2, "t4" -> 2)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
     //Then should be one leader per broker
-    for(brokerId <- 100 to 103)
+    for (brokerId <- 100 to 103)
       assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
   }
 
+
+  def assertWithinTollerance(expected: Int, actual: Int, tollerance: Int) = {
+    assertTrue(s"Expected [$expected] within tollerance [$tollerance] but got [$actual]", expected >= actual - tollerance && expected <= actual + tollerance)
+  }
 
   /**
     * Brace tests
     */
 
 
+  @Test
+  def simpleBraceTest(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
 
+    //Given 2 topics, with rep-factor 2 and 2 topics with rep-factor 3, all with 100 partitions loaded on first few brokers
+    val brokerCount = 10
+    val partitionCount = 10
+    val replicas = Seq(100, 101, 102)
+    val topics = Seq("t1", "t2", "t3", "t4")
+    val replicaCount = replicas.size
 
+    val reps = topics.map((_, replicaCount)).toMap
+    val brokers = (100 until (100 + brokerCount / 2)).map(bk(_, "rack1")) ++ ((100 + brokerCount/2) until (100 + brokerCount)).map(bk(_, "rack2"))
+
+    val partitions = ((0 until partitionCount).map(p(_, "t1") -> replicas).toMap
+      ++ (0 until partitionCount).map(p(_, "t2") -> replicas).toMap
+      ++ (0 until partitionCount).map(p(_, "t3") -> replicas).toMap
+      ++ (0 until partitionCount).map(p(_, "t4") -> replicas).toMap)
+
+    val mutablePartitions = collection.mutable.Map(partitions.toSeq: _*)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    assertEquals(topics.size * partitionCount, reassigned.size)
+    assertEquals(topics.size * partitionCount * replicaCount, reassigned.values.flatten.size)
+
+    //Then replicas should be evenly spread
+    for (brokerId <- 100 until (100 + brokerCount)) {
+      val expected: Int = topics.size * partitionCount * replicaCount / brokerCount
+      assertWithinTollerance(expected, reassigned.values.flatten.filter(_ == brokerId).size, expected/10)
+    }
+
+    //Then leaders should be evenly spread
+    for (brokerId <- 100 until (100 + brokerCount)) {
+      val expected: Int = partitionCount * topics.size / brokerCount
+      assertWithinTollerance(expected, reassigned.values.map(_ (0)).filter(_ == brokerId).size, expected/10)
+    }
+  }
+
+//TODO add test to ensure a complex output never breaks partition constraint or rack constraint.
   /**
     * Test Move & Leader Functions
     */

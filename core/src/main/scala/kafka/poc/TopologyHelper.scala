@@ -4,6 +4,7 @@ import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 
 import scala.collection.{Map, Iterable, Seq}
+import scala.util.Random
 
 trait TopologyHelper {
 
@@ -21,7 +22,7 @@ trait TopologyHelper {
     *
     */
   def leastLoadedBrokersPreferringOtherRacks(btr: Seq[(BrokerMetadata, Seq[Replica])],brokers: Seq[BrokerMetadata], racks: Seq[String]): Iterable[Int] = {
-    downrank(brokersOn(racks, brokers), leastLoadedBrokerIds(btr)).reverse
+    downrank(brokersOn(racks, brokers).map(_.id), leastLoadedBrokerIds(btr)).reverse
   }
 
   private def downrank(toDownrank: Seq[Int], all: Seq[Int]): Seq[Int] = {
@@ -42,7 +43,7 @@ trait TopologyHelper {
 
   def racks(brokers: Seq[BrokerMetadata]): Seq[String] = brokers.map(_.rack.get).distinct
 
-  def brokersOn(racks: Seq[String], brokers: Seq[BrokerMetadata]): Seq[Int] =     brokers.filter(broker => racks.contains(broker.rack.get)).map(_.id)
+  def brokersOn(racks: Seq[String], brokers: Seq[BrokerMetadata]): Seq[BrokerMetadata] =     brokers.filter(broker => racks.contains(broker.rack.get))
 
   def filter(rack: String, brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Map[TopicAndPartition, Seq[Int]] = {
     def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
@@ -61,7 +62,8 @@ trait TopologyHelper {
   def weightedReplicasFor(rack: String, brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
     //TODO2 we need to interleave these results by broker see MovesOptimisedRebalancePolicyTest.providesPotentiallyUnexpectedResult
-    brokersToReplicas.filter(_._1.rack.get == rack).sortBy(_._2.size).map(_._2).flatten
+//    Random.shuffle(
+      brokersToReplicas.filter(_._1.rack.get == rack).sortBy(_._2.size).map(_._2).flatten
   }
 
   def leastLoadedBrokerIds(rack: String, brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]): Seq[BrokerMetadata] = {
@@ -72,7 +74,8 @@ trait TopologyHelper {
   def weightedReplicasFor(broker: BrokerMetadata, brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
     //TODO2 we need to interleave these results by broker see MovesOptimisedRebalancePolicyTest.providesPotentiallyUnexpectedResult to
-    brokersToReplicas.filter(_._1 == broker).sortBy(_._2.size).map(_._2).flatten
+//    Random.shuffle(
+      brokersToReplicas.filter(_._1 == broker).sortBy(_._2.size).map(_._2).flatten
   }
 
   def leadersOn(broker: BrokerMetadata, brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]): Seq[TopicAndPartition] = {

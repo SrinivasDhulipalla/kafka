@@ -5,6 +5,7 @@ import kafka.common.TopicAndPartition
 import kafka.poc.fairness.{LeaderFairness, ReplicaFairness}
 
 import scala.collection.{Iterable, Seq, Map}
+import scala.util.Random
 
 class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[Int]], rack: String) extends ClusterView  with TopologyFactory with TopologyHelper {
 
@@ -13,19 +14,29 @@ class ByBroker(allBrokers: Seq[BrokerMetadata], p: Map[TopicAndPartition, Seq[In
   val partitions = filter(rack, allBrokers, p)
   val brokersToReplicas = createBrokersToReplicas(allBrokers, brokers, p).filter(_._1.rack.get == rack)
   val brokersToLeaders = createBrokersToLeaders(allBrokers, brokers, p).filter(_._1.rack.get == rack)
-  val replicaFairness = new ReplicaFairness(brokersToReplicas)
-  val leaderFairness = new LeaderFairness(brokersToLeaders)
+  val brokersToNonLeaders = createBrokersToNonLeaders(allBrokers, brokers, p).filter(_._1.rack.get == rack)
+  val replicaFairness = new ReplicaFairness(brokersToReplicas, brokers)
+  val leaderFairness = new LeaderFairness(brokersToLeaders, brokers)
+  val leaderCounts = leaderFairness.brokerLeaderCounts.map{case (broker, count)=>(broker.id, count)}.toMap
+
+  //TODO distinction between replica and leader fainess is not clear in public methods on interface
 
   def aboveParReplicas(): Seq[Replica] = replicaFairness.aboveParBrokers.flatMap(weightedReplicasFor(_, brokersToReplicas))
 
   def belowParBrokers(): Seq[BrokerMetadata] = replicaFairness.belowParBrokers
 
-  def aboveParPartitions(): Seq[TopicAndPartition] = leaderFairness.aboveParBrokers.flatMap(leadersOn(_, brokersToLeaders))
+  def aboveParLeaders(): Seq[TopicAndPartition] = leaderFairness.aboveParBrokers.flatMap(leadersOn(_, brokersToLeaders))
 
-  def brokersWithBelowParLeaders(): Seq[Int] = leaderFairness.belowParBrokers.map(_.id)
+  def brokersWithBelowParLeaders(): Seq[BrokerMetadata] = leaderFairness.belowParBrokers
 
   def refresh(newPartitionsMap: Map[TopicAndPartition, Seq[Int]]): ClusterView = new ByBroker(allBrokers, newPartitionsMap, rack)
 
+  //TODO - really need to make brokersToReplicas a map not a list!
+  def nonLeadReplicasFor(broker: BrokerMetadata): Seq[Replica] = brokersToNonLeaders.filter(_._1.id == broker.id).last._2
+
+  def printBrokerToLeaderMap(): Unit ={
+    println(leaderCounts)
+  }
 }
 
 
