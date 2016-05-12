@@ -692,7 +692,7 @@ class RebalacingTest {
     for (brokerId <- 100 to 103)
       assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
   }
-// TODO 
+// TODO
 //  @Test
 //  def shouldRemoveBrokerFromCluster(): Unit = {
 //    val policy = new MovesOptimisedRebalancePolicy()
@@ -716,11 +716,6 @@ class RebalacingTest {
 //    for (brokerId <- 100 to 101)
 //      assertEquals(2, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
 //  }
-
-
-  def assertWithinTollerance(expected: Int, actual: Int, tollerance: Int) = {
-    assertTrue(s"Expected [$expected] within tollerance [$tollerance] but got [$actual]", expected >= actual - tollerance && expected <= actual + tollerance)
-  }
 
 
 //TODO add test to ensure a complex output never breaks partition constraint or rack constraint.

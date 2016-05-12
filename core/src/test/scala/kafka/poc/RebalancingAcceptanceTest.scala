@@ -24,12 +24,11 @@ class RebalancingAcceptanceTest {
     val reps = topics.map((_, replicaCount)).toMap
     val brokers = (100 until (100 + brokerCount / 2)).map(bk(_, "rack1")) ++ ((100 + brokerCount/2) until (100 + brokerCount)).map(bk(_, "rack2"))
 
+    //TODO refactor me
     val partitions = ((0 until partitionCount).map(p(_, "t1") -> replicas).toMap
       ++ (0 until partitionCount).map(p(_, "t2") -> replicas).toMap
       ++ (0 until partitionCount).map(p(_, "t3") -> replicas).toMap
       ++ (0 until partitionCount).map(p(_, "t4") -> replicas).toMap)
-
-    val mutablePartitions = collection.mutable.Map(partitions.toSeq: _*)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
@@ -40,18 +39,14 @@ class RebalancingAcceptanceTest {
     //Then replicas should be evenly spread
     for (brokerId <- 100 until (100 + brokerCount)) {
       val expected: Int = topics.size * partitionCount * replicaCount / brokerCount
-      assertWithinTollerance(expected, reassigned.values.flatten.filter(_ == brokerId).size, expected/10)
+      assertEquals(expected, reassigned.values.flatten.filter(_ == brokerId).size)
     }
 
     //Then leaders should be evenly spread
     for (brokerId <- 100 until (100 + brokerCount)) {
       val expected: Int = partitionCount * topics.size / brokerCount
-      assertWithinTollerance(expected, reassigned.values.map(_ (0)).filter(_ == brokerId).size, expected/10)
+      assertEquals(expected, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
     }
   }
 
-  //TODO move to hamcrest or similar
-  def assertWithinTollerance(expected: Int, actual: Int, tollerance: Int) = {
-    assertTrue(s"Expected [$expected] within tollerance [$tollerance] but got [$actual]", expected >= actual - tollerance && expected <= actual + tollerance)
-  }
 }
