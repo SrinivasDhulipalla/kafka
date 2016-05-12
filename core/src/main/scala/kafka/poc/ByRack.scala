@@ -16,13 +16,13 @@ class ByRack(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndPartiti
   val replicaFairness = new ReplicaFairness(brokersToReplicas, allBrokers)
   val leaderFairness = new LeaderFairness(brokersToLeaders, allBrokers)
 
-  def aboveParReplicas(): Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_, brokersToReplicas))
+  def replicasOnAboveParBrokers(): Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_, brokersToReplicas))
 
-  def belowParBrokers(): Seq[BrokerMetadata] = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_, brokersToReplicas))
+  def brokersWithBelowParReplicaCount(): Seq[BrokerMetadata] = replicaFairness.belowParRacks.flatMap(leastLoadedBrokerIds(_, brokersToReplicas))
 
-  def aboveParLeaders(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks.flatMap(leadersOn(_, brokersToLeaders))
+  def leadersOnAboveParBrokers(): Seq[TopicAndPartition] = leaderFairness.aboveParRacks.flatMap(leadersOn(_, brokersToLeaders))
 
-  def brokersWithBelowParLeaders(): Seq[BrokerMetadata] = brokersOn(leaderFairness.belowParRacks, allBrokers)
+  def brokersWithBelowParLeaderCount(): Seq[BrokerMetadata] = brokersOn(leaderFairness.belowParRacks, allBrokers)
 
   def refresh(newPartitionsMap: Map[TopicAndPartition, Seq[Int]]): ClusterView = new ByRack(allBrokers, newPartitionsMap)
 

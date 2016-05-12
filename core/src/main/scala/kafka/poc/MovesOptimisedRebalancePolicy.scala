@@ -57,10 +57,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   def replicaFairness(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], replicationFactors: Map[String, Int], v: ClusterView): Unit = {
     var view = v
 
-    val aboveParReplicas = v.aboveParReplicas
+    val aboveParReplicas = v.replicasOnAboveParBrokers
     for (replicaFrom <- aboveParReplicas) {
       var moved = false
-      for (brokerTo <- view.belowParBrokers) {
+      for (brokerTo <- view.brokersWithBelowParReplicaCount) {
         val obeysPartition = view.constraints.obeysPartitionConstraint(replicaFrom.partition, brokerTo.id)
         val obeysRack = view.constraints.obeysRackConstraint(replicaFrom.partition, replicaFrom.broker, brokerTo.id, replicationFactors)
         if (!moved && obeysRack && obeysPartition) {
@@ -75,13 +75,13 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], v: ClusterView): Unit = {
     var view = v
 
-    val abParParts = view.aboveParLeaders
+    val abParParts = view.leadersOnAboveParBrokers
     for (aboveParLeaderPartition <- abParParts) {
       var moved = false
 
       //Attempt to switch leadership within partitions to achieve fairness (i.e. no data movement)
       for (aboveParFollowerBrokerId <- partitions.get(aboveParLeaderPartition).get.drop(1)) {
-        val brokersWithBelowParLeaders = view.brokersWithBelowParLeaders
+        val brokersWithBelowParLeaders = view.brokersWithBelowParLeaderCount
         if (brokersWithBelowParLeaders.map(_.id).contains(aboveParFollowerBrokerId)) {
           //if so, switch leadership
           makeLeader(aboveParLeaderPartition, aboveParFollowerBrokerId, partitions)
@@ -93,7 +93,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       //If that didn't succeed, pick a replica from another partition, which is on a below par broker, and physically swap them around.
       if (!moved) {
         val aboveParLeaderBroker = partitions.get(aboveParLeaderPartition).get(0)
-        for (broker <- view.brokersWithBelowParLeaders) {
+        for (broker <- view.brokersWithBelowParLeaderCount) {
           val followerReplicasOnBelowParBrokers = view.nonLeadReplicasFor(broker)
           for (belowParFollowerReplica <- followerReplicasOnBelowParBrokers) {
 
