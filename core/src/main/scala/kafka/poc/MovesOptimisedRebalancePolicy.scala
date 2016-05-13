@@ -52,35 +52,33 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     *
     * @param partitions         Map of partitions to brokers which will be mutated
     * @param constraints        Validation of partition and rack constraints
-    * @param replicationFactors Replication factors for all topics
+    * @param rfs Replication factors for all topics
     * @param allBrokers         List of all brokers, including those without replicas
     * @return
     */
-  def fullyReplicated(partitions: mutable.Map[TopicAndPartition, Seq[Int]], constraints: Constraints, replicationFactors: Map[String, Int], allBrokers: Seq[BrokerMetadata]): Map[TopicAndPartition, Seq[Int]] = {
+  def fullyReplicated(partitions: mutable.Map[TopicAndPartition, Seq[Int]], constraints: Constraints, rfs: Map[String, Int], allBrokers: Seq[BrokerMetadata]): Map[TopicAndPartition, Seq[Int]] = {
     val brokersToReplicas = createBrokersToReplicas(allBrokers, allBrokers, partitions)
 
     for (partition <- partitions.keys) {
-      val replicationFactor = replicationFactors.get(partition.topic).get
+      val replicationFactor = rfs.get(partition.topic).get
       def racks = racksFor(partition, allBrokers, partitions)
       def replicas = partitions.get(partition).get
 
-      (0 until replicationFactor - replicas.size) foreach  { _ =>
-        // Find least loaded broker that doesn't already have a replica for this partition. Prefer other racks where possible.
+      (0 until replicationFactor - replicas.size) foreach { _ =>
         val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, allBrokers, racks)
 
-        var moved = false
-        for (destinationBroker <- leastLoadedBrokers) {
-          val partitionConstraint = constraints.obeysPartitionConstraint(partition, destinationBroker)
-          val rackConstraint = constraints.obeysRackConstraint(partition, -1, destinationBroker, replicationFactors)
-
-          //Create a new replica
-          if (partitionConstraint && rackConstraint && !moved) {
-            partitions.put(partition, replicas :+ destinationBroker)
-            moved = true
+        def createReplicaOnFirstValidLeastLoadedBroker: Unit = {
+          for (destinationBroker <- leastLoadedBrokers) {
+            if (constraints.obeysPartitionConstraint(partition, destinationBroker)
+              && constraints.obeysRackConstraint(partition, -1, destinationBroker, rfs)) {
+              partitions.put(partition, replicas :+ destinationBroker)
+              return
+            }
           }
-        }
-        if (!moved)
           println(s"WARNING: Could not create replica due to either rack or partition constraints. Thus this partition will remain under-replicated")
+        }
+
+        createReplicaOnFirstValidLeastLoadedBroker
       }
     }
     partitions
