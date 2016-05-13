@@ -38,7 +38,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     for (rack <- racks(brokers)) {
       val view = new ByBroker(brokers, partitions, rack)
       replicaFairness(partitions, replicationFactors, view)
-      leaderFairness(partitions, new ByBroker(brokers, partitions, rack))
     }
 
     print(partitions, brokers)
@@ -113,8 +112,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
   /**
     * Move leadership to from above-par to below-par brokers. If a valid follower replica exists for this partition,
-    * leadership is switched, otherwise a replica from a different partition, on a above-par broker, will be picked
-    * and the replicas will be physically moved (i.e swap places) so that leadership can move to a below-par broker.
+    * leadership is simply switched (without a resulting data movement). If this cannot be achieved a replica from a
+    * different partition, on a above-par broker, will be selected, and the two replicas will be swapped (i.e. two
+    * way data movement) allowing leadership to be moved to a below-par broker.
     *
     * @param partitions Map of partitions to brokers which will be mutated
     * @param clusterView View of the cluster which incorporates fairness

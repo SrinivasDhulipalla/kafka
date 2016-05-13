@@ -269,7 +269,7 @@ class RebalacingTest {
   }
 
   @Test
-  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
+  def shouldFindReplicaFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given replicas are on one (of 3) racks
@@ -284,6 +284,8 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //Then
     assertEquals(8, reassigned.values.flatten.toSeq.size)
     assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
   }
