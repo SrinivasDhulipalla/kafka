@@ -1,4 +1,4 @@
-package kafka.poc
+package kafka.poc.constraints
 
 import kafka.common.TopicAndPartition
 

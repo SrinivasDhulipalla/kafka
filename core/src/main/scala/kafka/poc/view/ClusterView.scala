@@ -1,9 +1,11 @@
-package kafka.poc
+package kafka.poc.view
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
+import kafka.poc.constraints.Constraints
+import kafka.poc.topology.Replica
 
-import scala.collection.{Seq, Map}
+import scala.collection.{Map, Seq}
 
 trait ClusterView {
 

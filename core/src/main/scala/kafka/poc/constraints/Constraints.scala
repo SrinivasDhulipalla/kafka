@@ -1,11 +1,11 @@
-package kafka.poc
+package kafka.poc.constraints
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
-import kafka.poc.fairness.{LeaderFairness, ReplicaFairness, Fairness}
+import kafka.poc.topology.TopologyHelper
+import kafka.poc.topology.{TopologyHelper, TopologyFactory}
 
 import scala.collection._
-import collection.mutable.LinkedHashMap
 
 
 class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends TopologyHelper with TopologyFactory with RebalanceConstraints {
@@ -14,7 +14,7 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
 
   private def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
 
-  def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
+  override def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {
     val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount(allBrokers))
 
     //get replicas for partition, replacing brokerFrom with brokerTo
@@ -32,8 +32,12 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
     racksSpanned >= minRacksSpanned
   }
 
-  def obeysPartitionConstraint(partition: TopicAndPartition, brokerMovingTo: Int): Boolean = {
+  override def obeysPartitionConstraint(partition: TopicAndPartition, brokerMovingTo: Int): Boolean = {
+
     val replicas = partitions.get(partition).get
-    !replicas.contains(brokerMovingTo)
+    val result: Boolean = !replicas.contains(brokerMovingTo)
+    if(!result)
+      println(s"Failing partition constraint for $partition:${partitions.get(partition)} -> $brokerMovingTo ")
+    result
   }
 }

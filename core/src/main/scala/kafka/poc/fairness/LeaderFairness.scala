@@ -2,7 +2,7 @@ package kafka.poc.fairness
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
-import kafka.poc.TopologyHelper
+import kafka.poc.topology.TopologyHelper
 
 import scala.collection.immutable.ListMap
 import scala.collection.{Iterable, Map, Seq}
@@ -15,7 +15,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
   val brokerFairValue = Math.ceil(leaderCount.toFloat / allBrokers.size).toInt
   val rackFairValue = Math.ceil(leaderCount.toFloat / rackCount).toInt
 
-  def aboveParRacks(): Seq[String] = {
+  override def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
       .filter(_._2 > rackFairValue)
       .keys
@@ -23,7 +23,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
       .distinct
   }
 
-  def belowParRacks(): Seq[String] = {
+  override def belowParRacks(): Seq[String] = {
     rackLeaderCounts
       .filter(_._2 < rackFairValue)
       .keys
@@ -31,13 +31,13 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
       .distinct
   }
 
-  def aboveParBrokers(): Seq[BrokerMetadata] = {
+  override def aboveParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
       .filter(_._2 > brokerFairValue)
       .keys.toSeq.distinct
   }
 
-  def belowParBrokers(): Seq[BrokerMetadata] = {
+  override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
       .filter(_._2 < brokerFairValue)
       .keys.toSeq.distinct

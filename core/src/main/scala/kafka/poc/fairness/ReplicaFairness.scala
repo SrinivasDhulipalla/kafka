@@ -1,7 +1,7 @@
 package kafka.poc.fairness
 
 import kafka.admin.BrokerMetadata
-import kafka.poc.{TopologyHelper, Replica}
+import kafka.poc.topology.{Replica, TopologyHelper}
 
 import scala.collection.{Seq}
 
@@ -15,7 +15,7 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   val brokerFairValue = Math.ceil(replicaCount / allBrokers.size).toInt
 
 
-  def aboveParRacks(): Seq[String] = {
+  override def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
       .filter { x => x._2.toInt > rackFairValue }
@@ -24,7 +24,7 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
       .distinct
   }
 
-  def belowParRacks(): Seq[String] = {
+  override def belowParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
       .filter(_._2.toInt < rackFairValue)
@@ -33,14 +33,14 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
       .distinct
   }
 
-  def aboveParBrokers(): Seq[BrokerMetadata] = {
+  override def aboveParBrokers(): Seq[BrokerMetadata] = {
     //return brokers where replica count is over fair value
     brokerReplicaCounts
       .filter(_._2.toInt > brokerFairValue)
       .keys.toSeq.distinct
   }
 
-  def belowParBrokers(): Seq[BrokerMetadata] = {
+  override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerReplicaCounts
       .filter(_._2 < brokerFairValue)
       .keys.toSeq.distinct

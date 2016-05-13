@@ -2,6 +2,10 @@ package kafka.poc
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
+import kafka.poc.constraints.Constraints
+import kafka.poc.view.BrokerFairView
+import kafka.poc.topology.{Replica, TopologyHelper, TopologyFactory}
+import kafka.poc.view.{BrokerFairView, ClusterView, RackFairView}
 
 import scala.collection._
 
@@ -12,13 +16,11 @@ import scala.collection._
   * The policy is incremental, meaning it will move the minimum number of replicas required to achieve
   * replica and leader fairness across the cluster.
   *
-  * The algorithm is strictly rack aware, meaning that if racks are not assigned brokers equally the
-  * number of replicas and leaders on each broker may be skewed.
+  * The algorithm is strictly rack aware with respect to replica placement. This means that if racks are
+  * not assigned brokers equally the number of replicas on each broker may be skewed.
   *
-  * TODO:
-  * This is not the best strategy. There is a firm requirement for replicas to be spread across racks
-  * but no firm requirement for leaders to be spread across racks. Thus it would be better to only
-  * balance leaders across brokers (not across racks)
+  * However leaders will be balanced equally amoungst brokers, regardless of what rack they are on.
+  *
   */
 class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper with TopologyFactory {
 
@@ -29,18 +31,21 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     //1. Ensure no under-replicated partitions
     fullyReplicated(partitions, constraints, replicationFactors, brokers)
 
-    //2. Optimise across racks
-    val view = new ByRack(brokers, partitions)
-    replicaFairness(partitions, replicationFactors, view)
-    leaderFairness(partitions, view)
+    //2. Create replica fairness across racks
+    val rackView = new RackFairView(brokers, partitions)
+    replicaFairness(partitions, replicationFactors, rackView)
 
-    //3. Optimise brokers on each rack separately
+    //3. Create replica fairness for brokers, on each rack separately
     for (rack <- racks(brokers)) {
-      def view = new ByBroker(brokers, partitions, rack)
-      replicaFairness(partitions, replicationFactors, view)
-      leaderFairness(partitions, view)
+      def brokerView = new BrokerFairView(brokers, partitions, rack)
+      replicaFairness(partitions, replicationFactors, brokerView)
     }
 
+    //4. Create leader fairness for brokers, applied cluster-wide
+    val brokerView = new BrokerFairView(brokers, partitions, null)
+    leaderFairness(partitions, brokerView)
+
+    println("The result is:")
     print(partitions, brokers)
     partitions
   }
@@ -106,9 +111,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       }
     }
 
-    for (abovePar <- view.replicasOnAboveParBrokers) {
+    for (abovePar <- view.replicasOnAboveParBrokers)
       moveToBelowParBroker(abovePar)
-    }
   }
 
   /**
@@ -147,7 +151,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
             val obeysPartitionOut = view.constraints.obeysPartitionConstraint(aboveParLeaderPartition, belowParFollowerReplica.broker)
             val obeysPartitionBack = view.constraints.obeysPartitionConstraint(belowParFollowerReplica.partition, aboveParLeaderBroker)
 
-            if (!moved && obeysPartitionOut && obeysPartitionOut) {
+            if (!moved && obeysPartitionOut && obeysPartitionBack) {
               move(aboveParLeaderPartition, aboveParLeaderBroker, belowParFollowerReplica.broker, partitions)
               move(belowParFollowerReplica.partition, belowParFollowerReplica.broker, aboveParLeaderBroker, partitions)
               view = view.refresh(partitions)
@@ -167,9 +171,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       replicas = replicas.filter(_ != toPromote)
       replicas = Seq(toPromote) ++ replicas
       partitionsMap.put(tp, replicas)
-      println(s"Leadership moved brokers: [$currentLead -> $toPromote] for partition $tp")
+      println(s"Leadership moved brokers: [$currentLead -> $toPromote] for partition $tp:${partitionsMap.get(tp).get}")
     }
-    else println(s"Leadership change was not made as $toPromote was already the leader for partition $tp - see: ${partitionsMap.get(tp)}")
+    else println(s"Leadership change was not made as $toPromote was already the leader for partition $tp - see: ${partitionsMap.get(tp).get}")
   }
 
   def move(tp: TopicAndPartition, from: Int, to: Int, partitionsMap: collection.mutable.Map[TopicAndPartition, Seq[Int]]): Unit = {

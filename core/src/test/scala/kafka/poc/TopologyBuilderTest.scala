@@ -2,6 +2,7 @@ package kafka.poc
 
 import kafka.admin.BrokerMetadata
 import kafka.poc.Helper._
+import kafka.poc.topology.TopologyFactory
 import org.junit.Test
 import org.junit.Assert._
 class TopologyBuilderTest {

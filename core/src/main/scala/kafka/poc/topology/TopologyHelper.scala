@@ -1,11 +1,10 @@
-package kafka.poc
+package kafka.poc.topology
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 
 import scala.collection.immutable.ListMap
-import scala.collection.{mutable, Map, Iterable, Seq}
-import scala.util.Random
+import scala.collection.{Iterable, Map, Seq}
 
 trait TopologyHelper {
 
@@ -46,13 +45,6 @@ trait TopologyHelper {
 
   def brokersOn(racks: Seq[String], brokers: Seq[BrokerMetadata]): Seq[BrokerMetadata] =     brokers.filter(broker => racks.contains(broker.rack.get))
 
-  def filter(rack: String, brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Map[TopicAndPartition, Seq[Int]] = {
-    def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
-
-    partitions.map { case (p, replicas) => (p, replicas.filter(bk(_).rack.get == rack)) }
-      .filter { case (p, replicas) => replicas.size > 0 }
-  }
-
   def leadersOn(rack: String, brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]): Seq[TopicAndPartition] = {
     brokersToLeaders
       .filter(_._1.rack.get == rack)
@@ -83,7 +75,6 @@ trait TopologyHelper {
       .map(_._2).last.toSeq
   }
 
-  //duplicate
   def getRackLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]): Map[String, Int] = {
     brokersToLeaders
       .map { case (x, y) => (x, y.size) }
@@ -91,7 +82,6 @@ trait TopologyHelper {
       .mapValues(_.map(_._2).sum)
   }
 
-  //duplicate
   def getBrokerLeaderCounts(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]) = ListMap(
     brokersToLeaders
       .map { case (x, y) => (x, y.size) }
@@ -99,7 +89,6 @@ trait TopologyHelper {
       : _*
   )
 
-  //duplicate
   def getBrokerReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = ListMap(
     brokersToReplicas
       .map { case (x, y) => (x, y.size) }
@@ -107,7 +96,6 @@ trait TopologyHelper {
       : _*
   )
 
-  //duplicate
   def getRackReplicaCounts(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]) = ListMap(
     brokersToReplicas
       .map { case (x, y) => (x, y.size) }

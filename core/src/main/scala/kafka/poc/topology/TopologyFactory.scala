@@ -1,4 +1,4 @@
-package kafka.poc
+package kafka.poc.topology
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition

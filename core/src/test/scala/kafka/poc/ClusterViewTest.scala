@@ -4,7 +4,10 @@ package kafka.poc
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
+import kafka.poc.constraints.Constraints
 import kafka.poc.fairness.ReplicaFairness
+import kafka.poc.topology.Replica
+import kafka.poc.view.RackFairView
 import org.junit.Assert._
 import org.junit.Test
 
@@ -19,7 +22,7 @@ class ClusterViewTest {
       p(0) -> List(100, 101),
       p(1) -> List(100))
 
-    val topology = new ByRack(brokers, partitions).brokersToReplicas
+    val topology = new RackFairView(brokers, partitions).brokersToReplicas
 
     val expected = Map(
       new BrokerMetadata(101, Option("rack2")) -> Seq(new Replica(topic, 0, 101)),
@@ -40,10 +43,9 @@ class ClusterViewTest {
       p(4) -> List(101, 100)
     )
 
-    val filter = new ByRack(brokers, partitions)
+    val filter = new RackFairView(brokers, partitions)
     val leaderCounts = filter.brokersToLeaders.toMap
 
-    println(leaderCounts)
     assertEquals(2, leaderCounts.get(bk(100, "rack1")).get.size)
     assertEquals(3, leaderCounts.get(bk(101, "rack2")).get.size)
   }
@@ -60,7 +62,7 @@ class ClusterViewTest {
       p(4) -> List(100))
 
     //When
-    val view = new ByRack(brokers, partitions)
+    val view = new RackFairView(brokers, partitions)
     val leastLoaded = view.leastLoadedBrokerIds(view.brokersToReplicas)
 
     //Then
@@ -74,7 +76,7 @@ class ClusterViewTest {
     val partitions = Map(p(4) -> List(101))
 
     //When
-    val view = new ByRack(brokers, partitions)
+    val view = new RackFairView(brokers, partitions)
     val leastLoaded = view.leastLoadedBrokerIds(view.brokersToReplicas)
 
     //Then
@@ -93,7 +95,7 @@ class ClusterViewTest {
       p(3) -> List(103))
 
     //When
-    val view = new ByRack(brokers, partitions)
+    val view = new RackFairView(brokers, partitions)
     val leastLoaded = view.leastLoadedBrokersPreferringOtherRacks(view.brokersToReplicas, brokers, Seq("rack1"))
 
     //Then least loaded would be 100, 101, 102, 103 (based purely on replica count, least loaded first)
@@ -159,11 +161,10 @@ class ClusterViewTest {
     assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
-
   @Test
   def shouldFailPartitionConstraintIfReplicaAlreadyExistsOnTargetForMove(): Unit ={
     //Given
-    val brokers = List(bk(100, "rack1"))
+    val brokers = List(bk(100, "rack1"), bk(101, "rack1"))
     val partitions = Map(
       p(0) -> List(100)
     )

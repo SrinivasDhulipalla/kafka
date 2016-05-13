@@ -3,6 +3,7 @@ package kafka.poc
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 import kafka.poc.Helper._
+import kafka.poc.constraints.Constraints
 import org.hamcrest.core.IsCollectionContaining
 import org.hamcrest.core.IsCollectionContaining._
 import org.junit.Assert._
@@ -52,11 +53,10 @@ class RebalacingTest {
 
     //When
     val constraints = new Constraints(brokers, underreplicated)
-    val reassigned = policy.fullyReplicated(underreplicated,constraints, reps,  brokers)
+    val reassigned = policy.fullyReplicated(underreplicated, constraints, reps, brokers)
 
-    println(reassigned)
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
-      assertEquals(4, reassigned.get(p(0)).get.size)
+    assertEquals(4, reassigned.get(p(0)).get.size)
   }
 
   @Test
@@ -76,7 +76,6 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
-    println(reassigned)
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
     for (partitionId <- 0 to 3)
       assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
@@ -160,7 +159,7 @@ class RebalacingTest {
   }
 
   @Test
-  def shouldDoNothingIfMoreReplicasThanReplicationFactor(): Unit = {
+  def shouldContinueUnaffectedIfMoreReplicasThanReplicationFactor(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
     val brokers = (100 to 102).map(bk(_, "rack1"))
 
@@ -177,7 +176,7 @@ class RebalacingTest {
 
 
   @Test
-  def shouldContinueEvenIfNoOptionForCreatingFullyReplicatedPartitions(): Unit = {
+  def shouldContinueEvenIfNoAvailableBrokersForCreatingFullyReplicatedPartitions(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given three brokers, single partition and a replication factor of 4
@@ -268,49 +267,26 @@ class RebalacingTest {
 
   }
 
+
   @Test
-  def shouldFindReplicaFairnessWhereBrokersPerRacksAreUnevenWithTwoReplias(): Unit = {
+  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithTwoReplicas(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
-    //Given replicas are on one (of 3) racks
+    //Given 6 partitions, 2 replicas each, all starting out on the first two (of 3) brokers (rack1)
+    val partitions = (0 until 6).map { x => (p(x), List(100, 101)) }.toMap
     val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
-    val partitions = Map(
-      p(0) -> List(100, 101),
-      p(1) -> List(100, 101),
-      p(2) -> List(100, 101),
-      p(3) -> List(100, 101)
-    )
     val reps = replicationFactorOf(2)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then
-    assertEquals(8, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
-  }
-
-  @Test
-  def shouldFindFairnessWhereBrokersPerRacksAreUnevenWithThreeReplicas(): Unit = {
-    val policy = new MovesOptimisedRebalancePolicy()
-
-    //Given replicas are on one (of 3) racks
-    val brokers = List(bk(100, "rack1"), bk(101, "rack1"), bk(102, "rack2"))
-    val partitions = Map(
-      p(0) -> List(100, 101, 102),
-      p(1) -> List(100, 101, 102),
-      p(2) -> List(100, 101, 102),
-      p(3) -> List(100, 101, 102)
-    )
-    val reps = replicationFactorOf(3)
-
-    //When
-    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
-
-    //Then should leaders should be even across the three racks,
-    //so two leaders on the single broker on rack2
+    //Then we should still have 12 replicas
     assertEquals(12, reassigned.values.flatten.toSeq.size)
-    assertEquals(List(100, 101, 102, 102), reassigned.values.map(_ (0)).toSeq.sorted)
+
+    //Broker 100/102 should have 3 replicas each. 102 should have 6 replicas
+    assertEquals(3, reassigned.values.flatten.filter(_ == 100).size) //rack1
+    assertEquals(3, reassigned.values.flatten.filter(_ == 101).size) //rack1
+    assertEquals(6, reassigned.values.flatten.filter(_ == 102).size) //rack2
   }
 
 
@@ -550,7 +526,7 @@ class RebalacingTest {
   }
 
 
-  @Test //genuinely broker
+  @Test
   def shouldOptimiseLeaderFairnessWithinRacks(): Unit = {
 
     val policy = new MovesOptimisedRebalancePolicy()
@@ -571,16 +547,13 @@ class RebalacingTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //rack2 should get 6 replicas
+    //rack 1 & 2 should get 6 replicas despite having different numebers of brokers
+    assertEquals(6, reassigned.values.flatten.filter(getBroker(_).rack.get == "rack1").size)
     assertEquals(6, reassigned.values.flatten.filter(getBroker(_).rack.get == "rack2").size)
 
-    //rack2 should have 3 leaders
-    assertEquals(3, reassigned.values.map(_ (0)).filter(getBroker(_).rack.get == "rack2").size)
-
-    //They should not be all on one broker
-    assertFalse(reassigned.values.map(_ (0)).filter(_ == 101).size == 0)
-    assertFalse(reassigned.values.map(_ (0)).filter(_ == 102).size == 0)
-
+    //each broker should have 2 leaders
+    for (id <- 100 to 102)
+      assertEquals(2, reassigned.values.map(_ (0)).filter(_ == id).size)
   }
 
   /**
