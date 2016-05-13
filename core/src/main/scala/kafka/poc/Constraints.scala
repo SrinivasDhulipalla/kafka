@@ -18,9 +18,13 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
     val minRacksSpanned = Math.min(replicationFactors.get(partition.topic).get, rackCount(allBrokers))
 
     //get replicas for partition, replacing brokerFrom with brokerTo
-    var proposedReplicas: Seq[Int] = partitions.get(partition).get
+    var proposedReplicas = partitions.get(partition).get
+
     val index: Int = proposedReplicas.indexOf(brokerFrom)
-    proposedReplicas = proposedReplicas.patch(index, Seq(brokerTo), 1)
+    proposedReplicas = index match {
+      case -1 => proposedReplicas ++ Seq(brokerTo)
+      case _ => proposedReplicas.patch(index, Seq(brokerTo), 1)
+    }
 
     //find how many racks are now spanned
     val racksSpanned = proposedReplicas.map(bk(_)).map(_.rack).distinct.size

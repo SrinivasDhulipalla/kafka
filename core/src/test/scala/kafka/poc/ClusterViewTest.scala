@@ -116,26 +116,49 @@ class ClusterViewTest {
     val cluster: Constraints = new Constraints(brokers, partitions)
 
     //Then
-    assertEquals(true, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
+    assertTrue(cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
 
+
+
   @Test
-  def shouldFailIfPartitionMoveBreaksRackConstraint(): Unit ={
+  def shouldAllowReplicaCreationIfDoesNotBreakRackConstraint(): Unit ={
 
     //Given
     val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
     val partitions = Map(
-      p(0) -> List(100, 101)
+      p(0) -> List(100)
+    )
+    val replicationFactor= r(2)
+
+    //When
+    val brokerFrom: Int = -1 //doesn't exist (i.e. we're under-replicated
+    val brokerTo: Int = 101
+
+    val cluster: Constraints = new Constraints(brokers, partitions)
+    //Then
+    assertTrue( cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  replicationFactor))
+  }
+
+
+  @Test
+  def shouldFailIfReplicaCreationBreaksRackConstraint(): Unit ={
+
+    //Given
+    val brokers = List(bk(100, "rack1"), bk(101, "rack2"))
+    val partitions = Map(
+      p(0) -> List(100)
     )
 
     //When
-    val brokerFrom: Int = 100
-    val brokerTo: Int = 101
+    val brokerFrom: Int = -1 //doesn't exist (i.e. we're under-replicated
+    val brokerTo: Int = 100
     val cluster: Constraints = new Constraints(brokers, partitions)
 
     //Then
     assertEquals(false, cluster.obeysRackConstraint(p(0), brokerFrom, brokerTo,  r(2)))
   }
+
 
   @Test
   def shouldFailPartitionConstraintIfReplicaAlreadyExistsOnTargetForMove(): Unit ={

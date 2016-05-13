@@ -38,6 +38,27 @@ class RebalacingTest {
     assertEquals(4, reassigned.values.last.distinct.size)
   }
 
+
+  @Test
+  def shouldFullyReplicatePartitions(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given two partitions. One under-replicated by 2 replicas. 2 empty brokers 103/104
+    val brokers = (100 to 103).map(bk(_, "rack1"))
+    val underreplicated = mutable.Map(
+      p(0) -> Seq(100)
+    )
+    val reps = replicationFactorOf(4)
+
+    //When
+    val constraints = new Constraints(brokers, underreplicated)
+    val reassigned = policy.fullyReplicated(underreplicated,constraints, reps,  brokers)
+
+    println(reassigned)
+    //Then p1 should have two new replicas on the two empty brokers, 103, 104
+      assertEquals(4, reassigned.get(p(0)).get.size)
+  }
+
   @Test
   def shouldCreateMultipleReplicasPerPartitionIfNecessary(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
@@ -55,7 +76,7 @@ class RebalacingTest {
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, underreplicated, reps)
-
+    println(reassigned)
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
     for (partitionId <- 0 to 3)
       assertEquals(replicationFactor, reassigned.get(p(partitionId)).get.size)
@@ -153,6 +174,24 @@ class RebalacingTest {
     //Then nothing should have changed
     assertEquals((100 to 102), reassigned.get(p(0)).get.sorted)
   }
+
+
+  @Test
+  def shouldContinueEvenIfNoOptionForCreatingFullyReplicatedPartitions(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given three brokers, single partition and a replication factor of 4
+    val partitionWithThreeReplicas = Map(p(0) -> List(100, 101, 102))
+    val brokers = (100 to 102).map(bk(_, "rack1"))
+    val reps = replicationFactorOf(4)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitionWithThreeReplicas, reps)
+
+    //Then we should still have only 3 replcias (hence still underreplicated)
+    assertEquals(3, reassigned.get(p(0)).get.sorted.size)
+  }
+
 
   /**
     * Step 2.1: Optimise for replica fairness across racks
@@ -662,7 +701,7 @@ class RebalacingTest {
       p(1) -> List(100, 101, 102),
       p(2) -> List(100, 101, 102),
       p(3) -> List(100, 101, 102))
-    val reps = Map("t1" -> 3, "t2" -> 3, "t3" -> 3, "t4" -> 3)
+    val reps = replicationFactorOf(3)
 
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
@@ -674,7 +713,6 @@ class RebalacingTest {
     for (brokerId <- 100 to 103)
       assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
   }
-
 
 
   /**

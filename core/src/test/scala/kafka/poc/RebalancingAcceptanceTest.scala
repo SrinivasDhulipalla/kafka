@@ -11,8 +11,8 @@ class RebalancingAcceptanceTest {
     val policy = new MovesOptimisedRebalancePolicy()
 
     //Given 2 topics, with rep-factor 2 and 2 topics with rep-factor 3, all with 100 partitions loaded on first few brokers
-    val brokerCount = 10
-    val partitionCount = 10
+    val brokerCount = 100
+    val partitionCount = 100
     val replicas = Seq(100, 101, 102)
     val topics = Seq("t1", "t2", "t3", "t4")
     val replicaCount = replicas.size
@@ -29,7 +29,7 @@ class RebalancingAcceptanceTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then counts shoudl match
+    //Then counts should match
     assertEquals(topics.size * partitionCount, reassigned.size)
     assertEquals(topics.size * partitionCount * replicaCount, reassigned.values.flatten.size)
 
