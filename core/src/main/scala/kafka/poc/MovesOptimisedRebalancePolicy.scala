@@ -50,8 +50,6 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * be fully replicated, due to there not being a valid broker available, the algorithm will progress regardless
     * but outputting a warning.
     *
-    * Note this method enforces the partition constraint but not the rack constraint, instead other racks are preferred.
-    *
     * @param partitions         Map of partitions to brokers which will be mutated
     * @param constraints        Validation of partition and rack constraints
     * @param replicationFactors Replication factors for all topics
@@ -63,16 +61,20 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
     for (partition <- partitions.keys) {
       val replicationFactor = replicationFactors.get(partition.topic).get
-      def racksSpanndedByPartition = racksFor(partition, allBrokers, partitions)
+      def racks = racksFor(partition, allBrokers, partitions)
       def replicas = partitions.get(partition).get
 
       (0 until replicationFactor - replicas.size) foreach  { _ =>
-        // Create replica on least loaded broker that doesn't already have a replica for this partition. Prefer other racks where possible.
-        val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, allBrokers, racksSpanndedByPartition)
+        // Find least loaded broker that doesn't already have a replica for this partition. Prefer other racks where possible.
+        val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, allBrokers, racks)
 
         var moved = false
         for (destinationBroker <- leastLoadedBrokers) {
-          if (constraints.obeysPartitionConstraint(partition, destinationBroker) && !moved) {
+          val partitionConstraint = constraints.obeysPartitionConstraint(partition, destinationBroker)
+          val rackConstraint = constraints.obeysRackConstraint(partition, -1, destinationBroker, replicationFactors)
+
+          //Create a new replica
+          if (partitionConstraint && rackConstraint && !moved) {
             partitions.put(partition, replicas :+ destinationBroker)
             moved = true
           }
