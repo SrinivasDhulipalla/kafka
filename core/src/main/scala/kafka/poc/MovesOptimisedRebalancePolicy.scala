@@ -50,10 +50,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * be fully replicated, due to there not being a valid broker available, the algorithm will progress regardless
     * but outputting a warning.
     *
-    * @param partitions         Map of partitions to brokers which will be mutated
-    * @param constraints        Validation of partition and rack constraints
-    * @param rfs Replication factors for all topics
-    * @param allBrokers         List of all brokers, including those without replicas
+    * @param partitions  Map of partitions to brokers which will be mutated
+    * @param constraints Validation of partition and rack constraints
+    * @param rfs         Replication factors for all topics
+    * @param allBrokers  List of all brokers, including those without replicas
     * @return
     */
   def fullyReplicated(partitions: mutable.Map[TopicAndPartition, Seq[Int]], constraints: Constraints, rfs: Map[String, Int], allBrokers: Seq[BrokerMetadata]): Map[TopicAndPartition, Seq[Int]] = {
@@ -64,7 +64,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       def racks = racksFor(partition, allBrokers, partitions)
       def replicas = partitions.get(partition).get
 
-      def createReplicaOnFirstValidLeastLoadedBroker(leastLoadedBrokers: Iterable[Int]): Unit = {
+      def createReplicaOnFirstValid(leastLoadedBrokers: Iterable[Int]): Unit = {
         for (destinationBroker <- leastLoadedBrokers) {
           if (constraints.obeysPartitionConstraint(partition, destinationBroker)
             && constraints.obeysRackConstraint(partition, -1, destinationBroker, rfs)) {
@@ -77,7 +77,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
       (0 until replicationFactor - replicas.size) foreach { _ =>
         val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, allBrokers, racks)
-        createReplicaOnFirstValidLeastLoadedBroker(leastLoadedBrokers)
+        createReplicaOnFirstValid(leastLoadedBrokers)
       }
     }
     partitions
@@ -93,7 +93,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   def replicaFairness(partitions: mutable.Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int], clusterView: ClusterView): Unit = {
     var view = clusterView
 
-    def moveToBelowParBroker( abovePar: Replica): Unit= {
+    def moveToBelowParBroker(abovePar: Replica): Unit = {
       for (belowPar <- view.brokersWithBelowParReplicaCount) {
         val obeysPartition = view.constraints.obeysPartitionConstraint(abovePar.partition, belowPar.id)
         val obeysRack = view.constraints.obeysRackConstraint(abovePar.partition, abovePar.broker, belowPar.id, replicationFactors)
@@ -116,8 +116,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * leadership is switched, otherwise a replica from a different partition, on a above-par broker, will be picked
     * and the replicas will be physically moved (i.e swap places) so that leadership can move to a below-par broker.
     *
-    * @param partitions
-    * @param clusterView
+    * @param partitions Map of partitions to brokers which will be mutated
+    * @param clusterView View of the cluster which incorporates fairness
     */
   def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], clusterView: ClusterView): Unit = {
     var view = clusterView
