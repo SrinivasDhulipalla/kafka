@@ -64,21 +64,20 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
       def racks = racksFor(partition, allBrokers, partitions)
       def replicas = partitions.get(partition).get
 
+      def createReplicaOnFirstValidLeastLoadedBroker(leastLoadedBrokers: Iterable[Int]): Unit = {
+        for (destinationBroker <- leastLoadedBrokers) {
+          if (constraints.obeysPartitionConstraint(partition, destinationBroker)
+            && constraints.obeysRackConstraint(partition, -1, destinationBroker, rfs)) {
+            partitions.put(partition, replicas :+ destinationBroker)
+            return
+          }
+        }
+        println(s"WARNING: Could not create replica due to either rack or partition constraints. Thus this partition will remain under-replicated")
+      }
+
       (0 until replicationFactor - replicas.size) foreach { _ =>
         val leastLoadedBrokers = leastLoadedBrokersPreferringOtherRacks(brokersToReplicas, allBrokers, racks)
-
-        def createReplicaOnFirstValidLeastLoadedBroker: Unit = {
-          for (destinationBroker <- leastLoadedBrokers) {
-            if (constraints.obeysPartitionConstraint(partition, destinationBroker)
-              && constraints.obeysRackConstraint(partition, -1, destinationBroker, rfs)) {
-              partitions.put(partition, replicas :+ destinationBroker)
-              return
-            }
-          }
-          println(s"WARNING: Could not create replica due to either rack or partition constraints. Thus this partition will remain under-replicated")
-        }
-
-        createReplicaOnFirstValidLeastLoadedBroker
+        createReplicaOnFirstValidLeastLoadedBroker(leastLoadedBrokers)
       }
     }
     partitions
@@ -94,18 +93,21 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
   def replicaFairness(partitions: mutable.Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int], clusterView: ClusterView): Unit = {
     var view = clusterView
 
-    for (abovePar <- view.replicasOnAboveParBrokers) {
-      var moved = false
+    def moveToBelowParBroker( abovePar: Replica): Unit= {
       for (belowPar <- view.brokersWithBelowParReplicaCount) {
         val obeysPartition = view.constraints.obeysPartitionConstraint(abovePar.partition, belowPar.id)
         val obeysRack = view.constraints.obeysRackConstraint(abovePar.partition, abovePar.broker, belowPar.id, replicationFactors)
 
-        if (!moved && obeysRack && obeysPartition) {
+        if (obeysRack && obeysPartition) {
           move(abovePar.partition, abovePar.broker, belowPar.id, partitions)
           view = view.refresh(partitions)
-          moved = true
+          return
         }
       }
+    }
+
+    for (abovePar <- view.replicasOnAboveParBrokers) {
+      moveToBelowParBroker(abovePar)
     }
   }
 
