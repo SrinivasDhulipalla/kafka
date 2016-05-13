@@ -33,7 +33,7 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
   }
 
   def obeysPartitionConstraint(partition: TopicAndPartition, brokerMovingTo: Int): Boolean = {
-    val replicas = brokersToReplicas.filter(_._1.id == brokerMovingTo).seq(0)._2
-    !replicas.map(_.partition).contains(partition)
+    val replicas = partitions.get(partition).get
+    !replicas.contains(brokerMovingTo)
   }
 }
