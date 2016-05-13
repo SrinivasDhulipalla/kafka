@@ -36,8 +36,9 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
     //3. Optimise brokers on each rack separately
     for (rack <- racks(brokers)) {
-      val view = new ByBroker(brokers, partitions, rack)
+      def view = new ByBroker(brokers, partitions, rack)
       replicaFairness(partitions, replicationFactors, view)
+      leaderFairness(partitions, view)
     }
 
     print(partitions, brokers)
