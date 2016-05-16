@@ -23,9 +23,12 @@ import scala.collection._
   *
   */
 class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper with TopologyFactory {
+  var movesMade = 0
+  var brokersF: Seq[BrokerMetadata] = _
 
   override def rebalancePartitions(brokers: Seq[BrokerMetadata], replicasForPartitions: Map[TopicAndPartition, Seq[Int]], replicationFactors: Map[String, Int]): Map[TopicAndPartition, Seq[Int]] = {
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
+    brokersF = brokers
     val constraints: Constraints = new Constraints(brokers, partitions)
 
     //1. Ensure no under-replicated partitions
@@ -100,19 +103,23 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
 
     def moveToBelowParBroker(abovePar: Replica): Unit = {
       for (belowPar <- view.brokersWithBelowParReplicaCount) {
+
         val obeysPartition = view.constraints.obeysPartitionConstraint(abovePar.partition, belowPar.id)
         val obeysRack = view.constraints.obeysRackConstraint(abovePar.partition, abovePar.broker, belowPar.id, replicationFactors)
 
         if (obeysRack && obeysPartition) {
           move(abovePar.partition, abovePar.broker, belowPar.id, partitions)
           view = view.refresh(partitions)
+          print(partitions, brokersF)
           return
         }
       }
     }
 
+    //Attempt to move every above par broker once, double checking it's still above par
     for (abovePar <- view.replicasOnAboveParBrokers)
-      moveToBelowParBroker(abovePar)
+      if (view.replicasOnAboveParBrokers.contains(abovePar))
+        moveToBelowParBroker(abovePar)
   }
 
   /**
@@ -121,7 +128,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * different partition, on a above-par broker, will be selected, and the two replicas will be swapped (i.e. two
     * way data movement) allowing leadership to be moved to a below-par broker.
     *
-    * @param partitions Map of partitions to brokers which will be mutated
+    * @param partitions  Map of partitions to brokers which will be mutated
     * @param clusterView View of the cluster which incorporates fairness
     */
   def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], clusterView: ClusterView): Unit = {
@@ -187,6 +194,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     else {
       val replicas = replaceFirst(partitionsMap.get(tp).get, from, to)
       partitionsMap.put(tp, replicas)
+      movesMade += 1
     }
   }
 

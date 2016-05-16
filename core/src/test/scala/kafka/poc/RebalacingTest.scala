@@ -337,7 +337,7 @@ class RebalacingTest {
   }
 
   /**
-    * Step 2.2: Optimise for leader fairness across racks
+    * Step 2.2: Optimise for leader fairness across racks : TODO Defunct now
     */
   @Test
   def shouldOptimiseForLeaderFairnessAcrossRacks(): Unit = {
@@ -483,6 +483,36 @@ class RebalacingTest {
     assertEquals(6, reassigned.values.flatten.filter(_ == 100).size)
   }
 
+
+  @Test
+  def shouldNotMoveReplicaFromOverParBrokerWhereReplicasDoNotBalanceEvenly(): Unit = {
+    val policy = new MovesOptimisedRebalancePolicy()
+
+    //Given 5 brokers and 6 partitions with all replicas on broker 100
+    val brokers = (100 to 104).map(bk(_,"rack1"))
+    val partitions = Map(
+      p(0) -> List(100),
+      p(1) -> List(100),
+      p(2) -> List(100),
+      p(3) -> List(100),
+      p(4) -> List(100),
+      p(5) -> List(100)
+    )
+    val reps = replicationFactorOf(1)
+
+    //When
+    val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
+
+    //One broker will have an extra replica. It should be 100
+    assertEquals(2, reassigned.values.flatten.filter(_ == 100).size)
+    //The others should have just one replica
+    for (id <- 101 to 104)
+      assertEquals(1, reassigned.values.flatten.filter(_ == id).size)
+    //We should have made only 4 moves
+    assertEquals(4, policy.movesMade)
+  }
+
+
   /**
     * Step 3.2: Optimise for leader fairness across brokers
     */
@@ -618,9 +648,13 @@ class RebalacingTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then
-    val numberReplicasOn102 = reassigned.values.flatten.filter(_ == 102).size
-    assertEquals(2, numberReplicasOn102)
+    //Two replicas per broker
+    for (brokerId <- 100 to 102)
+      assertEquals(2, reassigned.values.flatten.filter(_ == brokerId).size)
+    //One Leader per broker
+    for (brokerId <- 100 to 102)
+      assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
+
   }
 
   @Test
@@ -639,9 +673,13 @@ class RebalacingTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then should be one leader per broker
-    for (brokerId <- 100 to 103)
+    //Three replicas per broker
+    for (brokerId <- 100 to 102)
       assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
+    //One Leader per broker
+    for (brokerId <- 100 to 102)
+      assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
+
   }
 
   @Test
@@ -660,9 +698,12 @@ class RebalacingTest {
     //When
     val reassigned = policy.rebalancePartitions(brokers, partitions, reps)
 
-    //Then should be one leader per broker
+    //Then should be three replicas per broker
     for (brokerId <- 100 to 103)
       assertEquals(3, reassigned.values.flatten.filter(_ == brokerId).size)
+    // Then there should be one leader per broker
+    for (brokerId <- 100 to 103)
+      assertEquals(1, reassigned.values.map(_ (0)).filter(_ == brokerId).size)
   }
 
   @Test
