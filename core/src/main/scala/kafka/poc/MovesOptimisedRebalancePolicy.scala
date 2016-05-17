@@ -118,9 +118,8 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
           view = view.refresh(partitions)
           debug(s"$abovePar was moved to ${belowPar.id}.")
           return true
-        } else {
+        } else
           debug(s"Move failed due to rack/partition/fairness constraints: $obeysRack, $obeysPartition, $fairness")
-        }
       }
       debug(s"Replica $abovePar could not be moved despite attempting ${view.brokersWithBelowParReplicaCount.size} different brokers")
       false
@@ -147,7 +146,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     */
   def leaderFairness(partitions: mutable.Map[TopicAndPartition, scala.Seq[Int]], clusterView: BrokerFairView): Unit = {
     var view = clusterView.refresh(partitions)
-    var continue = true
+    var moveFound = true
 
     def changeLeadership(aboveParLeader: TopicAndPartition): Boolean = {
       //Attempt to switch leadership within partitions to achieve fairness (i.e. no data movement)
@@ -188,12 +187,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     //Proceed in batches, terminating if no move is found (as constraints can cause termination without fairness being achieved)
     //Each batch contains above par leaders. We check each of them is still above par (as fairness may change as we move replicas)
     // as an optimisation
-    while (continue) {
-      continue = false
-      for (aboveParLeader <- view.leadersOnAboveParBrokers) {
-        if (view.leadersOnAboveParBrokers.contains(aboveParLeader)) {
-          continue = changeLeadership(aboveParLeader) || switchLeaderToOtherBroker(aboveParLeader)
-        }
+    while (moveFound) {
+      moveFound = false
+      for (aboveParLeader <- view.leadersOnAboveParBrokers) if (view.leadersOnAboveParBrokers.contains(aboveParLeader)) {
+          moveFound = changeLeadership(aboveParLeader) || switchLeaderToOtherBroker(aboveParLeader)
       }
     }
   }

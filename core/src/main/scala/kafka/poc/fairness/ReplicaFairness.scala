@@ -11,13 +11,13 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   private val brokerReplicaCounts = getBrokerReplicaCounts(brokersToReplicas)
   private val rackCount: Int = allBrokers.map(_.rack.get).distinct.size
   private val replicaCount: Float = brokerReplicaCounts.values.sum.toFloat
-  val rackFairValueUpper:Float = replicaCount / rackCount
-  val brokerFairValueUpper:Float = replicaCount / allBrokers.size
+  val rackFairValue:Float = replicaCount / rackCount
+  val brokerFairValue:Float = replicaCount / allBrokers.size
 
   override def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
-      .filter { x => x._2.toInt > Math.floor(replicaCount / rackCount).toInt}
+      .filter { x => x._2.toInt > Math.floor(rackFairValue).toInt}
       .keys
       .toSeq
       .distinct
@@ -26,7 +26,7 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   override def belowParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
-      .filter(_._2.toInt < Math.ceil(replicaCount / rackCount).toInt)
+      .filter(_._2.toInt < Math.ceil(rackFairValue).toInt)
       .keys
       .toSeq
       .distinct
@@ -35,13 +35,13 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   override def aboveParBrokers(): Seq[BrokerMetadata] = {
     //return brokers where replica count is over fair value
     brokerReplicaCounts
-      .filter(_._2.toInt > Math.floor(replicaCount / allBrokers.size).toInt)
+      .filter(_._2.toInt > Math.floor(brokerFairValue).toInt)
       .keys.toSeq.distinct
   }
 
   override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerReplicaCounts
-      .filter(_._2 < Math.ceil(replicaCount / allBrokers.size).toInt)
+      .filter(_._2 < Math.ceil(brokerFairValue).toInt)
       .keys.toSeq.distinct
   }
 

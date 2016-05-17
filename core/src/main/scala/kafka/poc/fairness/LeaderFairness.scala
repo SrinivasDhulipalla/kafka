@@ -12,12 +12,12 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
   private val rackCount = allBrokers.map(_.rack.get).distinct.size
   private val rackLeaderCounts: Map[String, Int] = getRackLeaderCounts(brokersToLeaders)
   private val brokerLeaderCounts: ListMap[BrokerMetadata, Int] = getBrokerLeaderCounts(brokersToLeaders)
-  val brokerFairValue = Math.ceil(leaderCount.toFloat / allBrokers.size).toInt
-  val rackFairValue = Math.ceil(leaderCount.toFloat / rackCount).toInt
+  val brokerFairValue:Float = leaderCount.toFloat / allBrokers.size
+  val rackFairValue:Float = leaderCount.toFloat / rackCount
 
   override def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 >  Math.floor(leaderCount.toFloat / rackCount).toInt)
+      .filter(_._2 >  Math.floor(rackFairValue).toInt)
       .keys
       .toSeq
       .distinct
@@ -25,7 +25,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   override def belowParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 <  Math.ceil(leaderCount.toFloat / rackCount).toInt)
+      .filter(_._2 <  Math.ceil(rackFairValue).toInt)
       .keys
       .toSeq
       .distinct
@@ -33,13 +33,13 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   override def aboveParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
-      .filter(_._2 > Math.floor(leaderCount.toFloat / allBrokers.size).toInt)
+      .filter(_._2 > Math.floor(brokerFairValue).toInt)
       .keys.toSeq.distinct
   }
 
   override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
-      .filter(_._2 < Math.ceil(leaderCount.toFloat / allBrokers.size).toInt)
+      .filter(_._2 < Math.ceil(brokerFairValue).toInt)
       .keys.toSeq.distinct
   }
 
