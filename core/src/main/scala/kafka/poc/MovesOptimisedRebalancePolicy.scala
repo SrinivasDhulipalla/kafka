@@ -20,8 +20,25 @@ import scala.collection._
   * The algorithm is strictly rack aware with respect to replica placement. This means that if racks are
   * not assigned brokers equally the number of replicas on each broker may be skewed.
   *
-  * However leaders will be balanced equally amoungst brokers, regardless of what rack they are on.
+  * However leaders will be balanced equally amongst brokers, regardless of what rack they are on.
   *
+  * There are a few other things worthy of note:
+  *
+  * (1) The algorithm has three clear stages : re-replication, fair-racks, fair-brokers, fair-leaders
+  *
+  * (2) Each stage (ignoreing re-replication) is wrapped in an outer loop. This continues until no move can be made
+  * for a single batch. Moves are then tested to ensure they improve fairness. So the algorithm will continues until
+  * no fairness improvement can be made. This allows the algorithm to terminate should it not be able to complete
+  * (certain configurations cannot create fairness, due to the rack and partition constraints).
+  *
+  * (3) The definition of fairness is different for above/below par values, when the value is not an integer
+  * BelowPar is always defined with ceil(). AbovePar is always defined with floor(). So, where fairness is
+  * a fractional value, there will be an overlap between abovePar and belowPar. This is required as the
+  * algorithm is not symmetric (it starts at with abovePar brokers then searches belowPar brokers). Consider
+  * the an arrangement where the replica counts on each broker are (1,1,2,3,3). The desired, fair, assignment
+  * would be (1,2,2,2,2) but this would not be achieved if fairness: ceil(11/2)=3.
+  *
+  * TBC
   */
 class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper with TopologyFactory with Logging {
   var replicasMoved = 0
@@ -35,13 +52,13 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     fullyReplicated(partitions, constraints, replicationFactors, brokers)
 
     //2. Create replica fairness across racks
-    info("******* Create replica fairness across racks")
+    info("******* Create replica fairness across racks *******")
     val rackView = new RackFairView(brokers, partitions)
     replicaFairness(partitions, replicationFactors, rackView)
 
     //3. Create replica fairness for brokers, on each rack separately
     for (rack <- racks(brokers)) {
-      info("******* Create replica fairness across brokers on rack " + rack)
+      info(s"******* Create replica fairness across brokers on rack $rack *******")
       def brokerView = new BrokerFairView(brokers, partitions, rack)
       replicaFairness(partitions, replicationFactors, brokerView)
     }
@@ -49,10 +66,10 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     //4. Create leader fairness for brokers, applied cluster-wide
     val brokerView = new BrokerFairView(brokers, partitions, null)
 
-    info("******* Create leader fairness")
+    info("******* Create leader fairness *******")
     leaderFairness(partitions, brokerView)
 
-    print(partitions, brokers)
+    log(partitions, brokers)
     partitions
   }
 
@@ -225,7 +242,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     debug(s"Physical move made from $from to $to")
   }
 
-  def print(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], brokers: Seq[BrokerMetadata]): Unit = {
+  def log(partitionsMap: mutable.Map[TopicAndPartition, scala.Seq[Int]], brokers: Seq[BrokerMetadata]): Unit = {
     val brokersToReplicas = createBrokersToReplicas(brokers, partitionsMap)
     val brokersToLeaders = createBrokersToLeaders(brokers, partitionsMap)
     //    info("Partitions to brokers: " + partitionsMap.map { case (k, v) => "\n" + k + " => " + v }.toSeq.sorted)

@@ -2,10 +2,9 @@ package kafka.poc.view
 
 import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
-import kafka.poc._
 import kafka.poc.constraints.Constraints
 import kafka.poc.fairness.{LeaderFairness, ReplicaFairness}
-import kafka.poc.topology.{Replica, TopologyHelper, TopologyFactory}
+import kafka.poc.topology.{Replica, TopologyFactory, TopologyHelper}
 
 import scala.collection.{Map, Seq}
 
@@ -35,17 +34,13 @@ class BrokerFairView(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAn
 
   override def nonFollowersOn(broker: BrokerMetadata): Seq[Replica] = brokersToNonLeaders.filter(_._1.id == broker.id).last._2
 
-  def hasReplicaFairnessImprovement(b1: Int, b2: Int): Boolean ={
-    val repliacsOnB1: Int = brokersToReplicas.filter(_._1.id ==b1).last._2.size
-    val repliacsOnB2: Int = brokersToReplicas.filter(_._1.id ==b2).last._2.size
-    repliacsOnB1 > repliacsOnB2 + 1
-  }
+  override def hasReplicaFairnessImprovement(b1: Int, b2: Int): Boolean = filterReplicas(b1) > filterReplicas(b2) + 1
 
-  def hasLeaderFairnessImprovement(b1: Int, b2: Int): Boolean ={
-    val leadersOnB1: Int = brokersToLeaders.filter(_._1.id ==b1).last._2.size
-    val leadersOnB2: Int = brokersToLeaders.filter(_._1.id ==b2).last._2.size
-    leadersOnB1 > leadersOnB2 + 1
-  }
+  override def hasLeaderFairnessImprovement(b1: Int, b2: Int): Boolean = filterLeaders(b1) > filterLeaders(b2) + 1
 
+  private def filterReplicas(b1: Int): Int =
+    brokersToReplicas.filter(_._1.id == b1).last._2.size
 
+  private def filterLeaders(b1: Int): Int =
+    brokersToLeaders.filter(_._1.id == b1).last._2.size
 }
