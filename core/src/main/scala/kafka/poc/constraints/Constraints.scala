@@ -4,13 +4,14 @@ import kafka.admin.BrokerMetadata
 import kafka.common.TopicAndPartition
 import kafka.poc.topology.TopologyHelper
 import kafka.poc.topology.{TopologyHelper, TopologyFactory}
+import kafka.utils.Logging
 
 import scala.collection._
 
 
-class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends TopologyHelper with TopologyFactory with RebalanceConstraints {
+class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends TopologyHelper with TopologyFactory with RebalanceConstraints with Logging {
 
-  private val brokersToReplicas = createBrokersToReplicas(allBrokers, allBrokers, partitions)
+  private val brokersToReplicas = createBrokersToReplicas(allBrokers, partitions)
 
   private def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
 
@@ -29,15 +30,21 @@ class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndParti
     //find how many racks are now spanned
     val racksSpanned = proposedReplicas.map(bk(_)).map(_.rack).distinct.size
 
-    racksSpanned >= minRacksSpanned
+    val result = racksSpanned >= minRacksSpanned
+
+    if (!result)
+      debug(s"failing rack constraint $partition:$proposedReplicas, $brokerFrom -> $brokerTo ")
+
+    result
   }
 
   override def obeysPartitionConstraint(partition: TopicAndPartition, brokerMovingTo: Int): Boolean = {
 
     val replicas = partitions.get(partition).get
-    val result: Boolean = !replicas.contains(brokerMovingTo)
-    if(!result)
-      println(s"Failing partition constraint for $partition:${partitions.get(partition)} -> $brokerMovingTo ")
+    val result = !replicas.contains(brokerMovingTo)
+    if (!result)
+      debug(s"Failing partition constraint for $partition:${partitions.get(partition)} -> $brokerMovingTo ")
+
     result
   }
 }

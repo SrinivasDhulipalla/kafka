@@ -11,14 +11,13 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   private val brokerReplicaCounts = getBrokerReplicaCounts(brokersToReplicas)
   private val rackCount: Int = allBrokers.map(_.rack.get).distinct.size
   private val replicaCount: Float = brokerReplicaCounts.values.sum.toFloat
-  val rackFairValue = Math.ceil(replicaCount / rackCount).toInt
-  val brokerFairValue = Math.ceil(replicaCount / allBrokers.size).toInt
-
+  val rackFairValueUpper:Float = replicaCount / rackCount
+  val brokerFairValueUpper:Float = replicaCount / allBrokers.size
 
   override def aboveParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
-      .filter { x => x._2.toInt > rackFairValue }
+      .filter { x => x._2.toInt > Math.floor(replicaCount / rackCount).toInt}
       .keys
       .toSeq
       .distinct
@@ -27,7 +26,7 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   override def belowParRacks(): Seq[String] = {
     //return racks for brokers where replica count is over fair value
     rackReplicaCounts
-      .filter(_._2.toInt < rackFairValue)
+      .filter(_._2.toInt < Math.ceil(replicaCount / rackCount).toInt)
       .keys
       .toSeq
       .distinct
@@ -36,21 +35,14 @@ class ReplicaFairness(brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])], al
   override def aboveParBrokers(): Seq[BrokerMetadata] = {
     //return brokers where replica count is over fair value
     brokerReplicaCounts
-      .filter(_._2.toInt > brokerFairValue)
+      .filter(_._2.toInt > Math.floor(replicaCount / allBrokers.size).toInt)
       .keys.toSeq.distinct
   }
 
   override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerReplicaCounts
-      .filter(_._2 < brokerFairValue)
+      .filter(_._2 < Math.ceil(replicaCount / allBrokers.size).toInt)
       .keys.toSeq.distinct
   }
 
-  private def countFromPar(rack: String): Int = {
-    Math.abs(rackReplicaCounts.get(rack).get - rackFairValue)
-  }
-
-  private def countFromPar(broker: BrokerMetadata): Int = {
-    Math.abs(brokerReplicaCounts.get(broker).get - brokerFairValue)
-  }
 }

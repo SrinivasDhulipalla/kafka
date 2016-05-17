@@ -17,7 +17,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   override def aboveParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 > rackFairValue)
+      .filter(_._2 >  Math.floor(leaderCount.toFloat / rackCount).toInt)
       .keys
       .toSeq
       .distinct
@@ -25,7 +25,7 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   override def belowParRacks(): Seq[String] = {
     rackLeaderCounts
-      .filter(_._2 < rackFairValue)
+      .filter(_._2 <  Math.ceil(leaderCount.toFloat / rackCount).toInt)
       .keys
       .toSeq
       .distinct
@@ -33,13 +33,13 @@ class LeaderFairness(brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPar
 
   override def aboveParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
-      .filter(_._2 > brokerFairValue)
+      .filter(_._2 > Math.floor(leaderCount.toFloat / allBrokers.size).toInt)
       .keys.toSeq.distinct
   }
 
   override def belowParBrokers(): Seq[BrokerMetadata] = {
     brokerLeaderCounts
-      .filter(_._2 < brokerFairValue)
+      .filter(_._2 < Math.ceil(leaderCount.toFloat / allBrokers.size).toInt)
       .keys.toSeq.distinct
   }
 

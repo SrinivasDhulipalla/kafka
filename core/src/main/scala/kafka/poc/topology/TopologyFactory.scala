@@ -8,7 +8,7 @@ import scala.collection.{Iterable, Map, Seq}
 trait TopologyFactory {
 
   //TODO Consolidate
-  def createBrokersToReplicas(brokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
+  def createBrokersToReplicas(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
     def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
 
@@ -28,7 +28,7 @@ trait TopologyFactory {
   }
 
   //TODO Consolidate
-  def createBrokersToLeaders(brokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
+  def createBrokersToLeaders(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Iterable[TopicAndPartition])] = {
 
     def bk(id: Int): BrokerMetadata = {
       brokers.filter(_.id == id).last
@@ -49,7 +49,7 @@ trait TopologyFactory {
   }
 
   //TODO Consolidate
-  def createBrokersToNonLeaders(brokers: Seq[BrokerMetadata], relevantBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
+  def createBrokersToNonLeaders(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
     def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
 

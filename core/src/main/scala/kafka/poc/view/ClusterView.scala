@@ -21,6 +21,10 @@ trait ClusterView {
 
   def refresh(partitionMap: Map[TopicAndPartition, Seq[Int]]): ClusterView
 
-  def nonLeadReplicasFor(brokerMetadata: BrokerMetadata): scala.Seq[Replica]
+  def nonFollowersOn(brokerMetadata: BrokerMetadata): scala.Seq[Replica]
+
+  def hasReplicaFairnessImprovement(b1: Int, b2: Int): Boolean
+
+  def hasLeaderFairnessImprovement(b1: Int, b2: Int): Boolean
 }
 

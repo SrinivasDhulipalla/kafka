@@ -45,6 +45,13 @@ trait TopologyHelper {
 
   def brokersOn(racks: Seq[String], brokers: Seq[BrokerMetadata]): Seq[BrokerMetadata] =     brokers.filter(broker => racks.contains(broker.rack.get))
 
+  def filter(rack: String, brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Map[TopicAndPartition, Seq[Int]] = {
+    def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
+
+    partitions.map { case (p, replicas) => (p, replicas.filter(rack==null || bk(_).rack.get == rack)) }
+      .filter { case (p, replicas) => replicas.size > 0 }
+  }
+
   def leadersOn(rack: String, brokersToLeaders: Seq[(BrokerMetadata, Iterable[TopicAndPartition])]): Seq[TopicAndPartition] = {
     brokersToLeaders
       .filter(_._1.rack.get == rack)
