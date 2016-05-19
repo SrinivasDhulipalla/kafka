@@ -30,19 +30,16 @@ class RackFairView(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndP
 
   override def nonFollowersOn(brokerMetadata: BrokerMetadata): scala.Seq[Replica] = Seq()
 
-  override def hasReplicaFairnessImprovement(b1: Int, b2: Int): Boolean =
-    filterReplicas(rack(b1)) > filterReplicas(rack(b2)) + 1
+  override def improvesReplicaFairness(b1: Int, b2: Int): Boolean = filterReplicas(rack(b1)) > filterReplicas(rack(b2)) + 1
 
-  override def hasLeaderFairnessImprovement(b1: Int, b2: Int): Boolean =
-    filterLeaders(rack(b1)) > filterLeaders(rack(b2)) + 1
+  override def improvesLeaderFairness(b1: Int, b2: Int): Boolean = filterLeaders(rack(b1)) > filterLeaders(rack(b2)) + 1
+
 
   private def rack(b1: Int): String = bk(b1).rack.get
 
-  private def filterLeaders(rack1: String): Int =
-    brokersToLeaders.filter(_._1.rack.get == rack1).map(_._2).flatten.size
+  private def filterLeaders(rack: String): Int = brokersToLeaders.filter(_._1.rack.get == rack).map(_._2).flatten.size
 
-  private def filterReplicas(rack1: String): Int =
-    brokersToReplicas.filter(_._1.rack.get == rack1).map(_._2).flatten.size
+  private def filterReplicas(rack: String): Int = brokersToReplicas.filter(_._1.rack.get == rack).map(_._2).flatten.size
 
   private def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
 }

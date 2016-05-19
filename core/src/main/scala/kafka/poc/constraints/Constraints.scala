@@ -10,9 +10,6 @@ import scala.collection._
 
 
 class Constraints(allBrokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]) extends TopologyHelper with TopologyFactory with RebalanceConstraints with Logging {
-
-  private val brokersToReplicas = createBrokersToReplicas(allBrokers, partitions)
-
   private def bk(id: Int): BrokerMetadata = allBrokers.filter(_.id == id).last
 
   override def obeysRackConstraint(partition: TopicAndPartition, brokerFrom: Int, brokerTo: Int, replicationFactors: Map[String, Int]): Boolean = {

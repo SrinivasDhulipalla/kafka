@@ -3,7 +3,7 @@ package kafka.poc.topology
 import kafka.common.TopicAndPartition
 
 
-class Replica(val topic: String, val partitionId: Int, val broker: Int) {
+case class Replica(val topic: String, val partitionId: Int, val broker: Int) {
   def partition(): TopicAndPartition = {
     new TopicAndPartition(topic, partitionId)
   }

@@ -54,7 +54,7 @@ class RebalancingTest {
 
     //When
     val constraints = new Constraints(brokers, underreplicated)
-    val reassigned = policy.fullyReplicated(underreplicated, constraints, reps, brokers)
+    val reassigned = policy.fullyReplicate(underreplicated, constraints, reps, brokers)
 
     //Then p1 should have two new replicas on the two empty brokers, 103, 104
     assertEquals(4, reassigned.get(p(0)).get.size)
@@ -98,7 +98,7 @@ class RebalancingTest {
     val constraints: Constraints = new Constraints(brokers, underreplicated)
 
     //When
-    policy.fullyReplicated(underreplicated, constraints, reps, brokers)
+    policy.fullyReplicate(underreplicated, constraints, reps, brokers)
 
     //then p[4] should have a new replica on broker 102 (the least loaded)
     assertEquals(3, underreplicated.get(p(4)).get.size)

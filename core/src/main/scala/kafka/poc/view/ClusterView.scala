@@ -23,8 +23,8 @@ trait ClusterView {
 
   def nonFollowersOn(brokerMetadata: BrokerMetadata): scala.Seq[Replica]
 
-  def hasReplicaFairnessImprovement(b1: Int, b2: Int): Boolean
+  def improvesReplicaFairness(b1: Int, b2: Int): Boolean
 
-  def hasLeaderFairnessImprovement(b1: Int, b2: Int): Boolean
+  def improvesLeaderFairness(b1: Int, b2: Int): Boolean
 }
 

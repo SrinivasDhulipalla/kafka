@@ -26,7 +26,7 @@ import scala.collection._
   *
   * (1) The algorithm has three clear stages : re-replication, fair-racks, fair-brokers, fair-leaders
   *
-  * (2) Each stage (ignoreing re-replication) is wrapped in an outer loop. This continues until no move can be made
+  * (2) Each stage (ignoring re-replication) is wrapped in an outer loop. This continues until no move can be made
   * for a single batch. Moves are then tested to ensure they improve fairness. So the algorithm will continues until
   * no fairness improvement can be made. This allows the algorithm to terminate should it not be able to complete
   * (certain configurations cannot create fairness, due to the rack and partition constraints).
@@ -48,25 +48,22 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     val partitions = collection.mutable.Map(replicasForPartitions.toSeq: _*) //todo deep copy?
     val constraints: Constraints = new Constraints(brokers, partitions)
 
-    //1. Ensure no under-replicated partitions
-    fullyReplicated(partitions, constraints, replicationFactors, brokers)
+    info("***** 1. Ensure no under-replicated partitions *****")
+    fullyReplicate(partitions, constraints, replicationFactors, brokers)
 
-    //2. Create replica fairness across racks
-    info("******* Create replica fairness across racks *******")
+    info("***** 2. Create replica fairness across racks *****")
     val rackView = new RackFairView(brokers, partitions)
     replicaFairness(partitions, replicationFactors, rackView)
 
-    //3. Create replica fairness for brokers, on each rack separately
+    // Create replica fairness for brokers, on each rack separately
     for (rack <- racks(brokers)) {
-      info(s"******* Create replica fairness across brokers on rack $rack *******")
+      info(s"**** 3. Create replica fairness across brokers on rack $rack ****")
       def brokerView = new BrokerFairView(brokers, partitions, rack)
       replicaFairness(partitions, replicationFactors, brokerView)
     }
 
-    //4. Create leader fairness for brokers, applied cluster-wide
+    info("**** 4. Create leader fairness for brokers, applied cluster-wide ****")
     val brokerView = new BrokerFairView(brokers, partitions, null)
-
-    info("******* Create leader fairness *******")
     leaderFairness(partitions, brokerView)
 
     log(partitions, brokers)
@@ -84,7 +81,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     * @param allBrokers  List of all brokers, including those without replicas
     * @return
     */
-  def fullyReplicated(partitions: mutable.Map[TopicAndPartition, Seq[Int]], constraints: Constraints, rfs: Map[String, Int], allBrokers: Seq[BrokerMetadata]): Map[TopicAndPartition, Seq[Int]] = {
+  def fullyReplicate(partitions: mutable.Map[TopicAndPartition, Seq[Int]], constraints: Constraints, rfs: Map[String, Int], allBrokers: Seq[BrokerMetadata]): Map[TopicAndPartition, Seq[Int]] = {
     val brokersToReplicas = createBrokersToReplicas(allBrokers, partitions)
 
     for (partition <- partitions.keys) {
@@ -123,20 +120,19 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     var moveFound = true
 
     def moveToBelowParBroker(abovePar: Replica): Boolean = {
-      debug(s"Moving $abovePar, # belowpar candidates: " + view.brokersWithBelowParReplicaCount.map(_.id).size)
-      for (belowPar <- view.brokersWithBelowParReplicaCount) {
+      debug(s"Moving $abovePar, # belowpar candidates: ${view.brokersWithBelowParReplicaCount.map(_.id).size}")
 
+      for (belowPar <- view.brokersWithBelowParReplicaCount) {
         val obeysPartition = view.constraints.obeysPartitionConstraint(abovePar.partition, belowPar.id)
         val obeysRack = view.constraints.obeysRackConstraint(abovePar.partition, abovePar.broker, belowPar.id, replicationFactors)
-        val fairness = view.hasReplicaFairnessImprovement(abovePar.broker, belowPar.id)
+        val fairness = view.improvesReplicaFairness(abovePar.broker, belowPar.id)
 
         if (obeysRack && obeysPartition && fairness) {
           move(abovePar.partition, abovePar.broker, belowPar.id, partitions)
           view = view.refresh(partitions)
-          debug(s"$abovePar was moved to ${belowPar.id}.")
           return true
-        } else
-          debug(s"Move failed due to rack/partition/fairness constraints: $obeysRack, $obeysPartition, $fairness")
+        }
+        debug(s"Move failed due to rack/partition/fairness constraints: $obeysRack, $obeysPartition, $fairness")
       }
       debug(s"Replica $abovePar could not be moved despite attempting ${view.brokersWithBelowParReplicaCount.size} different brokers")
       false
@@ -172,7 +168,7 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
         if (brokersWithBelowParLeaders.map(_.id).contains(follower)) {
           //it's a follower replica on a below par broker
           val leader = partitions.get(aboveParLeader).get(0)
-          if (view.hasLeaderFairnessImprovement(leader, follower)) {
+          if (view.improvesLeaderFairness(leader, follower)) {
             makeLeader(aboveParLeader, follower, partitions)
             view = view.refresh(partitions)
             return true
@@ -183,14 +179,15 @@ class MovesOptimisedRebalancePolicy extends RabalancePolicy with TopologyHelper 
     }
 
     def switchLeaderToOtherBroker(aboveParLeader: TopicAndPartition): Boolean = {
-      //Pick a replica from another partition, which is on a below par broker, and physically swap them around.
+      //No luck changing leadership within the partition so pick a completely different partition, which is on a below
+      // par broker, and physically swap replicas so this leader ends up on a different broker.
       val aboveParLeaderBroker = partitions.get(aboveParLeader).get(0)
       for (broker <- view.brokersWithBelowParLeaderCount) {
         for (belowParFollower <- view.nonFollowersOn(broker)) {
           val obeysPartitionOut = view.constraints.obeysPartitionConstraint(aboveParLeader, belowParFollower.broker)
           val obeysPartitionBack = view.constraints.obeysPartitionConstraint(belowParFollower.partition, aboveParLeaderBroker)
 
-          if (obeysPartitionOut && obeysPartitionBack && view.hasLeaderFairnessImprovement(aboveParLeaderBroker, belowParFollower.broker)) {
+          if (obeysPartitionOut && obeysPartitionBack && view.improvesLeaderFairness(aboveParLeaderBroker, belowParFollower.broker)) {
             move(aboveParLeader, aboveParLeaderBroker, belowParFollower.broker, partitions)
             move(belowParFollower.partition, belowParFollower.broker, aboveParLeaderBroker, partitions)
             view = view.refresh(partitions)
