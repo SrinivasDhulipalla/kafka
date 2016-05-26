@@ -14,10 +14,8 @@ import scala.collection.mutable
 
 class RebalancingTest {
 
-  //TODO add test to ensure a complex output never breaks partition constraint or rack constraint.
-  //TODO test should optimise leaders independently on different racks
   //TODO test should work where brokers don't have any racks specified
-  //TODO test that should take a sample cluster and increase the replication factor
+  //TODO test that should take a sample cluster and increase the replication factor?? really??
   //TODO tests that test number of moves is minimised (we should mock the move and make leader commands)
 
   /**
