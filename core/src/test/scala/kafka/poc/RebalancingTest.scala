@@ -585,7 +585,7 @@ class RebalancingTest {
       assertEquals(2, reassigned.values.map(_ (0)).filter(_ == id).size)
   }
 
-  @Test //in progress
+  @Test
   def shouldNotMoveLeadershipFromOverParBrokerWhereLeadersDoNotBalanceEvenly(): Unit = {
     val policy = new MovesOptimisedRebalancePolicy()
 
