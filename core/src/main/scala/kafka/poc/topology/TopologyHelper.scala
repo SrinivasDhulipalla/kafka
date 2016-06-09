@@ -61,7 +61,6 @@ trait TopologyHelper {
 
   def weightedReplicasFor(rack: String, brokersToReplicas: Seq[(BrokerMetadata, Seq[Replica])]): Seq[Replica] = {
     //TODO implement weighting later - for now just return replicas in rack in any order
-    //TODO2 we need to interleave these results by broker see MovesOptimisedRebalancePolicyTest.providesPotentiallyUnexpectedResult
       brokersToReplicas.filter(_._1.rack.get == rack).sortBy(_._2.size).map(_._2).flatten
   }
 
