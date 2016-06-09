@@ -17,7 +17,7 @@ class TopologyBuilderTest {
       p(3, "t4") -> List(100, 101, 102))
     val reps = Map("t1" -> 4, "t2" -> 4, "t3" -> 2, "t4" -> 2)
 
-    val nonLeaders = new TopologyFactory{}.createBrokersToNonLeaders(brokers, partitions)
+    val nonLeaders = new TopologyFactory{}.createBrokersToFollowers(brokers, partitions)
 
     print(nonLeaders.map { x => "\n" + x._1.id + " : " + x._2.map("p" + _.partitionId) })
     assertEquals(0, nonLeaders.toMap.get(bk(100,"rack1")).get.size)

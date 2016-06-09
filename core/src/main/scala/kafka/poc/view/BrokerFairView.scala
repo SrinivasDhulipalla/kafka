@@ -16,7 +16,7 @@ class BrokerFairView(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAn
 
   val brokersToReplicas = rackFilter(createBrokersToReplicas(allBrokers, allPartitions))
   val brokersToLeaders = rackFilter(createBrokersToLeaders(allBrokers, allPartitions))
-  val brokersToNonLeaders = rackFilter(createBrokersToNonLeaders(allBrokers, allPartitions))
+  val brokersToNonLeaders = rackFilter(createBrokersToFollowers(allBrokers, allPartitions))
 
   val replicaFairness = new ReplicaFairness(brokersToReplicas, brokersOnRack)
   val leaderFairness = new LeaderFairness(brokersToLeaders, brokersOnRack)

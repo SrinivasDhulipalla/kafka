@@ -16,7 +16,7 @@ class RackFairView(allBrokers: Seq[BrokerMetadata], allPartitions: Map[TopicAndP
 
   val replicaFairness = new ReplicaFairness(brokersToReplicas, allBrokers)
   val leaderFairness = new LeaderFairness(brokersToLeaders, allBrokers)
-  val brokersToNonLeaders = createBrokersToNonLeaders(allBrokers, allPartitions)
+  val brokersToFollowers = createBrokersToFollowers(allBrokers, allPartitions)
 
   override def replicasOnAboveParBrokers(): Seq[Replica] = replicaFairness.aboveParRacks.flatMap(weightedReplicasFor(_, brokersToReplicas))
 

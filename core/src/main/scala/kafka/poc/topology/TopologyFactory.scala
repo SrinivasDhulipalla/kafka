@@ -49,7 +49,7 @@ trait TopologyFactory {
   }
 
   //TODO Consolidate
-  def createBrokersToNonLeaders(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
+  def createBrokersToFollowers(brokers: Seq[BrokerMetadata], partitions: Map[TopicAndPartition, Seq[Int]]): Seq[(BrokerMetadata, Seq[Replica])] = {
 
     def bk(id: Int): BrokerMetadata = brokers.filter(_.id == id).last
 
