@@ -26,6 +26,7 @@ import kafka.message.ByteBufferMessageSet
 import kafka.api.{KAFKA_0_10_0_IV0, KAFKA_0_9_0}
 import kafka.common.{KafkaStorageException, TopicAndPartition}
 import ReplicaFetcherThread._
+//import kafka.server.TempThrottleTypes._
 import org.apache.kafka.clients.{ManualMetadataUpdater, NetworkClient, ClientRequest, ClientResponse}
 import org.apache.kafka.common.network.{LoginType, Selectable, ChannelBuilders, NetworkReceive, Selector, Mode}
 import org.apache.kafka.common.requests.{ListOffsetResponse, FetchResponse, RequestSend, AbstractRequest, ListOffsetRequest}
@@ -36,6 +37,7 @@ import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.{Errors, ApiKeys}
 import org.apache.kafka.common.utils.Time
 
+//import scala.RuntimeException
 import scala.collection.{JavaConverters, Map, mutable}
 import JavaConverters._
 
@@ -139,7 +141,48 @@ class ReplicaFetcherThread(name: String,
         fatal(s"Disk error while replicating data for $topicAndPartition", e)
         Runtime.getRuntime.halt(1)
     }
+
+//    evaluateQuota(partitionData)
   }
+//
+//  def evaluateQuota(partitionData: PartitionData): Unit = {
+//    val throttleTime: Int = quotaManagers(ApiKeys.FETCH.id)
+//      .recordAndMaybeThrottle(followerThrottleKey,
+//        partitionData.toByteBufferMessageSet.sizeInBytes, null)
+//
+//    if (throttleTime > 0)
+//      Thread.sleep(throttleTime)
+//  }
+//
+//  // Store all the quota managers for each type of request
+//  val quotaManagers: Map[Short, ClientQuotaManager] = instantiateQuotaManagers(brokerConfig)
+//
+//  /*
+// * Returns a Map of all quota managers configured. The request Api key is the key for the Map
+// */
+//  private def instantiateQuotaManagers(cfg: KafkaConfig): Map[Short, ClientQuotaManager] = {
+//    val producerQuotaManagerCfg = ClientQuotaManagerConfig(
+//      quotaBytesPerSecondDefault = cfg.producerQuotaBytesPerSecondDefault,
+//      numQuotaSamples = cfg.numQuotaSamples,
+//      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
+//    )
+//
+//    val consumerQuotaManagerCfg = ClientQuotaManagerConfig(
+//      quotaBytesPerSecondDefault = cfg.consumerQuotaBytesPerSecondDefault,
+//      numQuotaSamples = cfg.numQuotaSamples,
+//      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
+//    )
+//
+//    val quotaManagers = Map[Short, ClientQuotaManager](
+//      ApiKeys.PRODUCE.id ->
+//        new ClientQuotaManager(producerQuotaManagerCfg, metrics, ApiKeys.PRODUCE.name, new org.apache.kafka.common.utils.SystemTime),
+//      ApiKeys.FETCH.id ->
+//        new ClientQuotaManager(consumerQuotaManagerCfg, metrics, ApiKeys.FETCH.name, new org.apache.kafka.common.utils.SystemTime)
+//    )
+//    quotaManagers
+//  }
+
+
 
   def warnIfMessageOversized(messageSet: ByteBufferMessageSet, topicAndPartition: TopicAndPartition): Unit = {
     if (messageSet.sizeInBytes > 0 && messageSet.validBytes <= 0)

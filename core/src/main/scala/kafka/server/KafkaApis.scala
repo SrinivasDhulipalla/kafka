@@ -481,18 +481,20 @@ class KafkaApis(val requestChannel: RequestChannel,
         requestChannel.sendResponse(new RequestChannel.Response(request, new FetchResponseSend(request.connectionId, response)))
       }
 
-
       // When this callback is triggered, the remote API call has completed
       request.apiRemoteCompleteTimeMs = SystemTime.milliseconds
 
       // Do not throttle replication traffic
       if (fetchRequest.isFromFollower) {
-        fetchResponseCallback(0)
+        quotaManagers(ApiKeys.FETCH.id).recordAndMaybeThrottle(TempThrottleTypes.leaderThrottleKey,
+          FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),
+            fetchRequest.versionId),
+          fetchResponseCallback)
       } else {
         quotaManagers(ApiKeys.FETCH.id).recordAndMaybeThrottle(fetchRequest.clientId,
-                                                               FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),
-                                                                                          fetchRequest.versionId),
-                                                               fetchResponseCallback)
+          FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),
+          fetchRequest.versionId),
+          fetchResponseCallback)
       }
     }
 

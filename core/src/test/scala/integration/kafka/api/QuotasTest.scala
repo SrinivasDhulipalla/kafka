@@ -19,7 +19,7 @@ import java.util.Properties
 import kafka.admin.AdminUtils
 import kafka.consumer.SimpleConsumer
 import kafka.integration.KafkaServerTestHarness
-import kafka.server.{ClientQuotaManager, ClientConfigOverride, KafkaConfig, KafkaServer}
+import kafka.server._
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.clients.producer._
@@ -132,14 +132,21 @@ class QuotasTest extends KafkaServerTestHarness {
 
     // Consumer should read in a bursty manner and get throttled immediately
     consume(consumers.head, numRecords)
-    // The replica consumer should not be throttled also. Create a fetch request which will exceed the quota immediately
-    val request = new FetchRequestBuilder().addFetch(topic1, 0, 0, 1024*1024).replicaId(followerNode.config.brokerId).build()
-    replicaConsumers.head.fetch(request)
     val consumerMetricName = leaderNode.metrics.metricName("throttle-time",
                                                            ApiKeys.FETCH.name,
                                                            "Tracking throttle-time per client",
                                                            "client-id", consumerId1)
     assertTrue("Should have been throttled", allMetrics(consumerMetricName).value() > 0)
+
+
+    //Replicas should also be throttled
+    val internalReplicationClientId = TempThrottleTypes.leaderThrottleKey
+    val replicationMetricsName = leaderNode.metrics.metricName("throttle-time",
+      ApiKeys.FETCH.name,
+      "Tracking throttle-time per client",
+      "client-id", internalReplicationClientId)
+
+    assertTrue("Should have been throttled", allMetrics(replicationMetricsName).value() > 0)
   }
 
   @Test

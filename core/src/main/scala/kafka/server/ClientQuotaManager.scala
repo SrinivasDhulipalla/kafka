@@ -56,6 +56,11 @@ object ClientQuotaManagerConfig {
   val InactiveSensorExpirationTimeSeconds  = 3600
 }
 
+object TempThrottleTypes{
+  val leaderThrottleKey = "leader-internal-replication"
+  val followerThrottleKey = "follower-internal-replication"
+}
+
 /**
  * Helper class that records per-client metrics. It is also responsible for maintaining Quota usage statistics
  * for all clients.
@@ -111,6 +116,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
     val clientSensors = getOrCreateQuotaSensors(clientId)
     var throttleTimeMs = 0
     try {
+      println("evaluation of quota for "+clientId + " with value (bytes) "+value)
       clientSensors.quotaSensor.record(value)
       // trigger the callback immediately if quota is not violated
       callback(0)
@@ -123,7 +129,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
         // If delayed, add the element to the delayQueue
         delayQueue.add(new ThrottledResponse(time, throttleTimeMs, callback))
         delayQueueSensor.record()
-        logger.debug("Quota violated for sensor (%s). Delay time: (%d)".format(clientSensors.quotaSensor.name(), throttleTimeMs))
+        println("Quota violated for sensor (%s). Delay time: (%d)".format(clientSensors.quotaSensor.name(), throttleTimeMs))
     }
     throttleTimeMs
   }
@@ -138,10 +144,13 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
    */
   private def throttleTime(clientMetric: KafkaMetric, config: MetricConfig): Int = {
     val rateMetric: Rate = measurableAsRate(clientMetric.metricName(), clientMetric.measurable())
+    println("rateMetric: "+rateMetric)
     val quota = config.quota()
     val difference = clientMetric.value() - quota.bound
+    println("difference: "+difference)
     // Use the precise window used by the rate calculation
     val throttleTimeMs = difference / quota.bound * rateMetric.windowSize(config, time.milliseconds())
+    println("throttleTimeMs: "+throttleTimeMs)
     throttleTimeMs.round.toInt
   }
 
