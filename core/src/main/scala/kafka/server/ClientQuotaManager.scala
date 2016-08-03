@@ -121,7 +121,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
     val clientSensors = getOrCreateQuotaSensors(clientId)
     var throttleTimeMs = 0
     try {
-      println("evaluation of quota for "+clientId + " with value (bytes) "+value)
+//      println("evaluation of quota for "+clientId + " with value (bytes) "+value)
       clientSensors.quotaSensor.record(value)
       // trigger the callback immediately if quota is not violated
       if(callback != null)
@@ -152,13 +152,13 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
    */
   private def throttleTime(clientMetric: KafkaMetric, config: MetricConfig): Int = {
     val rateMetric: Rate = measurableAsRate(clientMetric.metricName(), clientMetric.measurable())
-    println("rateMetric: "+rateMetric)
+//    println("rateMetric: "+rateMetric)
     val quota = config.quota()
     val difference = clientMetric.value() - quota.bound
-    println("difference: "+difference)
+//    println("difference: "+difference)
     // Use the precise window used by the rate calculation
     val throttleTimeMs = difference / quota.bound * rateMetric.windowSize(config, time.milliseconds())
-    println("throttleTimeMs: "+throttleTimeMs)
+//    println("throttleTimeMs: "+throttleTimeMs)
     throttleTimeMs.round.toInt
   }
 

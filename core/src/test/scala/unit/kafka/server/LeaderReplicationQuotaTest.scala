@@ -41,7 +41,8 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
   var brokers: Seq[KafkaServer] = null
   var leader: KafkaServer = null
   var follower: KafkaServer = null
-  val topic1 = "foo"
+  val topic1 = "topic1"
+  val topic2 = "topic2"
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
   var leaderMetricName: MetricName = null
   var followerMetricName: MetricName = null
@@ -81,15 +82,12 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
   def testQuotaInvokesExpectedDelayOnSingleMessage() {
     val props = new Properties()
     val throttle: Int = 50 * 1000
-    val msg: Array[Byte] = new Array[Byte]( 800 * 1000) //~800K
+    val msg: Array[Byte] = new Array[Byte](800 * 1000) //~800K
 
     //Given
     props.put(ClientConfigOverride.ConsumerOverride, throttle.toString)
     AdminUtils.changeClientIdConfig(zkUtils, TempThrottleTypes.leaderThrottleKey, props)
-    val start = System.currentTimeMillis()
 
-    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers),
-      retries = 5)
     //When
     val record: ProducerRecord[Array[Byte], Array[Byte]] = new ProducerRecord(topic1, msg)
     producer.send(record).get
@@ -103,16 +101,16 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Then replication should complete
     waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
-
-    println("Took: " + (System.currentTimeMillis() - start) + " and should have taken: " + msg.length / throttle)
   }
 
-  @Test //probably too long and too fragile to check in
+  //TODO - some configuratios lead to the "delay time" imposed by the quota manager being negative (and significant values). Why?
+
+  @Test //probably too long and too fragile to check in. gets more accurate the more messages/lower-quota (i.e. longer running)
   def testQuotaProducesDesiredRateOverTime() {
     val props = new Properties()
-    val throttle: Int = 100 * 1000
+    val throttle: Int = 300 * 1000
     val msg: Array[Byte] = new Array[Byte](1000) //~1k with overhead
-    val numMessages = 4000
+    val numMessages = 8000
 
     //Given
     props.put(ClientConfigOverride.ConsumerOverride, throttle.toString)
@@ -123,7 +121,6 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
     for (x <- 0 to numMessages) {
       val record: ProducerRecord[Array[Byte], Array[Byte]] = new ProducerRecord(topic1, msg)
       producer.send(record).get
-      println("sent message " + x)
     }
     producer.close()
     waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
@@ -176,8 +173,67 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Then replication should complete
     waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
-
-    println("Took: " + (System.currentTimeMillis() - start) + " and should have taken: " + msg.length / throttle)
   }
+
+  @Test //probably too long and too fragile to keep enabled
+  def testFollowerQuotaProducesDesiredRateOverTime() {
+    val props = new Properties()
+    val throttle: Int = 300 * 1000
+    val msg: Array[Byte] = new Array[Byte](1000) //~1k with overhead
+    val numMessages = 8000
+
+    //Given
+    props.put(ClientConfigOverride.ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, TempThrottleTypes.followerThrottleKey, props)
+    val start = System.currentTimeMillis()
+
+    //When
+    for (x <- 0 to numMessages) {
+      val record: ProducerRecord[Array[Byte], Array[Byte]] = new ProducerRecord(topic1, msg)
+      producer.send(record).get
+    }
+    producer.close()
+    waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
+
+    //Then replication should take as long as expected
+    val expectedDuration: Int = msg.length * numMessages / throttle * 1000
+    val took: Long = System.currentTimeMillis() - start
+    val desc = "Took: " + took + "ms and should have taken: " + expectedDuration
+    println(desc)
+    assertEquals(desc, expectedDuration, took, expectedDuration * 0.2)
+  }
+
+  //TODO we need to test with multiple brokers.
+
+//
+//  @Test
+//  def testLeaderShouldOnlyThrottleConfiguredReplicas() {
+//    val props = new Properties()
+//    val throttle: Int = 50 * 1000
+//    val msg: Array[Byte] = new Array[Byte](800 * 1000) //~800K
+//
+//    //Given
+//    props.put(ClientConfigOverride.ConsumerOverride, throttle.toString)
+//    AdminUtils.changeClientIdConfig(zkUtils, TempThrottleTypes.followerThrottleKey, props)
+//    TestUtils.createTopic(zkUtils, topic1, 1, 2, brokers)
+//
+//    producer.send(new ProducerRecord(topic1, msg)).get
+//    producer.send(new ProducerRecord(topic2, msg)).get
+//    producer.close()
+//
+//    //Then we should get the correct delay imposed by the quota
+//    //throttle = 50K x 10  = 500K over 10s window. delta =  800K - 500K = 300K
+//    //so we expect a delay of 300K/500K x 10 = 30/50 * 10 = 6s
+//    val throttledTime: Double = follower.metrics.metrics().asScala(followerMetricName).value()
+//    assertEquals("Throttle time should be 6s", throttledTime, 6000, ERROR)
+//
+//    //Ensure leader throttle did not enable
+//    val throttledTimeLeader: Double = leader.metrics.metrics().asScala(leaderMetricName).value()
+//    assertEquals("Throttle on leader should not be engaged", throttledTimeLeader, 0, 0)
+//
+//    //Then replication should complete
+//    waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
+//  }
+
 
 }
