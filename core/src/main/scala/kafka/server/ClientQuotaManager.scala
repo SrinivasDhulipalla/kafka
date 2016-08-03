@@ -28,14 +28,16 @@ import org.apache.kafka.common.utils.Time
 
 /**
  * Represents the sensors aggregated per client
- * @param quotaSensor @Sensor that tracks the quota
+  *
+  * @param quotaSensor @Sensor that tracks the quota
  * @param throttleTimeSensor @Sensor that tracks the throttle time
  */
 private case class ClientSensors(quotaSensor: Sensor, throttleTimeSensor: Sensor)
 
 /**
  * Configuration settings for quota management
- * @param quotaBytesPerSecondDefault The default bytes per second quota allocated to any client
+  *
+  * @param quotaBytesPerSecondDefault The default bytes per second quota allocated to any client
  * @param numQuotaSamples The number of samples to retain in memory
  * @param quotaWindowSizeSeconds The time span of each sample
  *
@@ -64,7 +66,8 @@ object TempThrottleTypes{
 /**
  * Helper class that records per-client metrics. It is also responsible for maintaining Quota usage statistics
  * for all clients.
- * @param config @ClientQuotaManagerConfig quota configs
+  *
+  * @param config @ClientQuotaManagerConfig quota configs
  * @param metrics @Metrics Metrics instance
  * @param apiKey API Key for the request
  * @param time @Time object to use
@@ -87,7 +90,8 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
 
   /**
    * Reaper thread that triggers callbacks on all throttled requests
-   * @param delayQueue DelayQueue to dequeue from
+    *
+    * @param delayQueue DelayQueue to dequeue from
    */
   class ThrottledRequestReaper(delayQueue: DelayQueue[ThrottledResponse]) extends ShutdownableThread(
     "ThrottledRequestReaper-%s".format(apiKey), false) {
@@ -105,7 +109,8 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
 
   /**
    * Records that a clientId changed some metric being throttled (produced/consumed bytes, QPS etc.)
-   * @param clientId clientId that produced the data
+    *
+    * @param clientId clientId that produced the data
    * @param value amount of data written in bytes
    * @param callback Callback function. This will be triggered immediately if quota is not violated.
    *                 If there is a quota violation, this callback will be triggered after a delay
@@ -119,7 +124,8 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
       println("evaluation of quota for "+clientId + " with value (bytes) "+value)
       clientSensors.quotaSensor.record(value)
       // trigger the callback immediately if quota is not violated
-      callback(0)
+      if(callback != null)
+        callback(0)
     } catch {
       case qve: QuotaViolationException =>
         // Compute the delay
@@ -127,8 +133,10 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
         throttleTimeMs = throttleTime(clientMetric, getQuotaMetricConfig(quota(clientId)))
         clientSensors.throttleTimeSensor.record(throttleTimeMs)
         // If delayed, add the element to the delayQueue
-        delayQueue.add(new ThrottledResponse(time, throttleTimeMs, callback))
-        delayQueueSensor.record()
+        if(callback != null) {
+          delayQueue.add(new ThrottledResponse(time, throttleTimeMs, callback))
+          delayQueueSensor.record()
+        }
         println("Quota violated for sensor (%s). Delay time: (%d)".format(clientSensors.quotaSensor.name(), throttleTimeMs))
     }
     throttleTimeMs
@@ -253,7 +261,8 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
 
   /**
    * Overrides quotas per clientId
-   * @param clientId client to override
+    *
+    * @param clientId client to override
    * @param quota custom quota to apply
    */
   def updateQuota(clientId: String, quota: Quota) = {

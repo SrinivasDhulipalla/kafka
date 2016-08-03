@@ -47,7 +47,8 @@ class ReplicaFetcherThread(name: String,
                            brokerConfig: KafkaConfig,
                            replicaMgr: ReplicaManager,
                            metrics: Metrics,
-                           time: Time)
+                           time: Time,
+                           quotaManager: ClientQuotaManager)
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
@@ -142,47 +143,20 @@ class ReplicaFetcherThread(name: String,
         Runtime.getRuntime.halt(1)
     }
 
-//    evaluateQuota(partitionData)
+    evaluateQuota(partitionData)
   }
-//
-//  def evaluateQuota(partitionData: PartitionData): Unit = {
-//    val throttleTime: Int = quotaManagers(ApiKeys.FETCH.id)
-//      .recordAndMaybeThrottle(followerThrottleKey,
-//        partitionData.toByteBufferMessageSet.sizeInBytes, null)
-//
-//    if (throttleTime > 0)
-//      Thread.sleep(throttleTime)
-//  }
-//
-//  // Store all the quota managers for each type of request
-//  val quotaManagers: Map[Short, ClientQuotaManager] = instantiateQuotaManagers(brokerConfig)
-//
-//  /*
-// * Returns a Map of all quota managers configured. The request Api key is the key for the Map
-// */
-//  private def instantiateQuotaManagers(cfg: KafkaConfig): Map[Short, ClientQuotaManager] = {
-//    val producerQuotaManagerCfg = ClientQuotaManagerConfig(
-//      quotaBytesPerSecondDefault = cfg.producerQuotaBytesPerSecondDefault,
-//      numQuotaSamples = cfg.numQuotaSamples,
-//      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
-//    )
-//
-//    val consumerQuotaManagerCfg = ClientQuotaManagerConfig(
-//      quotaBytesPerSecondDefault = cfg.consumerQuotaBytesPerSecondDefault,
-//      numQuotaSamples = cfg.numQuotaSamples,
-//      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
-//    )
-//
-//    val quotaManagers = Map[Short, ClientQuotaManager](
-//      ApiKeys.PRODUCE.id ->
-//        new ClientQuotaManager(producerQuotaManagerCfg, metrics, ApiKeys.PRODUCE.name, new org.apache.kafka.common.utils.SystemTime),
-//      ApiKeys.FETCH.id ->
-//        new ClientQuotaManager(consumerQuotaManagerCfg, metrics, ApiKeys.FETCH.name, new org.apache.kafka.common.utils.SystemTime)
-//    )
-//    quotaManagers
-//  }
 
 
+  def evaluateQuota(partitionData: PartitionData): Unit = {
+    val throttleTime: Int = quotaManager
+      .recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey,
+        partitionData.toByteBufferMessageSet.sizeInBytes, null)
+
+    if (throttleTime > 0) {
+      println("Throttle engaged so sleeping for "+throttleTime)
+      Thread.sleep(throttleTime)
+    }
+  }
 
   def warnIfMessageOversized(messageSet: ByteBufferMessageSet, topicAndPartition: TopicAndPartition): Unit = {
     if (messageSet.sizeInBytes > 0 && messageSet.validBytes <= 0)

@@ -40,10 +40,11 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
   val ERROR: Int = 500
   var brokers: Seq[KafkaServer] = null
   var leader: KafkaServer = null
+  var follower: KafkaServer = null
   val topic1 = "foo"
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
-  var allMetrics: mutable.Map[MetricName, KafkaMetric] = null
-  var consumerMetricName: MetricName = null
+  var leaderMetricName: MetricName = null
+  var followerMetricName: MetricName = null
 
   @Before
   override def setUp() {
@@ -58,13 +59,16 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
       replicationFactor = 2,
       servers = brokers)
     leader = if (leaders(0).get == brokers.head.config.brokerId) brokers.head else brokers(1)
-    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers),
-      retries = 5)
-    allMetrics = leader.metrics.metrics().asScala
-    consumerMetricName = leader.metrics.metricName("throttle-time",
+    follower = if (leaders(0).get == brokers.head.config.brokerId) brokers(1) else brokers.head
+    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5)
+    leaderMetricName = leader.metrics.metricName("throttle-time",
       ApiKeys.FETCH.name,
       "Tracking throttle-time per client",
       "client-id", TempThrottleTypes.leaderThrottleKey)
+    followerMetricName = follower.metrics.metricName("throttle-time",
+      "apikey.replication",
+      "Tracking throttle-time per client",
+      "client-id", TempThrottleTypes.followerThrottleKey)
   }
 
   @After
@@ -94,7 +98,7 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
     //Then we should get the correct delay imposed by the quota
     //throttle = 50K x 10  = 500K over 10s window. delta =  800K - 500K = 300K
     //so we expect a delay of 300K/500K x 10 = 30/50 * 10 = 6s
-    val throttledTime: Double = allMetrics(consumerMetricName).value()
+    val throttledTime: Double = leader.metrics.metrics.asScala(leaderMetricName).value()
     assertEquals("Throttle time should be 6s", throttledTime, 6000, ERROR)
 
     //Then replication should complete
@@ -142,4 +146,38 @@ class LeaderReplicationQuotaTest extends ZooKeeperTestHarness {
     if (result) println("final offset was " + expectedOffset)
     result
   }
+
+  @Test
+  def testFollowerQuotaInvokesExpectedDelayOnSingleMessage() {
+    val props = new Properties()
+    val throttle: Int = 50 * 1000
+    val msg: Array[Byte] = new Array[Byte]( 800 * 1000) //~800K
+
+    //Given
+    props.put(ClientConfigOverride.ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, TempThrottleTypes.followerThrottleKey, props)
+    val start = System.currentTimeMillis()
+
+    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5)
+    //When
+    val record: ProducerRecord[Array[Byte], Array[Byte]] = new ProducerRecord(topic1, msg)
+    producer.send(record).get
+    producer.close()
+
+    //Then we should get the correct delay imposed by the quota
+    //throttle = 50K x 10  = 500K over 10s window. delta =  800K - 500K = 300K
+    //so we expect a delay of 300K/500K x 10 = 30/50 * 10 = 6s
+    val throttledTime: Double = follower.metrics.metrics().asScala(followerMetricName).value()
+    assertEquals("Throttle time should be 6s", throttledTime, 6000, ERROR)
+
+    //Ensure leader throttle did not enable
+    val throttledTimeLeader: Double = leader.metrics.metrics().asScala(leaderMetricName).value()
+    assertEquals("Throttle on leader should not be engaged", throttledTimeLeader, 0, 0)
+
+    //Then replication should complete
+    waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
+
+    println("Took: " + (System.currentTimeMillis() - start) + " and should have taken: " + msg.length / throttle)
+  }
+
 }

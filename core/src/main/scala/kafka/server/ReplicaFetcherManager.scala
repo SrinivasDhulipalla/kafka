@@ -33,7 +33,24 @@ class ReplicaFetcherManager(brokerConfig: KafkaConfig, replicaMgr: ReplicaManage
         "%s:ReplicaFetcherThread-%d-%d".format(p, fetcherId, sourceBroker.id)
     }
     new ReplicaFetcherThread(threadName, fetcherId, sourceBroker, brokerConfig,
-      replicaMgr, metrics, time)
+      replicaMgr, metrics, time, quotaManager)
+  }
+
+
+  // Store all the quota managers for each type of request
+  val quotaManager: ClientQuotaManager = instantiateQuotaManager(brokerConfig)
+
+  /*
+ * Returns a Map of all quota managers configured. The request Api key is the key for the Map
+ */
+  private def instantiateQuotaManager(cfg: KafkaConfig): ClientQuotaManager = {
+
+    val replicaQuotaManagerCfg = ClientQuotaManagerConfig(
+      quotaBytesPerSecondDefault = cfg.consumerQuotaBytesPerSecondDefault,
+      numQuotaSamples = cfg.numQuotaSamples,
+      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
+    )
+    new ClientQuotaManager(replicaQuotaManagerCfg, metrics, "apikey.replication", new org.apache.kafka.common.utils.SystemTime)
   }
 
   def shutdown() {

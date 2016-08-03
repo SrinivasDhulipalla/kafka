@@ -76,7 +76,7 @@ object ClientConfigOverride {
  * The callback provides the clientId and the full properties set read from ZK.
  * This implementation reports the overrides to the respective ClientQuotaManager objects
  */
-class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler {
+class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaManager], replicationQuotaManager: ClientQuotaManager) extends ConfigHandler {
 
   def processConfigChanges(clientId: String, clientConfig: Properties) = {
     if (clientConfig.containsKey(ClientConfigOverride.ProducerOverride)) {
@@ -86,6 +86,8 @@ class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaMan
 
     if (clientConfig.containsKey(ClientConfigOverride.ConsumerOverride)) {
       quotaManagers(ApiKeys.FETCH.id).updateQuota(clientId,
+        new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
+      replicationQuotaManager.updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
     }
   }

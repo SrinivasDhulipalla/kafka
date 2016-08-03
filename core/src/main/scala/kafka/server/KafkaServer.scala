@@ -41,6 +41,7 @@ import org.apache.kafka.common.requests.{ControlledShutdownResponse, ControlledS
 import org.apache.kafka.common.security.JaasUtils
 import org.apache.kafka.common.utils.AppInfoParser
 
+import scala.collection
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import org.I0Itec.zkclient.ZkClient
@@ -223,8 +224,9 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
         Mx4jLoader.maybeLoad()
 
         /* start dynamic config manager */
+        val managers: collection.Map[Short, ClientQuotaManager] = apis.quotaManagers
         dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config),
-                                                           ConfigType.Client -> new ClientIdConfigHandler(apis.quotaManagers))
+                                                           ConfigType.Client -> new ClientIdConfigHandler(managers, replicaManager.replicaFetcherManager.quotaManager ))
 
         // Apply all existing client configs to the ClientIdConfigHandler to bootstrap the overrides
         // TODO: Move this logic to DynamicConfigManager
@@ -632,6 +634,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
     * <li> config has broker.id and meta.properties contains broker.id if they don't match throws InconsistentBrokerIdException
     * <li> config has broker.id and there is no meta.properties file, creates new meta.properties and stores broker.id
     * <ol>
+    *
     * @return A brokerId.
     */
   private def getBrokerId: Int =  {
