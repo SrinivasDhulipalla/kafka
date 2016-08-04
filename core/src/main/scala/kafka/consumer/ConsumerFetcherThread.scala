@@ -109,6 +109,7 @@ class ConsumerFetcherThread(name: String,
       key -> new PartitionData(value)
     }
 
+  def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]){}
 }
 
 object ConsumerFetcherThread {

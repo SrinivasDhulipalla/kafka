@@ -18,9 +18,10 @@ package kafka.server
 
 import java.util.Collections
 
+import kafka.common.TopicAndPartition
 import org.apache.kafka.common.metrics.{MetricConfig, Metrics, Quota}
 import org.apache.kafka.common.utils.MockTime
-import org.junit.Assert.{assertEquals, assertTrue}
+import org.junit.Assert.{assertEquals, assertTrue, assertFalse}
 import org.junit.{Before, Test}
 
 class ClientQuotaManagerTest {
@@ -164,6 +165,23 @@ class ClientQuotaManagerTest {
       clientMetrics.shutdown()
     }
   }
+
+  @Test
+  def shouldThrottleOnlyDefinedReplicas() {
+    val quotaManager = new ClientQuotaManager(config, newMetrics, "consumer", time)
+    quotaManager.updateThrottledPartitions("topic1", Seq(1,2,3))
+
+    //should match if single partition does
+    assertTrue(quotaManager.hasThrottledPartitionsFor(Seq(tp1(1))))
+    //should match if all partitions do
+    assertTrue(quotaManager.hasThrottledPartitionsFor(Seq(tp1(1), tp1(2), tp1(3))))
+    //should not match if no matching partitions
+    assertFalse(quotaManager.hasThrottledPartitionsFor(Seq(tp1(0))))
+  }
+
+
+  def tp1(id: Int): TopicAndPartition = new TopicAndPartition("topic1", id)
+
 
   def newMetrics: Metrics = {
     new Metrics(new MetricConfig(), Collections.emptyList(), time)

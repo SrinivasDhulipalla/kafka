@@ -39,7 +39,7 @@ trait ConfigHandler {
  * The TopicConfigHandler will process topic config changes in ZK.
  * The callback provides the topic name and the full properties set read from ZK
  */
-class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig) extends ConfigHandler with Logging {
+class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, replicationQuotaManager: ClientQuotaManager, val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler with Logging {
 
   def processConfigChanges(topic: String, topicConfig: Properties) {
     // Validate the compatibility of message format version.
@@ -63,6 +63,24 @@ class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaC
       val logConfig = LogConfig(props)
       logs.foreach(_.config = logConfig)
     }
+
+    val brokerId: Int = kafkaConfig.brokerId
+
+    if(topicConfig.containsKey(KafkaConfig.ReplicationQuotaThrottledReplicas)) {
+      val partitions: Seq[Int] = parseThrottledPartitions(topicConfig, brokerId)
+      logger.info("Setting throttled partitions on broker "+brokerId +  " to "+ partitions.map(_.toString))
+      replicationQuotaManager.updateThrottledPartitions(topic, partitions)
+      for(qm <- quotaManagers.values)
+        qm.updateThrottledPartitions(topic, partitions)
+    }
+  }
+
+  def parseThrottledPartitions(topicConfig: Properties, brokerId: Int): Seq[Int] = {
+    val throttlePartitionIds = topicConfig.get(KafkaConfig.ReplicationQuotaThrottledReplicas).toString
+      .split(",")
+      .filter(_.split("-")(1).toInt == brokerId) //match replica
+      .map(_.split("-")(0).toInt).toSeq //match partition
+    throttlePartitionIds
   }
 }
 
@@ -70,6 +88,13 @@ object ClientConfigOverride {
   val ProducerOverride = "producer_byte_rate"
   val ConsumerOverride = "consumer_byte_rate"
 }
+
+//TODO this should be refactored/removed
+object ReplicationConfigOverride {
+  val QuotaOverride = "replication-quota"
+}
+
+
 
 /**
  * The ClientIdConfigHandler will process clientId config changes in ZK.

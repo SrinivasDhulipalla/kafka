@@ -122,6 +122,7 @@ class AbstractFetcherThreadTest {
     override protected def buildFetchRequest(partitionMap: collection.Map[TopicAndPartition, PartitionFetchState]): DummyFetchRequest = {
       new DummyFetchRequest(partitionMap.mapValues(_.offset))
     }
+    def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]){}
   }
 
 }

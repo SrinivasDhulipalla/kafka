@@ -199,7 +199,7 @@ object LogConfig {
   def validateNames(props: Properties) {
     val names = configNames
     for(name <- props.asScala.keys)
-      if (!names.contains(name))
+      if (!names.contains(name) && !name.equals(KafkaConfig.ReplicationQuotaThrottledReplicas)) //TODO DO NOT MERGE - need to work out what to do with this config
         throw new InvalidConfigurationException(s"Unknown configuration $name.")
   }
 

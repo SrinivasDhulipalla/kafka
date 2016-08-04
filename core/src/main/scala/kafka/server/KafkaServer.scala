@@ -225,7 +225,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
 
         /* start dynamic config manager */
         val managers: collection.Map[Short, ClientQuotaManager] = apis.quotaManagers
-        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config),
+        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, replicaManager.replicaFetcherManager.quotaManager, managers),
                                                            ConfigType.Client -> new ClientIdConfigHandler(managers, replicaManager.replicaFetcherManager.quotaManager ))
 
         // Apply all existing client configs to the ClientIdConfigHandler to bootstrap the overrides

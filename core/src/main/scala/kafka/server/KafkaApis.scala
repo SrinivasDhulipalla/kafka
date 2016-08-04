@@ -485,16 +485,15 @@ class KafkaApis(val requestChannel: RequestChannel,
       request.apiRemoteCompleteTimeMs = SystemTime.milliseconds
 
       // Do not throttle replication traffic
+      val quota = quotaManagers(ApiKeys.FETCH.id)
+      val size = FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic), fetchRequest.versionId)
       if (fetchRequest.isFromFollower) {
-        quotaManagers(ApiKeys.FETCH.id).recordAndMaybeThrottle(TempThrottleTypes.leaderThrottleKey,
-          FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),
-            fetchRequest.versionId),
-          fetchResponseCallback)
+        if(quota.hasThrottledPartitionsFor(fetchRequest.requestInfo.keySet.toSeq))
+          quota.recordAndMaybeThrottle(TempThrottleTypes.leaderThrottleKey, size, fetchResponseCallback)
+        else
+          fetchResponseCallback(0)
       } else {
-        quotaManagers(ApiKeys.FETCH.id).recordAndMaybeThrottle(fetchRequest.clientId,
-          FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),
-          fetchRequest.versionId),
-          fetchResponseCallback)
+        quota.recordAndMaybeThrottle(fetchRequest.clientId, size, fetchResponseCallback)
       }
     }
 

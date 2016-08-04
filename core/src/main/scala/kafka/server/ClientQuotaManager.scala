@@ -18,6 +18,7 @@ package kafka.server
 
 import java.util.concurrent.{ConcurrentHashMap, DelayQueue, TimeUnit}
 
+import kafka.common.TopicAndPartition
 import kafka.utils.{ShutdownableThread, Logging}
 import org.apache.kafka.common.MetricName
 import org.apache.kafka.common.metrics._
@@ -77,6 +78,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
                          private val apiKey: String,
                          private val time: Time) extends Logging {
   private val overriddenQuota = new ConcurrentHashMap[String, Quota]()
+  private val throttledPartitions = new ConcurrentHashMap[String, Seq[Int]]()
   private val defaultQuota = Quota.upperBound(config.quotaBytesPerSecondDefault)
   private val lock = new ReentrantReadWriteLock()
   private val delayQueue = new DelayQueue[ThrottledResponse]()
@@ -292,6 +294,19 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
     } finally {
       lock.writeLock().unlock()
     }
+  }
+
+  def updateThrottledPartitions(topic: String, partitions: Seq[Int]) = {
+    logger.info(s"Changing throttled partitions for topic $topic to ${partitions.map(_.toString)}")
+    throttledPartitions.put(topic, partitions)
+  }
+
+  def hasThrottledPartitionsFor(partitions: Seq[TopicAndPartition]): Boolean = {
+    for (p <- partitions)
+      if (throttledPartitions.containsKey(p.topic)
+        && throttledPartitions.get(p.topic).contains(p.partition))
+        return true
+    false
   }
 
   private def clientRateMetricName(clientId: String): MetricName = {

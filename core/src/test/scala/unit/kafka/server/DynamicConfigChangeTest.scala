@@ -147,4 +147,15 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     // Verify that processConfigChanges was only called once
     EasyMock.verify(handler)
   }
+
+  @Test
+  def shouldParseReplicationQuotaProperties {
+    val configHandler: TopicConfigHandler = new TopicConfigHandler(null, null, null, null)
+    val props: Properties = new Properties()
+    props.put(KafkaConfig.ReplicationQuotaThrottledReplicas, "0-101,0-102,1-101,1-102")
+
+    val result: Seq[Int] = configHandler.parseThrottledPartitions(props, 102)
+
+    assertEquals(Seq(0,1), result)
+  }
 }

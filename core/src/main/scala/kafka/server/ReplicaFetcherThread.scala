@@ -143,20 +143,19 @@ class ReplicaFetcherThread(name: String,
         Runtime.getRuntime.halt(1)
     }
 
-    evaluateQuota(partitionData)
   }
 
+  def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]) = {
+    if (quotaManager.hasThrottledPartitionsFor(partitions)) {
+      val throttleTime: Int = quotaManager.recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey, sizeInBytes, null)
 
-  def evaluateQuota(partitionData: PartitionData): Unit = {
-    val throttleTime: Int = quotaManager
-      .recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey,
-        partitionData.toByteBufferMessageSet.sizeInBytes, null)
-
-    if (throttleTime > 0) {
-      println("Throttle engaged so sleeping for "+throttleTime)
-      Thread.sleep(throttleTime)
+      if (throttleTime > 0) {
+        println("Throttle engaged so sleeping for " + throttleTime)
+        Thread.sleep(throttleTime)
+      }
     }
   }
+
 
   def warnIfMessageOversized(messageSet: ByteBufferMessageSet, topicAndPartition: TopicAndPartition): Unit = {
     if (messageSet.sizeInBytes > 0 && messageSet.validBytes <= 0)
