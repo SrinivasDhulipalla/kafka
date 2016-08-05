@@ -60,8 +60,12 @@ object ClientQuotaManagerConfig {
 }
 
 object TempThrottleTypes{
-  val leaderThrottleKey = "leader-internal-replication"
-  val followerThrottleKey = "follower-internal-replication"
+  val leaderThrottleClientId = "leader-internal-replication"
+  val leaderThrottleApiKey: Short = -1
+  val leaderThrottleApiName = leaderThrottleClientId
+  val followerThrottleClientId = "follower-internal-replication"
+  val followerThrottleApiKey: Short = -2
+  val followerThrottleApiName = followerThrottleClientId
 }
 
 /**

@@ -30,8 +30,6 @@ import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.MetricName
-import org.apache.kafka.common.protocol.ApiKeys
-import org.apache.kafka.common.serialization.{BytesSerializer, StringSerializer}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
 
@@ -68,13 +66,13 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     follower = if (leaders(0).get == brokers.head.config.brokerId) brokers(1) else brokers.head
     producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5)
     leaderMetricName = leader.metrics.metricName("throttle-time",
-      ApiKeys.FETCH.name,
+      leaderThrottleApiName,
       "Tracking throttle-time per client",
-      "client-id", leaderThrottleKey)
+      "client-id", leaderThrottleClientId)
     followerMetricName = follower.metrics.metricName("throttle-time",
-      "apikey.throttled.replication",
+      followerThrottleApiName,
       "Tracking throttle-time per client",
-      "client-id", followerThrottleKey)
+      "client-id", followerThrottleClientId)
     replicaProps.clear()
     replicasProps.clear()
   }
@@ -97,7 +95,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //Given only one throttled replica, on the leader
     val throttle: Int = 50 * 1000
     replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, leaderThrottleKey, replicaProps)
+    AdminUtils.changeClientIdConfig(zkUtils, leaderThrottleClientId, replicaProps)
 
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
@@ -123,7 +121,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //Given only one throttled replica, on the follower
     val throttle: Int = 50 * 1000
     replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleKey, replicaProps)
+    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleClientId, replicaProps)
 
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
@@ -153,7 +151,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //Given
     val throttle: Int = 300 * 1000
     replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, leaderThrottleKey, replicaProps)
+    AdminUtils.changeClientIdConfig(zkUtils, leaderThrottleClientId, replicaProps)
 
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
@@ -179,7 +177,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //Given
     val throttle: Int = 300 * 1000
     replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleKey, replicaProps)
+    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleClientId, replicaProps)
 
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
@@ -210,7 +208,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //Given follower throttling only
     val throttle: Int = 50 * 1000
     replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleKey, replicaProps)
+    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleClientId, replicaProps)
 
     //add both leader throttle to partition0
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0

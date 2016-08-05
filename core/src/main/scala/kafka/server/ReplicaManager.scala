@@ -109,7 +109,9 @@ class ReplicaManager(val config: KafkaConfig,
                      scheduler: Scheduler,
                      val logManager: LogManager,
                      val isShuttingDown: AtomicBoolean,
-                     threadNamePrefix: Option[String] = None) extends Logging with KafkaMetricsGroup {
+                     quotaManagers: Map[Short, ClientQuotaManager],
+                     threadNamePrefix: Option[String] = None
+                    ) extends Logging with KafkaMetricsGroup {
   /* epoch of the controller that last changed the leader */
   @volatile var controllerEpoch: Int = KafkaController.InitialControllerEpoch - 1
   private val localBrokerId = config.brokerId
@@ -117,9 +119,8 @@ class ReplicaManager(val config: KafkaConfig,
     new Partition(t, p, time, this)
   })
   private val replicaStateChangeLock = new Object
-  val replicationQuotaManager =  instantiateQuotaManager(config)
-  val replicaFetcherManager = new ReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, replicationQuotaManager)
-  val throttledFetcherManager = new ThrottledReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, replicationQuotaManager)
+  val replicaFetcherManager = new ReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(TempThrottleTypes.followerThrottleApiKey))
+  val throttledFetcherManager = new ThrottledReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(TempThrottleTypes.followerThrottleApiKey))
   private val highWatermarkCheckPointThreadStarted = new AtomicBoolean(false)
   val highWatermarkCheckpoints = config.logDirs.map(dir => (new File(dir).getAbsolutePath, new OffsetCheckpoint(new File(dir, ReplicaManager.HighWatermarkFilename)))).toMap
   private var hwThreadInitialized = false
@@ -133,18 +134,6 @@ class ReplicaManager(val config: KafkaConfig,
     purgatoryName = "Produce", config.brokerId, config.producerPurgatoryPurgeIntervalRequests)
   val delayedFetchPurgatory = DelayedOperationPurgatory[DelayedFetch](
     purgatoryName = "Fetch", config.brokerId, config.fetchPurgatoryPurgeIntervalRequests)
-
-  private def instantiateQuotaManager(cfg: KafkaConfig): ClientQuotaManager = {
-
-    //TODO create dedicated config for replication quotas
-    val replicaQuotaManagerCfg = ClientQuotaManagerConfig(
-      quotaBytesPerSecondDefault = cfg.consumerQuotaBytesPerSecondDefault,
-      numQuotaSamples = cfg.numQuotaSamples,
-      quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
-    )
-    //TODO refactor to support replication as an alternative to the API key
-    new ClientQuotaManager(replicaQuotaManagerCfg, metrics, "apikey.throttled.replication", new org.apache.kafka.common.utils.SystemTime)
-  }
 
   val leaderCount = newGauge(
     "LeaderCount",

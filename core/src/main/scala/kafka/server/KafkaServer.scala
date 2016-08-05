@@ -42,7 +42,7 @@ import org.apache.kafka.common.security.JaasUtils
 import org.apache.kafka.common.utils.AppInfoParser
 
 import scala.collection
-import scala.collection.mutable
+import scala.collection.{Map, mutable}
 import scala.collection.JavaConverters._
 import org.I0Itec.zkclient.ZkClient
 import kafka.controller.{ControllerStats, KafkaController}
@@ -194,9 +194,11 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
         socketServer = new SocketServer(config, metrics, kafkaMetricsTime)
         socketServer.startup()
 
+        val quotaManagers = QuotaManagerFactory.instantiate(config, metrics)
+
         /* start replica manager */
         replicaManager = new ReplicaManager(config, metrics, time, kafkaMetricsTime, zkUtils, kafkaScheduler, logManager,
-          isShuttingDown)
+          isShuttingDown, quotaManagers)
         replicaManager.startup()
 
         /* start kafka controller */
@@ -218,15 +220,14 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
 
         /* start processing requests */
         apis = new KafkaApis(socketServer.requestChannel, replicaManager, adminManager, groupCoordinator,
-          kafkaController, zkUtils, config.brokerId, config, metadataCache, metrics, authorizer)
+          kafkaController, zkUtils, config.brokerId, config, metadataCache, metrics, authorizer, quotaManagers)
         requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, config.numIoThreads)
 
         Mx4jLoader.maybeLoad()
 
         /* start dynamic config manager */ //TODO consolidate quota managers into one list
-        val managers: collection.Map[Short, ClientQuotaManager] = apis.quotaManagers
-        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, replicaManager.replicationQuotaManager, managers),
-                                                           ConfigType.Client -> new ClientIdConfigHandler(managers, replicaManager.replicationQuotaManager ))
+        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, quotaManagers),
+                                                           ConfigType.Client -> new ClientIdConfigHandler(quotaManagers))
 
         // Apply all existing client configs to the ClientIdConfigHandler to bootstrap the overrides
         // TODO: Move this logic to DynamicConfigManager

@@ -39,7 +39,7 @@ trait ConfigHandler {
  * The TopicConfigHandler will process topic config changes in ZK.
  * The callback provides the topic name and the full properties set read from ZK
  */
-class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, replicationQuotaManager: ClientQuotaManager, val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler with Logging {
+class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler with Logging {
 
   def processConfigChanges(topic: String, topicConfig: Properties) {
     // Validate the compatibility of message format version.
@@ -69,9 +69,8 @@ class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaC
     if(topicConfig.containsKey(KafkaConfig.ReplicationQuotaThrottledReplicas)) {
       val partitions: Seq[Int] = parseThrottledPartitions(topicConfig, brokerId)
       logger.info("Setting throttled partitions on broker "+brokerId +  " to "+ partitions.map(_.toString))
-      replicationQuotaManager.throttledReplicas.updateThrottledPartitions(topic, partitions)
-      for(qm <- quotaManagers.values)
-        qm.throttledReplicas.updateThrottledPartitions(topic, partitions)
+      quotaManagers(TempThrottleTypes.leaderThrottleApiKey).throttledReplicas.updateThrottledPartitions(topic, partitions)
+      quotaManagers(TempThrottleTypes.followerThrottleApiKey).throttledReplicas.updateThrottledPartitions(topic, partitions)
     }
   }
 
@@ -101,7 +100,7 @@ object ReplicationConfigOverride {
  * The callback provides the clientId and the full properties set read from ZK.
  * This implementation reports the overrides to the respective ClientQuotaManager objects
  */
-class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaManager], quotaManager: ClientQuotaManager) extends ConfigHandler {
+class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler {
 
   def processConfigChanges(clientId: String, clientConfig: Properties) = {
     if (clientConfig.containsKey(ClientConfigOverride.ProducerOverride)) {
@@ -112,7 +111,11 @@ class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaMan
     if (clientConfig.containsKey(ClientConfigOverride.ConsumerOverride)) {
       quotaManagers(ApiKeys.FETCH.id).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
-      quotaManager.updateQuota(clientId,
+
+      //TODO - these should be moved to broker level configs later
+      quotaManagers(TempThrottleTypes.leaderThrottleApiKey).updateQuota(clientId,
+        new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
+      quotaManagers(TempThrottleTypes.followerThrottleApiKey).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
     }
   }

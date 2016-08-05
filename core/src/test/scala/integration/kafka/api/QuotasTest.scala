@@ -137,16 +137,6 @@ class QuotasTest extends KafkaServerTestHarness {
                                                            "Tracking throttle-time per client",
                                                            "client-id", consumerId1)
     assertTrue("Should have been throttled", allMetrics(consumerMetricName).value() > 0)
-
-
-    //Replicas should also be throttled
-    val internalReplicationClientId = TempThrottleTypes.leaderThrottleKey
-    val replicationMetricsName = leaderNode.metrics.metricName("throttle-time",
-      ApiKeys.FETCH.name,
-      "Tracking throttle-time per client",
-      "client-id", internalReplicationClientId)
-
-    assertTrue("Should have been throttled", allMetrics(replicationMetricsName).value() > 0)
   }
 
   @Test

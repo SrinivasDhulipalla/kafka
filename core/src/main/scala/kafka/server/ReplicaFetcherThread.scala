@@ -149,7 +149,7 @@ class ReplicaFetcherThread(name: String,
 
   def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]) = {
     if (isThrottled && quotaManager.throttledReplicas.throttledPartitionsIncludedIn(partitions)) {
-      val throttleTime = quotaManager.recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey, sizeInBytes, null)
+      val throttleTime = quotaManager.recordAndMaybeThrottle(TempThrottleTypes.followerThrottleClientId, sizeInBytes, null)
 
       if (throttleTime > 0) {
         info("Throttle engaged so sleeping for " + throttleTime)
