@@ -48,7 +48,9 @@ class ReplicaFetcherThread(name: String,
                            replicaMgr: ReplicaManager,
                            metrics: Metrics,
                            time: Time,
-                           quotaManager: ClientQuotaManager)
+                           quotaManager: ClientQuotaManager,
+                           isThrottled: Boolean
+                          )
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
@@ -146,14 +148,16 @@ class ReplicaFetcherThread(name: String,
   }
 
   def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]) = {
-    if (quotaManager.hasThrottledPartitionsFor(partitions)) {
-      val throttleTime: Int = quotaManager.recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey, sizeInBytes, null)
+    if (isThrottled && quotaManager.throttledReplicas.throttledPartitionsIncludedIn(partitions)) {
+      val throttleTime = quotaManager.recordAndMaybeThrottle(TempThrottleTypes.followerThrottleKey, sizeInBytes, null)
 
       if (throttleTime > 0) {
-        println("Throttle engaged so sleeping for " + throttleTime)
+        info("Throttle engaged so sleeping for " + throttleTime)
         Thread.sleep(throttleTime)
       }
     }
+    if(sizeInBytes>0)
+      info("Successfully replicated: "+partitions.map(_.toString) + " with bytes retrieved "+sizeInBytes)
   }
 
 
@@ -283,8 +287,18 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-  protected def buildFetchRequest(partitionMap: Map[TopicAndPartition, PartitionFetchState]): FetchRequest = {
+  protected def buildFetchRequest(pm: Map[TopicAndPartition, PartitionFetchState]): FetchRequest = {
+    info("building fetch request for replication thread for partitions "+pm.keys.map(_.toString))
     val requestMap = mutable.Map.empty[TopicPartition, JFetchRequest.PartitionData]
+
+    var partitionMap: Map[TopicAndPartition, PartitionFetchState] = null
+
+    //TODO refactor this horrible code. Should this be a strategy we pass in?
+    if (isThrottled)
+      partitionMap = pm.filter { case (p, _) => quotaManager.throttledReplicas.isThrottled(p) }
+    else
+      partitionMap = pm.filter { case (p, _) => !quotaManager.throttledReplicas.isThrottled(p) }
+    info("fetch request inclusion altered to: " + partitionMap.keys.map(_.toString))
 
     partitionMap.foreach { case ((TopicAndPartition(topic, partition), partitionFetchState)) =>
       if (partitionFetchState.isActive)

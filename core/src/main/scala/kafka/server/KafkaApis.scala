@@ -488,7 +488,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       val quota = quotaManagers(ApiKeys.FETCH.id)
       val size = FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic), fetchRequest.versionId)
       if (fetchRequest.isFromFollower) {
-        if(quota.hasThrottledPartitionsFor(fetchRequest.requestInfo.keySet.toSeq))
+        if(quota.throttledReplicas.throttledPartitionsIncludedIn(fetchRequest.requestInfo.keySet.toSeq))
           quota.recordAndMaybeThrottle(TempThrottleTypes.leaderThrottleKey, size, fetchResponseCallback)
         else
           fetchResponseCallback(0)

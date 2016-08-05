@@ -223,10 +223,10 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
 
         Mx4jLoader.maybeLoad()
 
-        /* start dynamic config manager */
+        /* start dynamic config manager */ //TODO consolidate quota managers into one list
         val managers: collection.Map[Short, ClientQuotaManager] = apis.quotaManagers
-        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, replicaManager.replicaFetcherManager.quotaManager, managers),
-                                                           ConfigType.Client -> new ClientIdConfigHandler(managers, replicaManager.replicaFetcherManager.quotaManager ))
+        dynamicConfigHandlers = Map[String, ConfigHandler](ConfigType.Topic -> new TopicConfigHandler(logManager, config, replicaManager.replicationQuotaManager, managers),
+                                                           ConfigType.Client -> new ClientIdConfigHandler(managers, replicaManager.replicationQuotaManager ))
 
         // Apply all existing client configs to the ClientIdConfigHandler to bootstrap the overrides
         // TODO: Move this logic to DynamicConfigManager

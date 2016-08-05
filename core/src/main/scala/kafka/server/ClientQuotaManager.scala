@@ -77,12 +77,13 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
                          private val metrics: Metrics,
                          private val apiKey: String,
                          private val time: Time) extends Logging {
+
   private val overriddenQuota = new ConcurrentHashMap[String, Quota]()
-  private val throttledPartitions = new ConcurrentHashMap[String, Seq[Int]]()
   private val defaultQuota = Quota.upperBound(config.quotaBytesPerSecondDefault)
   private val lock = new ReentrantReadWriteLock()
   private val delayQueue = new DelayQueue[ThrottledResponse]()
   val throttledRequestReaper = new ThrottledRequestReaper(delayQueue)
+  val throttledReplicas = new ThrottledReplicaManager()
   throttledRequestReaper.start()
 
   private val delayQueueSensor = metrics.sensor(apiKey + "-delayQueue")
@@ -296,19 +297,6 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
     }
   }
 
-  def updateThrottledPartitions(topic: String, partitions: Seq[Int]) = {
-    logger.info(s"Changing throttled partitions for topic $topic to ${partitions.map(_.toString)}")
-    throttledPartitions.put(topic, partitions)
-  }
-
-  def hasThrottledPartitionsFor(partitions: Seq[TopicAndPartition]): Boolean = {
-    for (p <- partitions)
-      if (throttledPartitions.containsKey(p.topic)
-        && throttledPartitions.get(p.topic).contains(p.partition))
-        return true
-    false
-  }
-
   private def clientRateMetricName(clientId: String): MetricName = {
     metrics.metricName("byte-rate", apiKey,
                    "Tracking byte-rate per client",
@@ -318,4 +306,27 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
   def shutdown() = {
     throttledRequestReaper.shutdown()
   }
+
+  class ThrottledReplicaManager() extends Logging{
+
+    private val throttledPartitions = new ConcurrentHashMap[String, Seq[Int]]()
+
+    def updateThrottledPartitions(topic: String, partitions: Seq[Int]) = {
+      logger.info(s"Changing throttled partitions for topic $topic to ${partitions.map(_.toString)}")
+      throttledPartitions.put(topic, partitions)
+    }
+
+    def throttledPartitionsIncludedIn(partitions: Seq[TopicAndPartition]): Boolean = {
+      for (p <- partitions)
+        if (throttledPartitions.containsKey(p.topic)
+          && throttledPartitions.get(p.topic).contains(p.partition))
+          return true
+      false
+    }
+
+    def isThrottled(tp:TopicAndPartition): Boolean =
+      throttledPartitions.containsKey(tp.topic) && throttledPartitions.get(tp.topic).contains(tp.partition)
+
+  }
+
 }

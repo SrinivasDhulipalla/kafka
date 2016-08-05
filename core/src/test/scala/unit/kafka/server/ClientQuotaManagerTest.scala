@@ -169,14 +169,14 @@ class ClientQuotaManagerTest {
   @Test
   def shouldThrottleOnlyDefinedReplicas() {
     val quotaManager = new ClientQuotaManager(config, newMetrics, "consumer", time)
-    quotaManager.updateThrottledPartitions("topic1", Seq(1,2,3))
+    quotaManager.throttledReplicas.updateThrottledPartitions("topic1", Seq(1,2,3))
 
     //should match if single partition does
-    assertTrue(quotaManager.hasThrottledPartitionsFor(Seq(tp1(1))))
+    assertTrue(quotaManager.throttledReplicas.throttledPartitionsIncludedIn(Seq(tp1(1))))
     //should match if all partitions do
-    assertTrue(quotaManager.hasThrottledPartitionsFor(Seq(tp1(1), tp1(2), tp1(3))))
+    assertTrue(quotaManager.throttledReplicas.throttledPartitionsIncludedIn(Seq(tp1(1), tp1(2), tp1(3))))
     //should not match if no matching partitions
-    assertFalse(quotaManager.hasThrottledPartitionsFor(Seq(tp1(0))))
+    assertFalse(quotaManager.throttledReplicas.throttledPartitionsIncludedIn(Seq(tp1(0))))
   }
 
 

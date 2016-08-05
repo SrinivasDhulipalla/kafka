@@ -30,14 +30,12 @@ import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.MetricName
-import org.apache.kafka.common.metrics.KafkaMetric
 import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.serialization.{BytesSerializer, StringSerializer}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 class ReplicationQuotaTest extends ZooKeeperTestHarness {
   val ERROR: Int = 500
@@ -74,7 +72,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
       "Tracking throttle-time per client",
       "client-id", leaderThrottleKey)
     followerMetricName = follower.metrics.metricName("throttle-time",
-      "apikey.replication",
+      "apikey.throttled.replication",
       "Tracking throttle-time per client",
       "client-id", followerThrottleKey)
     replicaProps.clear()
@@ -130,6 +128,8 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
 
+    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
+
     val start = System.currentTimeMillis()
 
     //When
@@ -141,11 +141,10 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //so we expect a delay of 300K/(50K x10) x 10 = 300K/50K = 6s
     val expectedDuration = (msg800KB.length - throttle * 10) / throttle * 1000
     val throttledTime: Double = follower.metrics.metrics().asScala(followerMetricName).value()
-    assertEquals("Throttle time should be "+expectedDuration,expectedDuration, throttledTime, ERROR)
+    assertEquals("Throttle time should be " + expectedDuration, expectedDuration, throttledTime, ERROR)
 
     //Ensure leader throttle did not enable
     assertFalse(leader.metrics.metrics().containsKey(leaderMetricName))
-
   }
 
   @Test //probably too long and too fragile to check in. gets more accurate the more messages/lower-quota (i.e. longer running)
@@ -185,6 +184,8 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
 
+    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
+
     val start = System.currentTimeMillis()
 
     //When
@@ -199,9 +200,51 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
       expectedDuration, took, expectedDuration * 0.2)
   }
 
+  @Test
+  def shouldReplicateThrottledAndNonThrottledPartitionsConcurrentlyViaSeparateThreadPools() {
+    val topic = "specific-replicas"
+    TestUtils.createTopic(zkUtils, topic,
+      Map(0 -> Seq(0, 1), 1 -> Seq(0, 1)), //partitions both led on server0
+      brokers)
+
+    //Given follower throttling only
+    val throttle: Int = 50 * 1000
+    replicaProps.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, followerThrottleKey, replicaProps)
+
+    //add both leader throttle to partition0
+    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0
+    AdminUtils.changeTopicConfig(zkUtils, topic, replicasProps)
+
+    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
+
+    val start: Long = System.currentTimeMillis()
+
+    //Write a message to each partition (don't wait for replication (acks=1) + use marker message to ensure we wait for 1 follower throttle delay)
+    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, acks=1)
+    producer.send(new ProducerRecord(topic, 1, null, msg800KB)) //should be quick
+    producer.send(new ProducerRecord(topic, 0, null, msg800KB)) //should be throttled
+    producer.send(new ProducerRecord(topic, 1, null, msg1KB)) //marker msg
+    producer.send(new ProducerRecord(topic, 0, null, msg1KB)) //marker msg
+
+    def unthrottledLogsMatch() = logsMatch(new TopicAndPartition(topic, 1))
+    def throttledLogsMatch() = logsMatch(new TopicAndPartition(topic, 0))
+
+    waitUntilTrue(unthrottledLogsMatch, "Broker logs should be identical")
+    val took = System.currentTimeMillis() - start
+    assertTrue("Partition 1 should have replicated quickly: "+took, took < 1000)
+
+    waitUntilTrue(throttledLogsMatch, "Broker logs should be identical")
+    val expectedDuration = (msg800KB.length - throttle * 10) / throttle * 1000
+    assertEquals("The throttled partition should have taken " + expectedDuration, expectedDuration, System.currentTimeMillis() - start, ERROR)
+  }
+
   def logsMatch(): Boolean = {
+    logsMatch(TopicAndPartition(topic1, 0))
+  }
+
+  def logsMatch(topicAndPart: TopicAndPartition): Boolean = {
     var result = true
-    val topicAndPart = TopicAndPartition(topic1, 0)
     val expectedOffset = brokers.head.getLogManager().getLog(topicAndPart).get.logEndOffset
     result = result && expectedOffset > 0 && brokers.forall { item =>
       expectedOffset == item.getLogManager().getLog(topicAndPart).get.logEndOffset
@@ -209,6 +252,4 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     if (result) println("final offset was " + expectedOffset)
     result
   }
-
-
 }
