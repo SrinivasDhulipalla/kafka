@@ -8,12 +8,12 @@ import scala.collection.Map
 object QuotaManagerFactory {
 
   object QuotaType extends Enumeration{
-    val ClientFetch, ClientProduce, LeaderReplication, FollowerReplication = Value
+    val Fetch, Produce, LeaderReplication, FollowerReplication = Value
   }
   /*
    * Returns a Map of all quota managers configured. The request Api key is the key for the Map
    */
-  def instantiate(cfg: KafkaConfig, metrics: Metrics): Map[Short, ClientQuotaManager] = {
+  def instantiate(cfg: KafkaConfig, metrics: Metrics): Map[QuotaType.Value, ClientQuotaManager] = {
     val producerQuotaManagerCfg = ClientQuotaManagerConfig(
       quotaBytesPerSecondDefault = cfg.producerQuotaBytesPerSecondDefault,
       numQuotaSamples = cfg.numQuotaSamples,
@@ -26,15 +26,15 @@ object QuotaManagerFactory {
       quotaWindowSizeSeconds = cfg.quotaWindowSizeSeconds
     )
 
-    val quotaManagers = Map[Short, ClientQuotaManager](
-      ApiKeys.PRODUCE.id ->
-        new ClientQuotaManager(producerQuotaManagerCfg, metrics, ApiKeys.PRODUCE.name, new org.apache.kafka.common.utils.SystemTime),
-      ApiKeys.FETCH.id ->
-        new ClientQuotaManager(consumerQuotaManagerCfg, metrics, ApiKeys.FETCH.name, new org.apache.kafka.common.utils.SystemTime),
-      TempThrottleTypes.leaderThrottleApiKey ->
-        new ClientQuotaManager(consumerQuotaManagerCfg, metrics,  TempThrottleTypes.leaderThrottleApiName, new org.apache.kafka.common.utils.SystemTime),
-      TempThrottleTypes.followerThrottleApiKey ->
-        new ClientQuotaManager(consumerQuotaManagerCfg, metrics,  TempThrottleTypes.followerThrottleApiName, new org.apache.kafka.common.utils.SystemTime)
+    val quotaManagers = Map[QuotaType.Value, ClientQuotaManager](
+      QuotaType.Produce ->
+        new ClientQuotaManager(producerQuotaManagerCfg, metrics, QuotaType.Produce.toString, new org.apache.kafka.common.utils.SystemTime),
+      QuotaType.Fetch ->
+        new ClientQuotaManager(consumerQuotaManagerCfg, metrics, QuotaType.Fetch.toString, new org.apache.kafka.common.utils.SystemTime),
+      QuotaType.LeaderReplication ->
+        new ClientQuotaManager(consumerQuotaManagerCfg, metrics,  QuotaType.LeaderReplication.toString, new org.apache.kafka.common.utils.SystemTime),
+      QuotaType.FollowerReplication ->
+        new ClientQuotaManager(consumerQuotaManagerCfg, metrics,   QuotaType.FollowerReplication.toString, new org.apache.kafka.common.utils.SystemTime)
     )
     quotaManagers
   }

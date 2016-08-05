@@ -59,15 +59,6 @@ object ClientQuotaManagerConfig {
   val InactiveSensorExpirationTimeSeconds  = 3600
 }
 
-object TempThrottleTypes{
-  val leaderThrottleClientId = "leader-internal-replication"
-  val leaderThrottleApiKey: Short = -1
-  val leaderThrottleApiName = leaderThrottleClientId
-  val followerThrottleClientId = "follower-internal-replication"
-  val followerThrottleApiKey: Short = -2
-  val followerThrottleApiName = followerThrottleClientId
-}
-
 /**
  * Helper class that records per-client metrics. It is also responsible for maintaining Quota usage statistics
  * for all clients.

@@ -28,6 +28,8 @@ import kafka.controller.KafkaController
 import kafka.log.{LogAppendInfo, LogManager}
 import kafka.message.{ByteBufferMessageSet, InvalidMessageException, Message, MessageSet}
 import kafka.metrics.KafkaMetricsGroup
+import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaManagerFactory.QuotaType._
 import kafka.utils._
 import org.apache.kafka.common.errors.{ControllerMovedException, CorruptRecordException, InvalidTimestampException,
                                         InvalidTopicException, NotLeaderForPartitionException, OffsetOutOfRangeException,
@@ -109,7 +111,7 @@ class ReplicaManager(val config: KafkaConfig,
                      scheduler: Scheduler,
                      val logManager: LogManager,
                      val isShuttingDown: AtomicBoolean,
-                     quotaManagers: Map[Short, ClientQuotaManager],
+                     quotaManagers: Map[QuotaType.Value, ClientQuotaManager],
                      threadNamePrefix: Option[String] = None
                     ) extends Logging with KafkaMetricsGroup {
   /* epoch of the controller that last changed the leader */
@@ -119,8 +121,8 @@ class ReplicaManager(val config: KafkaConfig,
     new Partition(t, p, time, this)
   })
   private val replicaStateChangeLock = new Object
-  val replicaFetcherManager = new ReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(TempThrottleTypes.followerThrottleApiKey))
-  val throttledFetcherManager = new ThrottledReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(TempThrottleTypes.followerThrottleApiKey))
+  val replicaFetcherManager = new ReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(FollowerReplication))
+  val throttledFetcherManager = new ThrottledReplicaFetcherManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(FollowerReplication))
   private val highWatermarkCheckPointThreadStarted = new AtomicBoolean(false)
   val highWatermarkCheckpoints = config.logDirs.map(dir => (new File(dir).getAbsolutePath, new OffsetCheckpoint(new File(dir, ReplicaManager.HighWatermarkFilename)))).toMap
   private var hwThreadInitialized = false

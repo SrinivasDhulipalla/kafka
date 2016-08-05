@@ -21,6 +21,7 @@ import java.util.Properties
 
 import kafka.api.ApiVersion
 import kafka.log.{LogConfig, LogManager}
+import kafka.server.QuotaManagerFactory.QuotaType
 import kafka.utils.Logging
 import org.apache.kafka.common.metrics.Quota
 import org.apache.kafka.common.protocol.ApiKeys
@@ -39,7 +40,7 @@ trait ConfigHandler {
  * The TopicConfigHandler will process topic config changes in ZK.
  * The callback provides the topic name and the full properties set read from ZK
  */
-class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler with Logging {
+class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, val quotaManagers: Map[QuotaType.Value, ClientQuotaManager]) extends ConfigHandler with Logging {
 
   def processConfigChanges(topic: String, topicConfig: Properties) {
     // Validate the compatibility of message format version.
@@ -69,8 +70,8 @@ class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaC
     if(topicConfig.containsKey(KafkaConfig.ReplicationQuotaThrottledReplicas)) {
       val partitions: Seq[Int] = parseThrottledPartitions(topicConfig, brokerId)
       logger.info("Setting throttled partitions on broker "+brokerId +  " to "+ partitions.map(_.toString))
-      quotaManagers(TempThrottleTypes.leaderThrottleApiKey).throttledReplicas.updateThrottledPartitions(topic, partitions)
-      quotaManagers(TempThrottleTypes.followerThrottleApiKey).throttledReplicas.updateThrottledPartitions(topic, partitions)
+      quotaManagers(QuotaType.LeaderReplication).throttledReplicas.updateThrottledPartitions(topic, partitions)
+      quotaManagers(QuotaType.FollowerReplication).throttledReplicas.updateThrottledPartitions(topic, partitions)
     }
   }
 
@@ -100,22 +101,22 @@ object ReplicationConfigOverride {
  * The callback provides the clientId and the full properties set read from ZK.
  * This implementation reports the overrides to the respective ClientQuotaManager objects
  */
-class ClientIdConfigHandler(private val quotaManagers: Map[Short, ClientQuotaManager]) extends ConfigHandler {
+class ClientIdConfigHandler(private val quotaManagers: Map[QuotaType.Value, ClientQuotaManager]) extends ConfigHandler {
 
   def processConfigChanges(clientId: String, clientConfig: Properties) = {
     if (clientConfig.containsKey(ClientConfigOverride.ProducerOverride)) {
-      quotaManagers(ApiKeys.PRODUCE.id).updateQuota(clientId,
+      quotaManagers(QuotaType.Produce).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ProducerOverride).toLong, true))
     }
 
     if (clientConfig.containsKey(ClientConfigOverride.ConsumerOverride)) {
-      quotaManagers(ApiKeys.FETCH.id).updateQuota(clientId,
+      quotaManagers(QuotaType.Fetch).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
 
       //TODO - these should be moved to broker level configs later
-      quotaManagers(TempThrottleTypes.leaderThrottleApiKey).updateQuota(clientId,
+      quotaManagers(QuotaType.LeaderReplication).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
-      quotaManagers(TempThrottleTypes.followerThrottleApiKey).updateQuota(clientId,
+      quotaManagers(QuotaType.FollowerReplication).updateQuota(clientId,
         new Quota(clientConfig.getProperty(ClientConfigOverride.ConsumerOverride).toLong, true))
     }
   }

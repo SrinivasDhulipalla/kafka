@@ -24,6 +24,8 @@ import java.util.Properties
 import kafka.admin.{AdminUtils, RackAwareMode}
 import kafka.api._
 import kafka.cluster.Partition
+import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaManagerFactory.QuotaType._
 import kafka.{server, common}
 import kafka.common._
 import kafka.controller.KafkaController
@@ -61,7 +63,7 @@ class KafkaApis(val requestChannel: RequestChannel,
                 val metadataCache: MetadataCache,
                 val metrics: Metrics,
                 val authorizer: Option[Authorizer],
-                val quotaManagers: Map[Short,ClientQuotaManager]) extends Logging {
+                val quotaManagers: Map[Value,ClientQuotaManager]) extends Logging {
 
   this.logIdent = "[KafkaApi-%d] ".format(brokerId)
   // Store all the quota managers for each type of request
@@ -392,7 +394,7 @@ class KafkaApis(val requestChannel: RequestChannel,
       // When this callback is triggered, the remote API call has completed
       request.apiRemoteCompleteTimeMs = SystemTime.milliseconds
 
-      quotaManagers(ApiKeys.PRODUCE.id).recordAndMaybeThrottle(
+      quotaManagers(Produce).recordAndMaybeThrottle(
         request.header.clientId,
         numBytesAppended,
         produceResponseCallback)
@@ -488,13 +490,13 @@ class KafkaApis(val requestChannel: RequestChannel,
 
       val size = FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic), fetchRequest.versionId)
       if (fetchRequest.isFromFollower) {
-        val quota = quotaManagers(TempThrottleTypes.leaderThrottleApiKey)
+        val quota = quotaManagers(LeaderReplication)
         if(quota.throttledReplicas.throttledPartitionsIncludedIn(fetchRequest.requestInfo.keySet.toSeq))
-          quota.recordAndMaybeThrottle(TempThrottleTypes.leaderThrottleClientId, size, fetchResponseCallback)
+          quota.recordAndMaybeThrottle(LeaderReplication.toString, size, fetchResponseCallback)
         else
           fetchResponseCallback(0)
       } else {
-        val quota = quotaManagers(ApiKeys.FETCH.id)
+        val quota = quotaManagers(Fetch)
         quota.recordAndMaybeThrottle(fetchRequest.clientId, size, fetchResponseCallback)
       }
     }
