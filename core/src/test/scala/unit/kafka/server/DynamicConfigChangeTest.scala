@@ -18,7 +18,7 @@ package kafka.server
 
 import java.util.Properties
 
-import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType
 import org.apache.kafka.common.protocol.ApiKeys
 import org.junit.Assert._
 import org.apache.kafka.common.metrics.Quota

@@ -5,7 +5,7 @@ import org.apache.kafka.common.protocol.ApiKeys
 
 import scala.collection.Map
 
-object QuotaManagerFactory {
+object QuotaFactory {
 
   object QuotaType extends Enumeration{
     val Fetch, Produce, LeaderReplication, FollowerReplication = Value

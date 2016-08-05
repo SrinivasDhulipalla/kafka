@@ -21,7 +21,7 @@ import java.util.Properties
 
 import kafka.api.ApiVersion
 import kafka.log.{LogConfig, LogManager}
-import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType
 import kafka.utils.Logging
 import org.apache.kafka.common.metrics.Quota
 import org.apache.kafka.common.protocol.ApiKeys

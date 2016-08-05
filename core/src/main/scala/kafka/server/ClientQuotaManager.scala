@@ -73,7 +73,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
                          private val apiKey: String,
                          private val time: Time) extends Logging {
 
-  private val overriddenQuota = new ConcurrentHashMap[String, Quota]()
+  val overriddenQuota = new ConcurrentHashMap[String, Quota]()
   private val defaultQuota = Quota.upperBound(config.quotaBytesPerSecondDefault)
   private val lock = new ReentrantReadWriteLock()
   private val delayQueue = new DelayQueue[ThrottledResponse]()
@@ -321,7 +321,6 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
 
     def isThrottled(tp:TopicAndPartition): Boolean =
       throttledPartitions.containsKey(tp.topic) && throttledPartitions.get(tp.topic).contains(tp.partition)
-
   }
 
 }

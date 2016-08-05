@@ -19,7 +19,7 @@ import java.util.Properties
 import kafka.admin.AdminUtils
 import kafka.consumer.SimpleConsumer
 import kafka.integration.KafkaServerTestHarness
-import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType
 import kafka.server._
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}

@@ -23,8 +23,8 @@ import kafka.admin.AdminUtils
 import kafka.common._
 import kafka.server.ClientConfigOverride._
 import kafka.server.KafkaConfig._
-import kafka.server.QuotaManagerFactory.QuotaType
-import kafka.server.QuotaManagerFactory.QuotaType._
+import kafka.server.QuotaFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType._
 import kafka.server._
 import kafka.utils.TestUtils
 import kafka.utils.TestUtils._
@@ -33,6 +33,7 @@ import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.MetricName
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
+import org.hamcrest.core.Is.is
 
 import scala.collection.JavaConverters._
 
@@ -183,7 +184,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
 
-    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
+    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility
 
     val start = System.currentTimeMillis()
 
@@ -214,33 +215,41 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //add both leader throttle to partition0
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0
     AdminUtils.changeTopicConfig(zkUtils, topic, replicasProps)
+    waitForConfigToPropagate(topic)
 
-    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
 
+    Thread.sleep(1000) //until we have linearisibility we'll need to wait the purgatory period
     val start: Long = System.currentTimeMillis()
 
-    //Write a message to each partition (don't wait for replication (acks=1) + use marker message to ensure we wait for 1 follower throttle delay)
-    producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, acks = 1)
-    producer.send(new ProducerRecord(topic, 1, null, msg800KB)) //should be quick
-    producer.send(new ProducerRecord(topic, 0, null, msg800KB)) //should be throttled
+    //Write a message to each partition (wait for replication so we know two batches are replicated (acks=-1) so we get a delay between them when throttled)
+    val producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, acks = 1)
+    producer.send(new ProducerRecord(topic, 0, null, msg800KB)).get //should be quick
+    producer.send(new ProducerRecord(topic, 0, null, msg1KB)).get //marker msg
+    producer.send(new ProducerRecord(topic, 1, null, msg800KB)).get //should be throttled
     producer.send(new ProducerRecord(topic, 1, null, msg1KB)) //marker msg
-    producer.send(new ProducerRecord(topic, 0, null, msg1KB)) //marker msg
 
-    def logsMatchP1() = logsMatch(new TopicAndPartition(topic, 1))
-    def logsMatchP2() = logsMatch(new TopicAndPartition(topic, 0))
 
-    waitUntilTrue(logsMatchP1, "Broker logs should be identical")
+    def logsMatchP1() = waitForOffset(new TopicAndPartition(topic, 1), 2)
+    def logsMatchP0() = waitForOffset(new TopicAndPartition(topic, 0), 2)
+
+    waitUntilTrue(logsMatchP1, "Broker logs should contain 2 messages")
     val took = System.currentTimeMillis() - start
     assertTrue("Partition 1 should have replicated quickly: " + took, took < 1000)
 
-    waitUntilTrue(logsMatchP2, "Broker logs should be identical")
+    waitUntilTrue(logsMatchP0, "Broker logs should contain 2 messages")
     val expectedDuration = (msg800KB.length - throttle * 10) / throttle * 1000
-    assertEquals("The throttled partition should have taken " + expectedDuration, expectedDuration, System.currentTimeMillis() - start, ERROR)
+    assertTrue(System.currentTimeMillis() - start > expectedDuration * 0.9)
   }
 
-  def logsMatch(): Boolean = {
-    logsMatch(TopicAndPartition(topic1, 0))
+
+  def waitForConfigToPropagate(topic: String): Boolean = {
+    def configPropagated(): Boolean = {
+      brokers(1).quotaManagers(FollowerReplication).throttledReplicas.isThrottled(new TopicAndPartition(topic, 0)) && brokers(1).quotaManagers(FollowerReplication).overriddenQuota.containsKey(FollowerReplication.toString)
+    }
+    waitUntilTrue(configPropagated, "")
   }
+
+  def logsMatch(): Boolean = logsMatch(TopicAndPartition(topic1, 0))
 
   def logsMatch(topicAndPart: TopicAndPartition): Boolean = {
     var result = true
@@ -248,7 +257,16 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     result = result && expectedOffset > 0 && brokers.forall { item =>
       expectedOffset == item.getLogManager().getLog(topicAndPart).get.logEndOffset
     }
-    if (result) println("final offset was " + expectedOffset)
+    if (result) println("final offset was " + expectedOffset + " for partition " + topicAndPart)
+    result
+  }
+
+  def waitForOffset(topicAndPart: TopicAndPartition, offset: Int): Boolean = {
+    var result = true
+    result = result && brokers.forall { item =>
+      offset == item.getLogManager().getLog(topicAndPart).get.logEndOffset
+    }
+    if (result) println("final offset was " + offset + " for partition " + topicAndPart)
     result
   }
 }

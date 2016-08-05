@@ -30,6 +30,7 @@ import atomic.{AtomicInteger, AtomicBoolean}
 import java.io.{IOException, File}
 
 import kafka.security.auth.Authorizer
+import kafka.server.QuotaFactory.QuotaType
 import kafka.utils._
 import org.apache.kafka.clients.{ManualMetadataUpdater, ClientRequest, NetworkClient}
 import org.apache.kafka.common.Node
@@ -133,6 +134,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
 
   var kafkaHealthcheck: KafkaHealthcheck = null
   var metadataCache: MetadataCache = null
+  var quotaManagers:  Map[QuotaType.Value, ClientQuotaManager] = null
 
   var zkUtils: ZkUtils = null
   val correlationId: AtomicInteger = new AtomicInteger(0)
@@ -172,6 +174,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
       val canStartup = isStartingUp.compareAndSet(false, true)
       if (canStartup) {
         metrics = new Metrics(metricConfig, reporters, kafkaMetricsTime, true)
+        quotaManagers = QuotaFactory.instantiate(config, metrics)
 
         brokerState.newState(Starting)
 
@@ -193,8 +196,6 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePr
 
         socketServer = new SocketServer(config, metrics, kafkaMetricsTime)
         socketServer.startup()
-
-        val quotaManagers = QuotaManagerFactory.instantiate(config, metrics)
 
         /* start replica manager */
         replicaManager = new ReplicaManager(config, metrics, time, kafkaMetricsTime, zkUtils, kafkaScheduler, logManager,

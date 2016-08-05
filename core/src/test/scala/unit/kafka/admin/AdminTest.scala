@@ -16,7 +16,7 @@
  */
 package kafka.admin
 
-import kafka.server.QuotaManagerFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType
 import org.apache.kafka.common.errors.{InvalidReplicaAssignmentException, InvalidReplicationFactorException, InvalidTopicException, TopicExistsException}
 import org.apache.kafka.common.metrics.Quota
 import org.apache.kafka.common.protocol.ApiKeys

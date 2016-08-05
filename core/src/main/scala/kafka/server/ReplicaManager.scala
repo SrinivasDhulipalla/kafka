@@ -28,8 +28,8 @@ import kafka.controller.KafkaController
 import kafka.log.{LogAppendInfo, LogManager}
 import kafka.message.{ByteBufferMessageSet, InvalidMessageException, Message, MessageSet}
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.QuotaManagerFactory.QuotaType
-import kafka.server.QuotaManagerFactory.QuotaType._
+import kafka.server.QuotaFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType._
 import kafka.utils._
 import org.apache.kafka.common.errors.{ControllerMovedException, CorruptRecordException, InvalidTimestampException,
                                         InvalidTopicException, NotLeaderForPartitionException, OffsetOutOfRangeException,

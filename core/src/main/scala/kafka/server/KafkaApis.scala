@@ -24,8 +24,8 @@ import java.util.Properties
 import kafka.admin.{AdminUtils, RackAwareMode}
 import kafka.api._
 import kafka.cluster.Partition
-import kafka.server.QuotaManagerFactory.QuotaType
-import kafka.server.QuotaManagerFactory.QuotaType._
+import kafka.server.QuotaFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType._
 import kafka.{server, common}
 import kafka.common._
 import kafka.controller.KafkaController

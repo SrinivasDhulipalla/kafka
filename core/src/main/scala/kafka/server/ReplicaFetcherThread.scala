@@ -26,8 +26,8 @@ import kafka.message.ByteBufferMessageSet
 import kafka.api.{KAFKA_0_10_0_IV0, KAFKA_0_9_0}
 import kafka.common.{KafkaStorageException, TopicAndPartition}
 import ReplicaFetcherThread._
-import kafka.server.QuotaManagerFactory.QuotaType
-import kafka.server.QuotaManagerFactory.QuotaType._
+import kafka.server.QuotaFactory.QuotaType
+import kafka.server.QuotaFactory.QuotaType._
 
 //import kafka.server.TempThrottleTypes._
 import org.apache.kafka.clients.{ManualMetadataUpdater, NetworkClient, ClientRequest, ClientResponse}
@@ -151,6 +151,9 @@ class ReplicaFetcherThread(name: String,
   }
 
   def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]) = {
+    if(sizeInBytes>0)
+      info("Successfully replicated: "+partitions.map(_.toString) + " with bytes retrieved "+sizeInBytes)
+
     if (isThrottled && quotaManager.throttledReplicas.throttledPartitionsIncludedIn(partitions)) {
       val throttleTime = quotaManager.recordAndMaybeThrottle(FollowerReplication.toString, sizeInBytes, null)
 
@@ -159,8 +162,7 @@ class ReplicaFetcherThread(name: String,
         Thread.sleep(throttleTime)
       }
     }
-    if(sizeInBytes>0)
-      info("Successfully replicated: "+partitions.map(_.toString) + " with bytes retrieved "+sizeInBytes)
+
   }
 
 
