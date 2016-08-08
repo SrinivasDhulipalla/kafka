@@ -27,8 +27,15 @@ import kafka.common.TopicAndPartition
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.Utils
 
-abstract class AbstractFetcherManager(protected val name: String, clientId: String, numFetchers: Int = 1)
-  extends Logging with KafkaMetricsGroup {
+trait FetcherManager{
+  def removeFetcherForPartitions(partitions: Set[TopicAndPartition])
+  def addFetcherForPartitions(partitionAndOffsets: Map[TopicAndPartition, BrokerAndInitialOffset])
+  def shutdownIdleFetcherThreads()
+  def closeAllFetchers()
+}
+
+abstract class AbstractFetcherManager(protected val name: String, protected val clientId: String, numFetchers: Int = 1)
+  extends Logging with KafkaMetricsGroup with FetcherManager {
   // map of (source broker_id, fetcher_id per source broker) => fetcher
   private val fetcherThreadMap = new mutable.HashMap[BrokerAndFetcherId, AbstractFetcherThread]
   private val mapLock = new Object

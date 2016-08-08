@@ -241,7 +241,6 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     assertTrue(System.currentTimeMillis() - start > expectedDuration * 0.9)
   }
 
-
   def waitForConfigToPropagate(topic: String): Boolean = {
     def configPropagated(): Boolean = {
       brokers(1).quotaManagers(FollowerReplication).throttledReplicas.isThrottled(new TopicAndPartition(topic, 0)) && brokers(1).quotaManagers(FollowerReplication).overriddenQuota.containsKey(FollowerReplication.toString)
