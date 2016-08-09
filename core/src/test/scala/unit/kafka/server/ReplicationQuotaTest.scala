@@ -25,11 +25,11 @@ import kafka.server.ClientConfigOverride._
 import kafka.server.KafkaConfig._
 import kafka.server.QuotaFactory.QuotaType._
 import kafka.server._
-import kafka.utils.TestUtils
+import kafka.utils.{CoreUtils, TestUtils}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
-import org.apache.kafka.common.MetricName
+import org.apache.kafka.common.{KafkaException, MetricName}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
 
@@ -126,10 +126,6 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
 
-    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility TODO remove
-
-    val start = System.currentTimeMillis()
-
     //When
     producer.send(new ProducerRecord(topic1, msg800KB)).get
     waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
@@ -167,7 +163,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     val expectedDuration = msg1KB.length * 8000 / throttle * 1000
     val took: Long = System.currentTimeMillis() - start
     val desc = "Took: " + took + "ms and should have taken: " + expectedDuration
-    println(desc)
+    info(desc)
     assertEquals(desc, expectedDuration, took, expectedDuration * 0.2)
   }
 
@@ -181,8 +177,6 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
     AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
-
-    Thread.sleep(1000) //only needed whilst we don't ensure linearisibility
 
     val start = System.currentTimeMillis()
 
@@ -214,8 +208,6 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0
     AdminUtils.changeTopicConfig(zkUtils, topic, replicasProps)
 
-
-    Thread.sleep(1000) //until we have linearisibility we'll need to wait the purgatory period
     val start: Long = System.currentTimeMillis()
 
     //Write a message to each partition (wait for replication so we know two batches are replicated (acks=-1) so we get a delay between them when throttled)
@@ -253,7 +245,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     result = result && expectedOffset > 0 && brokers.forall { item =>
       expectedOffset == item.getLogManager().getLog(topicAndPart).get.logEndOffset
     }
-    if (result) println("final offset was " + expectedOffset + " for partition " + topicAndPart)
+    if (result) info("final offset was " + expectedOffset + " for partition " + topicAndPart)
     result
   }
 
@@ -262,7 +254,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     result = result && brokers.forall { item =>
       offset == item.getLogManager().getLog(topicAndPart).get.logEndOffset
     }
-    if (result) println("final offset was " + offset + " for partition " + topicAndPart)
+    if (result) info("final offset was " + offset + " for partition " + topicAndPart)
     result
   }
 }
