@@ -18,6 +18,7 @@
 package kafka.server
 
 import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 
 import kafka.admin.AdminUtils
 import kafka.cluster.BrokerEndPoint
@@ -26,21 +27,17 @@ import kafka.message.ByteBufferMessageSet
 import kafka.api.{KAFKA_0_10_0_IV0, KAFKA_0_9_0}
 import kafka.common.{KafkaStorageException, TopicAndPartition}
 import ReplicaFetcherThread._
-import kafka.server.QuotaFactory.QuotaType
 import kafka.server.QuotaFactory.QuotaType._
 
-//import kafka.server.TempThrottleTypes._
 import org.apache.kafka.clients.{ManualMetadataUpdater, NetworkClient, ClientRequest, ClientResponse}
 import org.apache.kafka.common.network.{LoginType, Selectable, ChannelBuilders, NetworkReceive, Selector, Mode}
 import org.apache.kafka.common.requests.{ListOffsetResponse, FetchResponse, RequestSend, AbstractRequest, ListOffsetRequest}
 import org.apache.kafka.common.requests.{FetchRequest => JFetchRequest}
-import org.apache.kafka.common.security.ssl.SslFactory
 import org.apache.kafka.common.{Node, TopicPartition}
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.{Errors, ApiKeys}
 import org.apache.kafka.common.utils.Time
-
-//import scala.RuntimeException
+import kafka.utils.CoreUtils.inLock
 import scala.collection.{JavaConverters, Map, mutable}
 import JavaConverters._
 
@@ -51,8 +48,7 @@ class ReplicaFetcherThread(name: String,
                            replicaMgr: ReplicaManager,
                            metrics: Metrics,
                            time: Time,
-                           quotaManager: ClientQuotaManager,
-                           isThrottled: Boolean
+                           quotaManager: ClientQuotaManager
                           )
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
@@ -151,18 +147,15 @@ class ReplicaFetcherThread(name: String,
   }
 
   def postProcess(sizeInBytes: Int, partitions: Seq[TopicAndPartition]) = {
-    if(sizeInBytes>0)
-      info("Successfully replicated: "+partitions.map(_.toString) + " with bytes retrieved "+sizeInBytes)
-
-    if (isThrottled && quotaManager.throttledReplicas.throttledPartitionsIncludedIn(partitions)) {
+    if (sizeInBytes > 0 && quotaManager != null) {
       val throttleTime = quotaManager.recordAndMaybeThrottle(FollowerReplication.toString, sizeInBytes, null)
-
       if (throttleTime > 0) {
-        info("Throttle engaged so sleeping for " + throttleTime)
-        Thread.sleep(throttleTime)
+        info("Throttle engaged. Pausing thread for " + throttleTime + "ms")
+        inLock(partitionMapLock){
+          partitionMapCond.await(throttleTime, TimeUnit.MILLISECONDS)
+        }
       }
     }
-
   }
 
 
@@ -292,18 +285,8 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-  protected def buildFetchRequest(pm: Map[TopicAndPartition, PartitionFetchState]): FetchRequest = {
-    info("building fetch request for replication thread for partitions "+pm.keys.map(_.toString))
+  protected def buildFetchRequest(partitionMap: Map[TopicAndPartition, PartitionFetchState]): FetchRequest = {
     val requestMap = mutable.Map.empty[TopicPartition, JFetchRequest.PartitionData]
-
-    var partitionMap: Map[TopicAndPartition, PartitionFetchState] = null
-
-    //TODO refactor this horrible code. Should this be a strategy we pass in?
-    if (isThrottled)
-      partitionMap = pm.filter { case (p, _) => quotaManager.throttledReplicas.isThrottled(p) }
-    else
-      partitionMap = pm.filter { case (p, _) => !quotaManager.throttledReplicas.isThrottled(p) }
-    info("fetch request inclusion altered to: " + partitionMap.keys.map(_.toString))
 
     partitionMap.foreach { case ((TopicAndPartition(topic, partition), partitionFetchState)) =>
       if (partitionFetchState.isActive)

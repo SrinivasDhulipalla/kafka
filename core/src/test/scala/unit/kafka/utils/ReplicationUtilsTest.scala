@@ -18,7 +18,7 @@
 package kafka.utils
 
 import kafka.controller.LeaderIsrAndControllerEpoch
-import kafka.server.{ReplicaThreadpoolManager, ReplicaFetcherManager, KafkaConfig}
+import kafka.server.{ReplicaThrottleManager, ReplicaFetcherManager, KafkaConfig}
 import kafka.api.LeaderAndIsr
 import kafka.zk.ZooKeeperTestHarness
 import kafka.common.TopicAndPartition
@@ -65,7 +65,7 @@ class ReplicationUtilsTest extends ZooKeeperTestHarness {
     val replicaManager = EasyMock.createMock(classOf[kafka.server.ReplicaManager])
     EasyMock.expect(replicaManager.config).andReturn(configs.head)
     EasyMock.expect(replicaManager.logManager).andReturn(logManager)
-    EasyMock.expect(replicaManager.replicaFetcherManager).andReturn(EasyMock.createMock(classOf[ReplicaThreadpoolManager]))
+    EasyMock.expect(replicaManager.replicaFetcherManager).andReturn(EasyMock.createMock(classOf[ReplicaThrottleManager]))
     EasyMock.expect(replicaManager.zkUtils).andReturn(zkUtils)
     EasyMock.replay(replicaManager)
 

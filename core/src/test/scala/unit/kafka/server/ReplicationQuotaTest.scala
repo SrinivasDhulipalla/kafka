@@ -23,7 +23,6 @@ import kafka.admin.AdminUtils
 import kafka.common._
 import kafka.server.ClientConfigOverride._
 import kafka.server.KafkaConfig._
-import kafka.server.QuotaFactory.QuotaType
 import kafka.server.QuotaFactory.QuotaType._
 import kafka.server._
 import kafka.utils.TestUtils
@@ -33,12 +32,11 @@ import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.MetricName
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
-import org.hamcrest.core.Is.is
 
 import scala.collection.JavaConverters._
 
 class ReplicationQuotaTest extends ZooKeeperTestHarness {
-  val ERROR: Int = 500
+  val ERROR: Int = 1000
   val msg1KB = new Array[Byte](1000)
   val msg800KB = new Array[Byte](800 * 1000)
   var brokers: Seq[KafkaServer] = null
@@ -203,7 +201,7 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
   @Test
   def shouldReplicateThrottledAndNonThrottledPartitionsConcurrentlyViaSeparateThreadPools() {
     val topic = "specific-replicas"
-    TestUtils.createTopic(zkUtils, topic,
+    val leaders: Map[Int, Option[Int]] = TestUtils.createTopic(zkUtils, topic,
       Map(0 -> Seq(0, 1), 1 -> Seq(0, 1)), //partitions both led on server0
       brokers)
 
@@ -215,7 +213,6 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
     //add both leader throttle to partition0
     replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0
     AdminUtils.changeTopicConfig(zkUtils, topic, replicasProps)
-    waitForConfigToPropagate(topic)
 
 
     Thread.sleep(1000) //until we have linearisibility we'll need to wait the purgatory period
@@ -223,9 +220,9 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Write a message to each partition (wait for replication so we know two batches are replicated (acks=-1) so we get a delay between them when throttled)
     val producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, acks = 1)
-    producer.send(new ProducerRecord(topic, 0, null, msg800KB)).get //should be quick
+    producer.send(new ProducerRecord(topic, 0, null, msg800KB)).get //should be throttled
     producer.send(new ProducerRecord(topic, 0, null, msg1KB)).get //marker msg
-    producer.send(new ProducerRecord(topic, 1, null, msg800KB)).get //should be throttled
+    producer.send(new ProducerRecord(topic, 1, null, msg800KB)).get //should be fast
     producer.send(new ProducerRecord(topic, 1, null, msg1KB)) //marker msg
 
 

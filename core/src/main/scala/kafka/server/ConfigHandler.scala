@@ -40,7 +40,7 @@ trait ConfigHandler {
  * The TopicConfigHandler will process topic config changes in ZK.
  * The callback provides the topic name and the full properties set read from ZK
  */
-class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, val quotaManagers: Map[QuotaType.Value, ClientQuotaManager]) extends ConfigHandler with Logging {
+class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaConfig, val quotaManagers: Map[QuotaType.Value, ClientQuotaManager], throttledFetcherManager: ReplicaThrottleManager) extends ConfigHandler with Logging {
 
   def processConfigChanges(topic: String, topicConfig: Properties) {
     // Validate the compatibility of message format version.
@@ -71,7 +71,7 @@ class TopicConfigHandler(private val logManager: LogManager, kafkaConfig: KafkaC
       val partitions: Seq[Int] = parseThrottledPartitions(topicConfig, brokerId)
       logger.info("Setting throttled partitions on broker "+brokerId +  " to "+ partitions.map(_.toString))
       quotaManagers(QuotaType.LeaderReplication).throttledReplicas.updateThrottledPartitions(topic, partitions)
-      quotaManagers(QuotaType.FollowerReplication).throttledReplicas.updateThrottledPartitions(topic, partitions)
+      throttledFetcherManager.updateThrottledPartitions(topic, partitions)
     }
   }
 

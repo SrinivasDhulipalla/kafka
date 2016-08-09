@@ -49,8 +49,8 @@ abstract class AbstractFetcherThread(name: String,
   type PD <: PartitionData
 
   private val partitionMap = new mutable.HashMap[TopicAndPartition, PartitionFetchState] // a (topic, partition) -> partitionFetchState map
-  private val partitionMapLock = new ReentrantLock
-  private val partitionMapCond = partitionMapLock.newCondition()
+  protected val partitionMapLock = new ReentrantLock
+  protected val partitionMapCond = partitionMapLock.newCondition()
 
   private val metricId = new ClientIdAndBroker(clientId, sourceBroker.host, sourceBroker.port)
   val fetcherStats = new FetcherStats(metricId)
@@ -214,13 +214,29 @@ abstract class AbstractFetcherThread(name: String,
     } finally partitionMapLock.unlock()
   }
 
-  def removePartitions(topicAndPartitions: Set[TopicAndPartition]) {
+  def removePartitions(topicAndPartitions: Set[TopicAndPartition]) : Map[TopicAndPartition, Long] = {
     partitionMapLock.lockInterruptibly()
+    val result = new mutable.HashMap[TopicAndPartition, Long]
     try {
       topicAndPartitions.foreach { topicAndPartition =>
-        partitionMap.remove(topicAndPartition)
+        val state: Option[PartitionFetchState] = partitionMap.remove(topicAndPartition)
+        result.put(topicAndPartition, if(state.isDefined) state.get.offset else 0)
         fetcherLagStats.unregister(topicAndPartition.topic, topicAndPartition.partition)
       }
+      result
+    } finally partitionMapLock.unlock()
+  }
+
+  def removeAllPartitions(): Map[TopicAndPartition, Long] = {
+    partitionMapLock.lockInterruptibly()
+    val result = new mutable.HashMap[TopicAndPartition, Long]
+    try {
+      for (topicAndPartition <- partitionMap.keySet) {
+        val state: Option[PartitionFetchState] = partitionMap.remove(topicAndPartition)
+        result.put(topicAndPartition, if(state.isDefined) state.get.offset else 0)
+        fetcherLagStats.unregister(topicAndPartition.topic, topicAndPartition.partition)
+      }
+      result
     } finally partitionMapLock.unlock()
   }
 

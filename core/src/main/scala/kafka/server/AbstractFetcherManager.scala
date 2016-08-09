@@ -17,9 +17,7 @@
 
 package kafka.server
 
-import scala.collection.mutable
-import scala.collection.Set
-import scala.collection.Map
+import scala.collection.{Map, mutable, Set}
 import kafka.utils.Logging
 import kafka.cluster.BrokerEndPoint
 import kafka.metrics.KafkaMetricsGroup
@@ -28,13 +26,13 @@ import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.Utils
 
 trait FetcherManager{
-  def removeFetcherForPartitions(partitions: Set[TopicAndPartition])
+  def removeFetcherForPartitions(partitions: Set[TopicAndPartition]): Map[TopicAndPartition, BrokerAndInitialOffset]
   def addFetcherForPartitions(partitionAndOffsets: Map[TopicAndPartition, BrokerAndInitialOffset])
   def shutdownIdleFetcherThreads()
   def closeAllFetchers()
 }
 
-abstract class AbstractFetcherManager(protected val name: String, protected val clientId: String, numFetchers: Int = 1)
+abstract class AbstractFetcherManager(val name: String, val clientId: String, numFetchers: Int = 1)
   extends Logging with KafkaMetricsGroup with FetcherManager {
   // map of (source broker_id, fetcher_id per source broker) => fetcher
   private val fetcherThreadMap = new mutable.HashMap[BrokerAndFetcherId, AbstractFetcherThread]
@@ -102,13 +100,28 @@ abstract class AbstractFetcherManager(protected val name: String, protected val 
       "[" + topicAndPartition + ", initOffset " + brokerAndInitialOffset.initOffset + " to broker " + brokerAndInitialOffset.broker + "] "}))
   }
 
-  def removeFetcherForPartitions(partitions: Set[TopicAndPartition]) {
+  def removeFetcherForPartitions(partitions: Set[TopicAndPartition]): Map[TopicAndPartition, BrokerAndInitialOffset] = {
+    val result = new mutable.HashMap[TopicAndPartition, BrokerAndInitialOffset]
     mapLock synchronized {
       for ((key, fetcher) <- fetcherThreadMap) {
         fetcher.removePartitions(partitions)
+          .foreach{ case (tp, offset) => result.put(tp, new BrokerAndInitialOffset(key.broker, offset))}
       }
     }
     info("Removed fetcher for partitions %s".format(partitions.mkString(",")))
+    result
+  }
+
+  def removeFetcherForAllPartitions() : Map[TopicAndPartition, BrokerAndInitialOffset] ={
+    val result = new mutable.HashMap[TopicAndPartition, BrokerAndInitialOffset]
+    mapLock synchronized {
+      for ((key, fetcher) <- fetcherThreadMap) {
+        fetcher.removeAllPartitions()
+          .foreach{ case (tp, offset) => result.put(tp, new BrokerAndInitialOffset(key.broker, offset))}
+      }
+    }
+    info("Removed fetcher for all partitions.")
+    result
   }
 
   def shutdownIdleFetcherThreads() {

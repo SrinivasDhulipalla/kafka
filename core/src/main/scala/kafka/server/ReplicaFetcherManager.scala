@@ -21,12 +21,9 @@ import kafka.cluster.BrokerEndPoint
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.utils.Time
 
-class ReplicaFetcherManager(brokerConfig: KafkaConfig, replicaMgr: ReplicaManager, metrics: Metrics, time: Time, threadNamePrefix: Option[String] = None, quotaManager: ClientQuotaManager, isThrottled: Boolean)
-  extends AbstractFetcherManager(
-    if (isThrottled) "Throttled" else "" + "ReplicaFetcherManager on broker " + brokerConfig.brokerId,
-    if (isThrottled) "ThrottledReplica" else "Replica", brokerConfig.numReplicaFetchers) {
+class ReplicaFetcherManager(brokerConfig: KafkaConfig, replicaMgr: ReplicaManager, metrics: Metrics, time: Time, threadNamePrefix: Option[String] = None, quotaManager: ClientQuotaManager, name: String, clientId: String, fetchIdOffset:Int)
+  extends AbstractFetcherManager(name, clientId) {
 
-§
   override def createFetcherThread(fetcherId: Int, sourceBroker: BrokerEndPoint): AbstractFetcherThread = {
     val threadName = threadNamePrefix match {
       case None =>
@@ -34,9 +31,9 @@ class ReplicaFetcherManager(brokerConfig: KafkaConfig, replicaMgr: ReplicaManage
       case Some(p) =>
         "%s:%sFetcherThread-%d-%d".format(p, clientId, fetcherId, sourceBroker.id)
     }
-    val id = if (isThrottled) fetcherId + 1000 else fetcherId //TODO we should have a better mechanism than this for managing fetcherIds
+    val id =  fetcherId + fetchIdOffset //TODO we should have a better mechanism than this for managing fetcherIds than arbitary namespacing
     new ReplicaFetcherThread(threadName, id, sourceBroker, brokerConfig,
-      replicaMgr, metrics, time, quotaManager, isThrottled)
+      replicaMgr, metrics, time, quotaManager)
   }
 
   def shutdown() {

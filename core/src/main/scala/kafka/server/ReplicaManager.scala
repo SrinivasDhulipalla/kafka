@@ -121,7 +121,7 @@ class ReplicaManager(val config: KafkaConfig,
     new Partition(t, p, time, this)
   })
   private val replicaStateChangeLock = new Object
-  val replicaFetcherManager = new ReplicaThreadpoolManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(FollowerReplication))
+  val replicaFetcherManager = new ReplicaThrottleManager(config, this, metrics, jTime, threadNamePrefix, quotaManagers(FollowerReplication))
   private val highWatermarkCheckPointThreadStarted = new AtomicBoolean(false)
   val highWatermarkCheckpoints = config.logDirs.map(dir => (new File(dir).getAbsolutePath, new OffsetCheckpoint(new File(dir, ReplicaManager.HighWatermarkFilename)))).toMap
   private var hwThreadInitialized = false
@@ -266,8 +266,10 @@ class ReplicaManager(val config: KafkaConfig,
         (responseMap, Errors.STALE_CONTROLLER_EPOCH.code)
       } else {
         val partitions = stopReplicaRequest.partitions.asScala
+        logger.info(config.brokerId + ": stopReplicas called in repmanager for "+partitions)
         controllerEpoch = stopReplicaRequest.controllerEpoch
         // First stop fetchers for all partitions, then stop the corresponding replicas
+        println("stop replica")
         replicaFetcherManager.removeFetcherForPartitions(partitions.map(r => TopicAndPartition(r.topic, r.partition)))
         for(topicPartition <- partitions){
           val errorCode = stopReplica(topicPartition.topic, topicPartition.partition, stopReplicaRequest.deletePartitions)
@@ -700,6 +702,7 @@ class ReplicaManager(val config: KafkaConfig,
     val partitionsToMakeLeaders: mutable.Set[Partition] = mutable.Set()
 
     try {
+      println("make leader")
       // First stop fetchers for all the partitions
       replicaFetcherManager.removeFetcherForPartitions(partitionState.keySet.map(new TopicAndPartition(_)))
       // Update the partition information to be the leader
@@ -799,7 +802,7 @@ class ReplicaManager(val config: KafkaConfig,
             partition.getOrCreateReplica()
         }
       }
-
+      println("make follower")
       replicaFetcherManager.removeFetcherForPartitions(partitionsToMakeFollower.map(new TopicAndPartition(_)))
       partitionsToMakeFollower.foreach { partition =>
         stateChangeLogger.trace(("Broker %d stopped fetchers as part of become-follower request from controller " +
