@@ -7,6 +7,7 @@ import scala.collection.Map
 
 object QuotaFactory {
 
+  //TODO - why do we still seperate value for leader/follower here. are they needed?
   object QuotaType extends Enumeration{
     val Fetch, Produce, LeaderReplication, FollowerReplication = Value
   }

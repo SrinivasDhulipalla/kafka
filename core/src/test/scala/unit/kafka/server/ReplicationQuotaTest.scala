@@ -23,6 +23,7 @@ import kafka.admin.AdminUtils
 import kafka.common._
 import kafka.server.ClientConfigOverride._
 import kafka.server.KafkaConfig._
+import kafka.server.QuotaFactory.QuotaType
 import kafka.server.QuotaFactory.QuotaType._
 import kafka.server._
 import kafka.utils.{CoreUtils, TestUtils}
@@ -47,8 +48,9 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
   var leaderMetricName: MetricName = null
   var followerMetricName: MetricName = null
-  val replicaProps = new Properties()
-  val replicasProps = new Properties()
+  var leaderDelayQueueMetricName: MetricName = null
+  val props1 = new Properties()
+  val props2 = new Properties()
 
   @Before
   override def setUp() {
@@ -73,8 +75,11 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
       FollowerReplication.toString,
       "Tracking throttle-time per client",
       "client-id", FollowerReplication.toString)
-    replicaProps.clear()
-    replicasProps.clear()
+    leaderDelayQueueMetricName = leader.metrics.metricName("queue-size",
+      QuotaType.LeaderReplication.toString,
+      "Tracks the size of the delay queue")
+    props1.clear()
+    props2.clear()
   }
 
   @After
@@ -94,11 +99,11 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Given only one throttled replica, on the leader
     val throttle: Int = 50 * 1000
-    replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, LeaderReplication.toString, replicaProps)
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, LeaderReplication.toString, props1)
 
-    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
-    AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic1, props2)
 
     //When
     producer.send(new ProducerRecord(topic1, msg800KB)).get
@@ -120,11 +125,11 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Given only one throttled replica, on the follower
     val throttle: Int = 50 * 1000
-    replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, replicaProps)
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, props1)
 
-    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
-    AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic1, props2)
 
     //When
     producer.send(new ProducerRecord(topic1, msg800KB)).get
@@ -146,11 +151,11 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Given
     val throttle: Int = 300 * 1000
-    replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, LeaderReplication.toString, replicaProps)
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, LeaderReplication.toString, props1)
 
-    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
-    AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic1, props2)
 
     val start = System.currentTimeMillis()
 
@@ -172,11 +177,11 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
 
     //Given
     val throttle: Int = 300 * 1000
-    replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, replicaProps)
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, props1)
 
-    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
-    AdminUtils.changeTopicConfig(zkUtils, topic1, replicasProps)
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic1, props2)
 
     val start = System.currentTimeMillis()
 
@@ -193,42 +198,45 @@ class ReplicationQuotaTest extends ZooKeeperTestHarness {
   }
 
   @Test
-  def shouldReplicateThrottledAndNonThrottledPartitionsConcurrentlyViaSeparateThreadPools() {
-    val topic = "specific-replicas"
-    val leaders: Map[Int, Option[Int]] = TestUtils.createTopic(zkUtils, topic,
-      Map(0 -> Seq(0, 1), 1 -> Seq(0, 1)), //partitions both led on server0
-      brokers)
+  def shouldNotReorderDuringReplicaHandoverBetweenThreadsOnFollower() {
 
-    //Given follower throttling only
-    val throttle: Int = 50 * 1000
-    replicaProps.put(ConsumerOverride, throttle.toString)
-    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, replicaProps)
 
-    //add both leader throttle to partition0
-    replicasProps.put(ReplicationQuotaThrottledReplicas, "0-1") //follower side throttle for partition 0
-    AdminUtils.changeTopicConfig(zkUtils, topic, replicasProps)
-
-    val start: Long = System.currentTimeMillis()
-
-    //Write a message to each partition (wait for replication so we know two batches are replicated (acks=-1) so we get a delay between them when throttled)
     val producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, acks = 1)
-    producer.send(new ProducerRecord(topic, 0, null, msg800KB)).get //should be throttled
-    producer.send(new ProducerRecord(topic, 0, null, msg1KB)).get //marker msg
-    producer.send(new ProducerRecord(topic, 1, null, msg800KB)).get //should be fast
-    producer.send(new ProducerRecord(topic, 1, null, msg1KB)) //marker msg
+    val topic = "single-partition-topic"
+    val leader = brokers(0)
+    val follower = brokers(1)
+    TestUtils.createTopic(zkUtils, topic, Map(0 -> Seq(0, 1)), brokers)
 
 
-    def logsMatchP1() = waitForOffset(new TopicAndPartition(topic, 1), 2)
-    def logsMatchP0() = waitForOffset(new TopicAndPartition(topic, 0), 2)
+    //Leader throttle to produce 6s delay
+    val throttle = 50 * 1000
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, LeaderReplication.toString, props1)
 
-    waitUntilTrue(logsMatchP1, "Broker logs should contain 2 messages")
-    val took = System.currentTimeMillis() - start
-    assertTrue("Partition 1 should have replicated quickly: " + took, took < 1000)
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + leader.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic, props2)
 
-    waitUntilTrue(logsMatchP0, "Broker logs should contain 2 messages")
-    val expectedDuration = (msg800KB.length - throttle * 10) / throttle * 1000
-    assertTrue(System.currentTimeMillis() - start > expectedDuration * 0.9)
+    //Send a message
+    producer.send(new ProducerRecord(topic, 0, null, msg800KB)).get
+    def done(): Boolean = leader.metrics.metrics.asScala(leaderDelayQueueMetricName).value == 1
+
+    waitUntilTrue(done, "leader should be throttled")
+
+    //The leader should now be blocking replication.
+
+    //Add a follower throttle, this should create a second request from the other threadpool
+    props1.put(ConsumerOverride, throttle.toString)
+    AdminUtils.changeClientIdConfig(zkUtils, FollowerReplication.toString, props1)
+
+    props2.put(ReplicationQuotaThrottledReplicas, "0-" + follower.config.brokerId)
+    AdminUtils.changeTopicConfig(zkUtils, topic, props2)
+
+
+    waitUntilTrue(logsMatch, "Broker logs should be identical", 30000)
   }
+
+  //
+
 
   def waitForConfigToPropagate(topic: String): Boolean = {
     def configPropagated(): Boolean = {

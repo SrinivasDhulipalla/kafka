@@ -116,6 +116,7 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
    *         Zero otherwise
    */
   def recordAndMaybeThrottle(clientId: String, value: Int, callback: Int => Unit): Int = {
+    logger.info("checking throttle for client "+ clientId + " value "+value)
     val clientSensors = getOrCreateQuotaSensors(clientId)
     var throttleTimeMs = 0
     try {
@@ -129,9 +130,10 @@ class ClientQuotaManager(private val config: ClientQuotaManagerConfig,
         throttleTimeMs = throttleTime(clientMetric, getQuotaMetricConfig(quota(clientId)))
         clientSensors.throttleTimeSensor.record(throttleTimeMs)
         // If delayed, add the element to the delayQueue
-        if(callback != null) {
+        if(callback != null) { //TODO lose the null
           delayQueue.add(new ThrottledResponse(time, throttleTimeMs, callback))
           delayQueueSensor.record()
+          println(delayQueueSensor.name())
         }
         logger.info("Quota violated for sensor (%s). Delay time: (%d)".format(clientSensors.quotaSensor.name(), throttleTimeMs))
     }
