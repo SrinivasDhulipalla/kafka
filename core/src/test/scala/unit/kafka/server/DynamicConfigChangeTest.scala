@@ -18,15 +18,15 @@ package kafka.server
 
 import java.util.Properties
 
-import org.apache.kafka.common.protocol.ApiKeys
+import kafka.log.LogConfig._
+import kafka.server.Constants._
 import org.junit.Assert._
 import org.apache.kafka.common.metrics.Quota
-import org.easymock.{Capture, EasyMock}
+import org.easymock.EasyMock
 import org.junit.Test
 import kafka.integration.KafkaServerTestHarness
 import kafka.utils._
 import kafka.common._
-import kafka.log.LogConfig
 import kafka.admin.{AdminOperationException, AdminUtils}
 
 import scala.collection.Map
@@ -42,14 +42,14 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     val newVal: java.lang.Long = 200000L
     val tp = TopicAndPartition("test", 0)
     val logProps = new Properties()
-    logProps.put(LogConfig.FlushMessagesProp, oldVal.toString)
+    logProps.put(FlushMessagesProp, oldVal.toString)
     AdminUtils.createTopic(zkUtils, tp.topic, 1, 1, logProps)
     TestUtils.retry(10000) {
       val logOpt = this.servers.head.logManager.getLog(tp)
       assertTrue(logOpt.isDefined)
       assertEquals(oldVal, logOpt.get.config.flushInterval)
     }
-    logProps.put(LogConfig.FlushMessagesProp, newVal.toString)
+    logProps.put(FlushMessagesProp, newVal.toString)
     AdminUtils.changeTopicConfig(zkUtils, tp.topic, logProps)
     TestUtils.retry(10000) {
       assertEquals(newVal, this.servers.head.logManager.getLog(tp).get.config.flushInterval)
@@ -67,10 +67,9 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     AdminUtils.changeClientIdConfig(zkUtils, clientId, props)
 
     TestUtils.retry(10000) {
-      val configHandler = this.servers.head.dynamicConfigHandlers(ConfigType.Client).asInstanceOf[ClientIdConfigHandler]
-      val quotaManagers: Map[Short, ClientQuotaManager] = servers.head.apis.quotaManagers
-      val overrideProducerQuota = quotaManagers.get(ApiKeys.PRODUCE.id).get.quota(clientId)
-      val overrideConsumerQuota = quotaManagers.get(ApiKeys.FETCH.id).get.quota(clientId)
+      val quotaManagers: Map[QuotaType, ClientQuotaManager] = servers.head.apis.quotas.client
+      val overrideProducerQuota = quotaManagers.get(QuotaType.Produce).get.quota(clientId)
+      val overrideConsumerQuota = quotaManagers.get(QuotaType.Fetch).get.quota(clientId)
 
       assertEquals(s"ClientId $clientId must have overridden producer quota of 1000",
         Quota.upperBound(1000), overrideProducerQuota)
@@ -84,7 +83,7 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
     val topic = TestUtils.tempTopic
     try {
       val logProps = new Properties()
-      logProps.put(LogConfig.FlushMessagesProp, 10000: java.lang.Integer)
+      logProps.put(FlushMessagesProp, 10000: java.lang.Integer)
       AdminUtils.changeTopicConfig(zkUtils, topic, logProps)
       fail("Should fail with AdminOperationException for topic doesn't exist")
     } catch {
@@ -146,5 +145,33 @@ class DynamicConfigChangeTest extends KafkaServerTestHarness {
 
     // Verify that processConfigChanges was only called once
     EasyMock.verify(handler)
+  }
+
+  @Test
+  def shouldParseReplicationQuotaProperties {
+    val configHandler: TopicConfigHandler = new TopicConfigHandler(null, null, null)
+    val props: Properties = new Properties()
+
+    //Given
+    props.put(ThrottledReplicasListProp, "0-101:0-102:1-101:1-102")
+
+    //When/Then
+    assertEquals(Seq(0,1), configHandler.parseThrottledPartitions(props, 102))
+    assertEquals(Seq(), configHandler.parseThrottledPartitions(props, 103))
+  }
+
+  @Test
+  def shouldParseWildcardReplicationQuotaProperties {
+    val configHandler: TopicConfigHandler = new TopicConfigHandler(null, null, null)
+    val props: Properties = new Properties()
+
+    //Given
+    props.put(ThrottledReplicasListProp, "*")
+
+    //When
+    val result = configHandler.parseThrottledPartitions(props, 102)
+
+    //Then
+    assertEquals(allReplicas, result)
   }
 }
