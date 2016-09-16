@@ -307,7 +307,10 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 'partitions': topic_cfg.get('partitions', 1),
                 'replication': topic_cfg.get('replication-factor', 1)
             }
-
+        if 'replica-assignment' in topic_cfg:
+            cmd += " --replica-assignment %(replica-assignment)s" % {
+                'replica-assignment': topic_cfg.get('replica-assignment')
+            }
         if "configs" in topic_cfg.keys() and topic_cfg["configs"] is not None:
             for config_name, config_value in topic_cfg["configs"].items():
                 cmd += " --config %s=%s" % (config_name, str(config_value))

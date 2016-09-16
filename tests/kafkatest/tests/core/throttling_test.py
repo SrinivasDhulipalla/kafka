@@ -16,7 +16,6 @@
 import time
 
 from ducktape.tests.test import Test
-from ducktape.mark import parametrize
 
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.services.kafka import KafkaService
@@ -58,7 +57,7 @@ class ThrottlingTest(Test):
                                   jmx_attributes=['OneMinuteRate'])
         self.num_producers = 1
         self.num_consumers = 1
-        self.num_records = 30000
+        self.num_records = 6000
         self.record_size = 100 * 1024  # 100 KB
 
     def setUp(self):
