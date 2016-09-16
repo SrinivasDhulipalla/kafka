@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import time
+
 from ducktape.tests.test import Test
 from ducktape.mark import parametrize
 
@@ -39,7 +41,12 @@ class ThrottlingTest(Test):
                                       self.topic: {
                                           'partitions': 6,
                                           'replication-factor': 3,
-                                          'replica-assignment': '0:1:2, 1:2:3, 2:3:4, 3:4:5, 4:5:0, 5:0:1',
+                                          'replica-assignment': '0:1:2,\
+                                                                1:2:3,\
+                                                                2:3:4,\
+                                                                3:4:5,\
+                                                                4:5:0,\
+                                                                5:0:1',
                                           'configs': {
                                               'min.insync.replicas': 1,
                                               'quota.replication.throttled.replicas': '0:0,1:1,2:2,3:3'
@@ -116,7 +123,22 @@ class ThrottlingTest(Test):
         # rest of the brokers.
         self.logger.debug("About to start remaining brokers..")
         self.kafka.start_some([4,5], create_topics=False)
-        self.logger.debug("Remaining broker started..")
+        self.logger.debug("Remaining brokers started..")
 
         # TODO(apurva): Check that the throttled replicas catch up slower than the
         # un-throttled ones.
+        #
+        # partitions 0,1,2,3 are throttled on brokers 0,1,2,3 respectively.
+        # What's left to do is to ensure that these brokers are the leaders for
+        # these partitions.
+        #
+        # Then we have to make sure that if this is true, then these throttled
+        # partitions catch up on brokers 4,5 at a slower rate than partitions
+        # 4,5, and that the rate is consistent with the throttle of
+        # 1000 Byte/s
+        for partition in range(7):
+            self.logger.info("Leader for partition %d is %d" % (partition,
+                             self.kafka.leader(self.topic, partition)))
+
+        self.logger.info("Sleeping for 60 seconds")
+        time.sleep(60)
