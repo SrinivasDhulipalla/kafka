@@ -31,7 +31,7 @@ class ThrottlingTest(Test):
     def __init__(self, test_context):
         """:type test_context: ducktape.tests.test.TestContext"""
         super(ThrottlingTest, self).__init__(test_context=test_context)
-        self.topic = "test_topic_14Sep_1"
+        self.topic = "test_topic_16Sep_1"
         self.zk = ZookeeperService(test_context, num_nodes=1)
         self.kafka = KafkaService(test_context, num_nodes=6, zk=self.zk,
                                   security_protocol='PLAINTEXT',
@@ -58,7 +58,7 @@ class ThrottlingTest(Test):
                                   jmx_attributes=['OneMinuteRate'])
         self.num_producers = 1
         self.num_consumers = 1
-        self.num_records = 3000
+        self.num_records = 30000
         self.record_size = 100 * 1024  # 100 KB
 
     def setUp(self):
@@ -86,8 +86,8 @@ class ThrottlingTest(Test):
 
         return success
 
-    @parametrize(security_protocol="PLAINTEXT")
-    def test_throttling_basic(self, security_protocol):
+    def test_throttling_basic(self):
+        security_protocol = 'PLAINTEXT'
         self.kafka.security_protocol = security_protocol
         self.kafka.interbroker_security_protocol = security_protocol
         self.kafka.start_some([0,1,2,3])
