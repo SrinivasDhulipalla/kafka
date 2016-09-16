@@ -67,7 +67,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
     def __init__(self, context, num_nodes, zk, security_protocol=SecurityConfig.PLAINTEXT, interbroker_security_protocol=SecurityConfig.PLAINTEXT,
                  client_sasl_mechanism=SecurityConfig.SASL_MECHANISM_GSSAPI, interbroker_sasl_mechanism=SecurityConfig.SASL_MECHANISM_GSSAPI,
-                 authorizer_class_name=None, topics=None, version=TRUNK, quota_config=None, jmx_object_names=None,
+                 authorizer_class_name=None, topics=None, version=TRUNK, quota_config=None, jmx_object_names=None, replication_throttling_rate=None,
                  jmx_attributes=[], zk_connect_timeout=5000, zk_session_timeout=6000):
         """
         :type context
@@ -114,9 +114,15 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             'SASL_SSL': Port('SASL_SSL', 9095, False)
         }
 
+        node_config = {}
+        if replication_throttling_rate is not None:
+            node_config[config_property.THROTTLING_REPLICATION_RATE_LIMIT] =\
+                replication_throttling_rate
+
         for node in self.nodes:
             node.version = version
-            node.config = KafkaConfig(**{config_property.BROKER_ID: self.idx(node)})
+            node_config[config_property.BROKER_ID] = self.idx(node)
+            node.config = KafkaConfig(**node_config)
 
     @property
     def security_config(self):
@@ -137,6 +143,43 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 self.minikdc.start()
         else:
             self.minikdc = None
+
+    def start_some(self, nodes_to_start, add_principals=""):
+        """Starts a subset of alloted nodes.
+
+        Keyword arguments:
+            nodes_to_start -- a list of nodes to start. Node ids range from
+                [0 .. num_nodes)
+         """
+        self.open_port(self.security_protocol)
+        self.open_port(self.interbroker_security_protocol)
+        self.start_minikdc(add_principals)
+        for node_id in nodes_to_start:
+            node = self.nodes[node_id]
+            # Added precaution - kill running processes, clean persistent files
+            # try/except for each step, since each of these steps may fail if
+            # there are no processes to kill or no files to remove
+            try:
+                self.stop_node(node)
+            except:
+                pass
+
+            try:
+                self.clean_node(node)
+            except:
+                pass
+
+            self.logger.debug("%s: starting node" % self.who_am_i(node))
+            self.start_node(node)
+
+        # Create topics if necessary
+        if self.topics is not None:
+            for topic, topic_cfg in self.topics.items():
+                if topic_cfg is None:
+                    topic_cfg = {}
+
+                topic_cfg["topic"] = topic
+                self.create_topic(topic_cfg)
 
     def start(self, add_principals=""):
         self.open_port(self.security_protocol)
@@ -259,7 +302,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         cmd += "--zookeeper %(zk_connect)s --create --topic %(topic)s --partitions %(partitions)d --replication-factor %(replication)d" % {
                 'zk_connect': self.zk.connect_setting(),
                 'topic': topic_cfg.get("topic"),
-                'partitions': topic_cfg.get('partitions', 1), 
+                'partitions': topic_cfg.get('partitions', 1),
                 'replication': topic_cfg.get('replication-factor', 1)
             }
 
@@ -284,7 +327,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         for line in node.account.ssh_capture(cmd):
             output += line
         return output
-    
+
     def alter_message_format(self, topic, msg_format_version, node=None):
         if node is None:
             node = self.nodes[0]
