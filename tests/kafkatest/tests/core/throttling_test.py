@@ -137,8 +137,8 @@ class ThrottlingTest(Test):
         # 4,5, and that the rate is consistent with the throttle of
         # 1000 Byte/s
         for partition in range(7):
-            self.logger.info("Leader for partition %d is %d" % (partition,
-                             self.kafka.leader(self.topic, partition)))
+            self.logger.info("Leader for partition %d is %s" % (partition,
+                             str(self.kafka.leader(self.topic, partition))))
 
         self.logger.info("Sleeping for 60 seconds")
         time.sleep(60)
