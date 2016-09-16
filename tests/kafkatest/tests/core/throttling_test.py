@@ -114,8 +114,9 @@ class ThrottlingTest(Test):
 
         # All the messages have been published properly. Let's start the
         # rest of the brokers.
-
-        self.kafka.start_some([4,5])
+        self.logger.debug("About to start remaining brokers..")
+        self.kafka.start_some([4,5], create_topics=False)
+        self.logger.debug("Remaining broker started..")
 
         # TODO(apurva): Check that the throttled replicas catch up slower than the
         # un-throttled ones.

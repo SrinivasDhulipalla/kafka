@@ -144,12 +144,13 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         else:
             self.minikdc = None
 
-    def start_some(self, nodes_to_start, add_principals=""):
+    def start_some(self, nodes_to_start, create_topics=True, add_principals=""):
         """Starts a subset of alloted nodes.
 
         Keyword arguments:
             nodes_to_start -- a list of nodes to start. Node ids range from
                 [0 .. num_nodes)
+            create_topics -- whether or not to create the configured topics.
          """
         self.open_port(self.security_protocol)
         self.open_port(self.interbroker_security_protocol)
@@ -173,13 +174,14 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             self.start_node(node)
 
         # Create topics if necessary
-        if self.topics is not None:
-            for topic, topic_cfg in self.topics.items():
-                if topic_cfg is None:
-                    topic_cfg = {}
+        if create_topics is True:
+            if self.topics is not None:
+                for topic, topic_cfg in self.topics.items():
+                    if topic_cfg is None:
+                        topic_cfg = {}
 
-                topic_cfg["topic"] = topic
-                self.create_topic(topic_cfg)
+                    topic_cfg["topic"] = topic
+                    self.create_topic(topic_cfg)
 
     def start(self, add_principals=""):
         self.open_port(self.security_protocol)
