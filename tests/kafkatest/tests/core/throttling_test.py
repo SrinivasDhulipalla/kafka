@@ -136,9 +136,13 @@ class ThrottlingTest(Test):
         # partitions catch up on brokers 4,5 at a slower rate than partitions
         # 4,5, and that the rate is consistent with the throttle of
         # 1000 Byte/s
-        for partition in range(7):
-            self.logger.info("Leader for partition %d is %s" % (partition,
-                             str(self.kafka.leader(self.topic, partition))))
+        for partition in range(6):
+            leader = self.kafka.idx(self.kafka.leader(self.topic, partition))
+            try:
+                self.logger.info("Leader for partition %d is %d" % (partition,
+                                 leader))
+            except:
+                pass
 
         self.logger.info("Sleeping for 60 seconds")
         time.sleep(60)
