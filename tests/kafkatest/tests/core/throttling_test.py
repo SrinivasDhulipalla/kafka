@@ -38,8 +38,6 @@ class ThrottlingTest(Test):
                                   replication_throttling_rate=1000,
                                   topics={
                                       self.topic: {
-                                          'partitions': 6,
-                                          'replication-factor': 3,
                                           'replica-assignment': '0:1:2,1:2:3,2:3:4,3:4:5,4:5:0,5:0:1',
                                           'configs': {
                                               'min.insync.replicas': 1,
