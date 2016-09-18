@@ -297,20 +297,26 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         """
         if node is None:
             node = self.nodes[0]
-        self.logger.info("Creating topic %s with settings %s", topic_cfg["topic"], topic_cfg)
+        self.logger.info("Creating topic %s with settings %s",
+                         topic_cfg["topic"], topic_cfg)
         kafka_topic_script = self.path.script("kafka-topics.sh", node)
 
         cmd = kafka_topic_script + " "
-        cmd += "--zookeeper %(zk_connect)s --create --topic %(topic)s --partitions %(partitions)d --replication-factor %(replication)d" % {
+        cmd += "--zookeeper %(zk_connect)s --create --topic %(topic)s " % {
                 'zk_connect': self.zk.connect_setting(),
                 'topic': topic_cfg.get("topic"),
-                'partitions': topic_cfg.get('partitions', 1),
-                'replication': topic_cfg.get('replication-factor', 1)
-            }
+           }
         if 'replica-assignment' in topic_cfg:
             cmd += " --replica-assignment %(replica-assignment)s" % {
                 'replica-assignment': topic_cfg.get('replica-assignment')
             }
+        else:
+            cmd += " --partitions %(partitions)d --replication-factor "
+            "%(replication-factor)d" % {
+                'partitions': topic_cfg.get('partitions', 1),
+                'replication-factor': topic_cfg.get('replication-factor', 1)
+            }
+
         if "configs" in topic_cfg.keys() and topic_cfg["configs"] is not None:
             for config_name, config_value in topic_cfg["configs"].items():
                 cmd += " --config %s=%s" % (config_name, str(config_value))
