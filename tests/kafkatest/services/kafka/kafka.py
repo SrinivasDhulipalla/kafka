@@ -311,8 +311,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
                 'replica-assignment': topic_cfg.get('replica-assignment')
             }
         else:
-            cmd += " --partitions %(partitions)d --replication-factor "
-            "%(replication-factor)d" % {
+            cmd += " --partitions %(partitions)d --replication-factor %(replication-factor)d" % {
                 'partitions': topic_cfg.get('partitions', 1),
                 'replication-factor': topic_cfg.get('replication-factor', 1)
             }
