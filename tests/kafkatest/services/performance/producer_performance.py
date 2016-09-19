@@ -75,6 +75,7 @@ class ProducerPerformanceService(JmxMixin, PerformanceService):
         self.intermediate_stats = intermediate_stats
         self.client_id = client_id
 
+        self.num_records = 0
         for node in self.nodes:
             node.version = version
 
@@ -124,6 +125,10 @@ class ProducerPerformanceService(JmxMixin, PerformanceService):
     def alive(self, node):
         return len(self.pids(node)) > 0
 
+    @property
+    def num_acked(self):
+        return self.num_records
+
     def _worker(self, idx, node):
 
         node.account.ssh("mkdir -p %s" % ProducerPerformanceService.PERSISTENT_ROOT, allow_fail=False)
@@ -163,6 +168,7 @@ class ProducerPerformanceService(JmxMixin, PerformanceService):
             self.results[idx-1] = self.parse_stats(last)
         except:
             raise Exception("Unable to parse aggregate performance statistics on node %d: %s" % (idx, last))
+        self.num_records = self.results[idx-1]['records']
 
     def parse_stats(self, line):
 
