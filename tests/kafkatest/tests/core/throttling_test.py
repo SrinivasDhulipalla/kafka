@@ -50,9 +50,10 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                                           "replication-factor": 3,
                                           'configs': {"min.insync.replicas": 2}}
                                   })
+        self.producer_start_timeout_sec = 360
         self.num_partitions = 20
         self.timeout_sec = 400
-        self.num_records = 300
+        self.num_records = 10
         self.record_size = 100 * 1024  # 100 KB
         self.partition_size = (self.num_records * self.record_size) / self.num_partitions
         # 30 MB total size => 30 / 20 == 1.5MB per partition.

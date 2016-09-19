@@ -28,6 +28,7 @@ class ProduceConsumeValidateTest(Test):
 
     def __init__(self, test_context):
         super(ProduceConsumeValidateTest, self).__init__(test_context=test_context)
+        self.producer_start_timeout_sec = 60
 
     def setup_producer_and_consumer(self):
         raise NotImplementedError("Subclasses should implement this")
@@ -35,7 +36,7 @@ class ProduceConsumeValidateTest(Test):
     def start_producer_and_consumer(self):
         # Start background producer and consumer
         self.producer.start()
-        wait_until(lambda: self.producer.num_acked > 5, timeout_sec=360,
+        wait_until(lambda: self.producer.num_acked > 5, timeout_sec=self.producer_start_timeout_sec,
              err_msg="Producer failed to start in a reasonable amount of time.")
         self.consumer.start()
         wait_until(lambda: len(self.consumer.messages_consumed[1]) > 0, timeout_sec=60,
