@@ -411,7 +411,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
 
         return True
 
-    def execute_reassign_partitions(self, reassignment, node=None):
+    def execute_reassign_partitions(self, reassignment, node=None,
+                                    throttle=None):
         """Run the reassign partitions admin tool in "verify" mode
         """
         if node is None:
@@ -428,6 +429,8 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
         cmd += "--zookeeper %s " % self.zk.connect_setting()
         cmd += "--reassignment-json-file %s " % json_file
         cmd += "--execute"
+        if throttle is not None:
+            cmd += " --throttle %d" % throttle
         cmd += " && sleep 1 && rm -f %s" % json_file
 
         # send command

@@ -14,127 +14,143 @@
 # limitations under the License.
 
 import time
-
-from ducktape.tests.test import Test
+from ducktape.mark import parametrize
+from ducktape.utils.util import wait_until
 
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.services.kafka import KafkaService
 from kafkatest.services.console_consumer import ConsoleConsumer
+from kafkatest.tests.produce_consume_validate import ProduceConsumeValidateTest
 from kafkatest.services.performance import ProducerPerformanceService
+from kafkatest.utils import is_int
+import random
 
 
-class ThrottlingTest(Test):
-    """This class provides all the system tests for replication throttling.
+class ThrottlingTest(ProduceConsumeValidateTest):
+    """
+    These tests validate partition reassignment.
+    Create a topic with few partitions, load some data, trigger partition
+    re-assignment with and without broker failure, check that partition
+    re-assignment can complete and there is no data loss.
     """
 
     def __init__(self, test_context):
         """:type test_context: ducktape.tests.test.TestContext"""
         super(ThrottlingTest, self).__init__(test_context=test_context)
-        self.topic = "test_topic_16Sep_1"
+
+        self.topic = "test_topic"
         self.zk = ZookeeperService(test_context, num_nodes=1)
-        self.kafka = KafkaService(test_context, num_nodes=6, zk=self.zk,
-                                  security_protocol='PLAINTEXT',
-                                  interbroker_security_protocol='PLAINTEXT',
-                                  replication_throttling_rate=1000,
+        self.num_brokers = 3
+        self.kafka = KafkaService(test_context,
+                                  num_nodes=self.num_brokers,
+                                  zk=self.zk,
                                   topics={
                                       self.topic: {
-                                          'replica-assignment': '0:1:2,1:2:3,2:3:4,3:4:5,4:5:0,5:0:1',
-                                          'configs': {
-                                              'min.insync.replicas': 1,
-                                              'quota.replication.throttled.replicas': '0:0,1:1,2:2,3:3'
-                                          }
-                                      }
-                                  },
-                                  jmx_object_names=['kafka.server:type=BrokerTopicMetrics,name=BytesInPerSec',
-                                                    'kafka.server:type=BrokerTopicMetrics,name=BytesOutPerSec'],
-                                  jmx_attributes=['OneMinuteRate'])
+                                          "partitions": 20,
+                                          "replication-factor": 3,
+                                          'configs': {"min.insync.replicas": 2}}
+                                  })
+        self.num_partitions = 20
+        self.timeout_sec = 400
+        self.num_records = 300
+        self.record_size = 100 * 1024  # 100 KB
+        self.partition_size = (self.num_records * self.record_size) / self.num_partitions
+        # 30 MB total size => 30 / 20 == 1.5MB per partition.
         self.num_producers = 1
         self.num_consumers = 1
-        self.num_records = 6000
-        self.record_size = 100 * 1024  # 100 KB
+        self.throttle = 512*1024  # 0.5 MB/s
 
     def setUp(self):
         self.zk.start()
 
     def min_cluster_size(self):
-        """
-        Override this since we're adding services outside of the constructor
-        """
+        # Override this since we're adding services outside of the constructor
         return super(ThrottlingTest, self).min_cluster_size() +\
             self.num_producers + self.num_consumers
 
+    def clean_bounce_some_brokers(self):
+        """Bounce every other broker"""
+        for node in self.kafka.nodes[::2]:
+            self.kafka.restart_node(node, clean_shutdown=True)
 
-    def validate(self, broker, producer, consumer):
-        success = True
+    def reassign_partitions(self, bounce_brokers, throttle):
+        partition_info = self.kafka.parse_describe_topic(
+            self.kafka.describe_topic(self.topic))
+        self.logger.debug("Partitions before reassignment:" +
+                          str(partition_info))
 
-        self.kafka.read_jmx_output_all_nodes()
+        # jumble partition assignment in dictionary
+        seed = random.randint(0, 2 ** 31 - 1)
+        self.logger.debug("Jumble partition assignment with seed " + str(seed))
+        random.seed(seed)
+        # The list may still be in order, but that's ok
+        shuffled_list = range(0, self.num_partitions)
+        random.shuffle(shuffled_list)
 
-        produced_num = sum([value['records'] for value in producer.results])
-        consumed_num = sum([len(value) for value in consumer.messages_consumed.values()])
-        self.logger.info("Producer produced %d messages" % produced_num)
-        self.logger.info("Consumer consumed %d messages" % consumed_num)
-        if produced_num != consumed_num:
-            success = False
+        num_moves = 0
+        for i in range(0, self.num_partitions):
+            if partition_info["partitions"][i]["partition"] != shuffled_list[i]:
+                num_moves += 1
+            partition_info["partitions"][i]["partition"] = shuffled_list[i]
+        self.logger.debug("Jumbled partitions: " + str(partition_info))
+        self.logger.info("Number of moves: %d", num_moves)
+        # send reassign partitions command
+        self.kafka.execute_reassign_partitions(partition_info, throttle)
 
-        return success
+        if bounce_brokers:
+            # bounce a few brokers at the same time
+            self.clean_bounce_some_brokers()
 
-    def test_throttling_basic(self):
-        security_protocol = 'PLAINTEXT'
+        # Wait until finished or timeout
+        size_per_broker = (num_moves / self.num_brokers) * self.partition_size
+        estimated_throttled_time = size_per_broker / self.throttle
+        start = time.time()
+        self.logger.info("Waiting %ds for the reassignment to complete",
+                         estimated_throttled_time * 2)
+        wait_until(lambda: self.kafka.verify_reassign_partitions(partition_info),
+                   timeout_sec=estimated_throttled_time * 2, backoff_sec=.5)
+        stop = time.time()
+        self.logger.info("Transfer took %d second. Estimated time : %ds", stop - start,
+                         estimated_throttled_time)
+
+    @parametrize(security_protocol="PLAINTEXT", bounce_brokers=False)
+    @parametrize(security_protocol="PLAINTEXT", bounce_brokers=True)
+    def test_throttled_reassignment(self, bounce_brokers, security_protocol):
+        """Reassign partitions tests.
+        Setup: 1 zk, 3 kafka nodes, 1 topic with partitions=3,
+        replication-factor=3, and min.insync.replicas=2
+
+            - Produce messages in the background
+            - Consume messages in the background
+            - Reassign partitions
+            - If bounce_brokers is True, also bounce a few brokers while
+              partition re-assignment is in progress
+            - When done reassigning partitions and bouncing brokers, stop
+              producing, and finish consuming
+            - Validate that every acked message was consumed
+        """
+
         self.kafka.security_protocol = security_protocol
         self.kafka.interbroker_security_protocol = security_protocol
-        self.kafka.start_some([0,1,2,3])
-        producer_num = 1
-        producer_id = 'default_producer'
-        producer = ProducerPerformanceService(
+        new_consumer = (False if self.kafka.security_protocol == "PLAINTEXT"
+                        else True)
+        producer_num = 0
+        producer_id = 'performance_producer'
+        self.producer = ProducerPerformanceService(
             self.test_context, producer_num, self.kafka, topic=self.topic,
             num_records=self.num_records, record_size=self.record_size,
             throughput=-1, client_id=producer_id,
             jmx_object_names=
             ['kafka.producer:type=producer-metrics,client-id=%s' % producer_id],
              jmx_attributes=['outgoing-byte-rate'])
-
-        producer.run()
-
-        consumer_id = 'default_consumer_id'
-        consumer_num = 1
-
-        consumer = ConsoleConsumer(self.test_context, consumer_num, self.kafka,
-                                   self.topic, new_consumer=False,
-                                   consumer_timeout_ms=60000,
-                                   client_id=consumer_id,
-                                   jmx_object_names=
-                                   ['kafka.consumer:type=ConsumerTopicMetrics,name=BytesPerSec,clientId=%s' % consumer_id],
-                                   jmx_attributes=['OneMinuteRate'])
-        consumer.run()
-
-        result = self.validate(self.kafka, producer, consumer)
-
-        assert result
-
-        # All the messages have been published properly. Let's start the
-        # rest of the brokers.
-        self.logger.debug("About to start remaining brokers..")
-        self.kafka.start_some([4,5], create_topics=False)
-        self.logger.debug("Remaining brokers started..")
-
-        # TODO(apurva): Check that the throttled replicas catch up slower than the
-        # un-throttled ones.
-        #
-        # partitions 0,1,2,3 are throttled on brokers 0,1,2,3 respectively.
-        # What's left to do is to ensure that these brokers are the leaders for
-        # these partitions.
-        #
-        # Then we have to make sure that if this is true, then these throttled
-        # partitions catch up on brokers 4,5 at a slower rate than partitions
-        # 4,5, and that the rate is consistent with the throttle of
-        # 1000 Byte/s
-        for partition in range(6):
-            leader = self.kafka.idx(self.kafka.leader(self.topic, partition))
-            try:
-                self.logger.info("Leader for partition %d is %d" % (partition,
-                                 leader))
-            except:
-                pass
-
-        self.logger.info("Sleeping for 60 seconds")
-        time.sleep(60)
+        self.consumer = ConsoleConsumer(self.test_context,
+                                        self.num_consumers,
+                                        self.kafka,
+                                        self.topic,
+                                        new_consumer=new_consumer,
+                                        consumer_timeout_ms=60000,
+                                        message_validator=is_int)
+        self.kafka.start()
+        self.run_produce_consume_validate(core_test_action=
+                                          lambda: self.reassign_partitions(
+                                              bounce_brokers, self.throttle))
