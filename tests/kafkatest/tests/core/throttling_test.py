@@ -62,7 +62,7 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.partition_size = (self.num_records * self.record_size) / self.num_partitions
         self.num_producers = 1
         self.num_consumers = 1
-        self.throttle = 2048  # 2 KB/s
+        self.throttle = 128  # 128 b/s
 
     def setUp(self):
         self.zk.start()
