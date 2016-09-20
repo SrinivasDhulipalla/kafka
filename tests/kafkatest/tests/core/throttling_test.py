@@ -99,7 +99,8 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.logger.debug("Jumbled partitions: " + str(partition_info))
         self.logger.info("Number of moves: %d", num_moves)
         # send reassign partitions command
-        self.kafka.execute_reassign_partitions(partition_info, throttle)
+        self.kafka.execute_reassign_partitions(partition_info,
+                                               throttle=throttle)
 
         if bounce_brokers:
             # bounce a few brokers at the same time
@@ -152,5 +153,4 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                                         message_validator=is_int)
         self.kafka.start()
         self.run_produce_consume_validate(core_test_action=
-                                          lambda: self.reassign_partitions(
-                                              bounce_brokers, self.throttle))
+                                          lambda: self.reassign_partitions(bounce_brokers, self.throttle))
