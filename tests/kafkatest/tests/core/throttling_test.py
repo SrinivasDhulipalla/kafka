@@ -14,15 +14,17 @@
 # limitations under the License.
 
 import time
+import math
 from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until
+
 
 from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.services.kafka import KafkaService
 from kafkatest.services.console_consumer import ConsoleConsumer
 from kafkatest.tests.produce_consume_validate import ProduceConsumeValidateTest
-from kafkatest.services.performance import ProducerPerformanceService
-from kafkatest.utils import is_int
+from kafkatest.services.verifiable_producer import VerifiableProducer
+from kafkatest.utils import is_int_with_prefix
 import random
 
 
@@ -46,20 +48,21 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                                   zk=self.zk,
                                   topics={
                                       self.topic: {
-                                          "partitions": 20,
+                                          "partitions": 6,
                                           "replication-factor": 3,
                                           'configs': {"min.insync.replicas": 2}}
                                   })
-        self.producer_start_timeout_sec = 360
-        self.num_partitions = 20
+        self.producer_throughput = 10000
+        self.num_partitions = 6
         self.timeout_sec = 400
-        self.num_records = 10
-        self.record_size = 100 * 1024  # 100 KB
+        self.num_records = 1000000
+        avg_record_val = (self.num_records + 1) / 2
+        self.record_size = int(math.log10(avg_record_val)) + 1
+        # 1 MB per partition on average.
         self.partition_size = (self.num_records * self.record_size) / self.num_partitions
-        # 30 MB total size => 30 / 20 == 1.5MB per partition.
         self.num_producers = 1
         self.num_consumers = 1
-        self.throttle = 512*1024  # 0.5 MB/s
+        self.throttle = 2048  # 2 KB/s
 
     def setUp(self):
         self.zk.start()
@@ -135,15 +138,11 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.kafka.interbroker_security_protocol = security_protocol
         new_consumer = (False if self.kafka.security_protocol == "PLAINTEXT"
                         else True)
-        producer_num = 0
-        producer_id = 'performance_producer'
-        self.producer = ProducerPerformanceService(
-            self.test_context, producer_num, self.kafka, topic=self.topic,
-            num_records=self.num_records, record_size=self.record_size,
-            throughput=-1, client_id=producer_id,
-            jmx_object_names=
-            ['kafka.producer:type=producer-metrics,client-id=%s' % producer_id],
-             jmx_attributes=['outgoing-byte-rate'])
+        self.producer = VerifiableProducer(self.test_context, self.num_producers,
+                                           self.kafka, self.topic,
+                                           message_validator = is_int_with_prefix,
+                                           max_messages = self.num_records)
+
         self.consumer = ConsoleConsumer(self.test_context,
                                         self.num_consumers,
                                         self.kafka,
