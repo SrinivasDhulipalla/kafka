@@ -24,7 +24,7 @@ from kafkatest.services.kafka import KafkaService
 from kafkatest.services.console_consumer import ConsoleConsumer
 from kafkatest.tests.produce_consume_validate import ProduceConsumeValidateTest
 from kafkatest.services.verifiable_producer import VerifiableProducer
-from kafkatest.utils import is_int_with_prefix
+from kafkatest.utils import is_int
 import random
 
 
@@ -140,7 +140,7 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                         else True)
         self.producer = VerifiableProducer(self.test_context, self.num_producers,
                                            self.kafka, self.topic,
-                                           message_validator = is_int_with_prefix,
+                                           message_validator = is_int,
                                            max_messages = self.num_records)
 
         self.consumer = ConsoleConsumer(self.test_context,
