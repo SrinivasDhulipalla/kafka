@@ -128,7 +128,7 @@ class DynamicConfigManager(private val zkUtils: ZkUtils,
       }
 
       val entityConfig = AdminUtils.fetchEntityConfig(zkUtils, entityType, entity)
-      logger.info(s"Processing override for entityType: $entityType, entity: $entity with config: $entityConfig")
+//      logger.info(s"Processing override for entityType: $entityType, entity: $entity with config: $entityConfig")
       configHandlers(entityType).processConfigChanges(entity, entityConfig)
 
     }

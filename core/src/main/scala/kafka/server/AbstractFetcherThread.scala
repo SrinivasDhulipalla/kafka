@@ -90,13 +90,20 @@ abstract class AbstractFetcherThread(name: String,
   override def doWork() {
 
     val fetchRequest = inLock(partitionMapLock) {
-      val fetchRequest = buildFetchRequest(partitionStates.partitionStates.asScala.map { state =>
+      var fetchRequest = buildFetchRequest(partitionStates.partitionStates.asScala.map { state =>
         state.topicPartition -> state.value
       })
-      if (fetchRequest.isEmpty) {
-        trace("There are no active partitions. Back off for %d ms before sending a fetch request".format(fetchBackOffMs))
-        partitionMapCond.await(fetchBackOffMs, TimeUnit.MILLISECONDS)
+
+      (0 until 10).foreach{ ignored =>
+        if (fetchRequest.isEmpty) {
+          trace("There are no active partitions. Back off for %d ms before sending a fetch request".format(fetchBackOffMs))
+          partitionMapCond.await(fetchBackOffMs/10, TimeUnit.MILLISECONDS)
+          fetchRequest = buildFetchRequest(partitionStates.partitionStates.asScala.map { state =>
+            state.topicPartition -> state.value
+          })
+        }
       }
+
       fetchRequest
     }
     if (!fetchRequest.isEmpty)
