@@ -125,7 +125,6 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                 time_taken))
 
     @parametrize(bounce_brokers=False, new_consumer=True)
-    @parametrize(bounce_brokers=False, new_consumer=False)
     def test_throttled_reassignment(self, bounce_brokers, new_consumer):
         """Tests throttled partition reassignment. This is essentially similar
         to the reassign_partitions_test, except that we throttle the reassignment
