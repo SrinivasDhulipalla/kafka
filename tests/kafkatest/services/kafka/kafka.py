@@ -292,7 +292,7 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
             output += line
         return output
 
-    def alter_message_format(self, topic, msg_format_version, node=None):
+    def alter_message_format(self, topic, msg_format_version):
         if node is None:
             node = self.nodes[0]
         self.logger.info("Altering message format version for topic %s with format %s", topic, msg_format_version)
@@ -300,6 +300,23 @@ class KafkaService(KafkaPathResolverMixin, JmxMixin, Service):
               (self.path.script("kafka-configs.sh", node), self.zk.connect_setting(), topic, msg_format_version)
         self.logger.info("Running alter message format command...\n%s" % cmd)
         node.account.ssh(cmd)
+
+    def configure_throttle(self, topic, throttle, node_count):
+        node = self.nodes[0]
+
+        self.logger.info("Throttling all replicas on topic %s with limit %s", topic, throttle)
+        cmd = "%s --zookeeper %s --entity-name %s --entity-type topics --alter --add-config quota.replication.throttled.replicas=*" % \
+              (self.path.script("kafka-configs.sh", node), self.zk.connect_setting(), topic)
+        self.logger.info("Running throttled replicas command...\n%s" % cmd)
+        node.account.ssh(cmd)
+
+        for brokerId in range (0, node_count):
+            self.logger.info("Setting throttle limit for broker %s with limit %s", str(brokerId), throttle)
+            cmd = "%s --zookeeper %s --entity-name %s --entity-type brokers --alter --add-config replication.quota.throttled.rate=%s" % \
+                  (self.path.script("kafka-configs.sh", node), self.zk.connect_setting(), str(brokerId), str(throttle))
+            self.logger.info("Running throttled limit command...\n%s" % cmd)
+            node.account.ssh(cmd)
+
 
     def parse_describe_topic(self, topic_description):
         """Parse output of kafka-topics.sh --describe (or describe_topic() method above), which is a string of form

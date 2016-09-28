@@ -75,7 +75,8 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.partition_size = (self.num_records * self.record_size) / self.num_partitions
         self.num_producers = 2
         self.num_consumers = 1
-        self.throttle = 4 * 1024 * 1024  # 4 MB/s
+        self.throttle = 4 * 1024 * 1024  # 2 MB/s
+        self.use_config_command = True
 
     def setUp(self):
         self.zk.start()
@@ -109,8 +110,11 @@ class ThrottlingTest(ProduceConsumeValidateTest):
             partition_info["partitions"][i]["partition"] = new_part
         self.logger.debug("Jumbled partitions: " + str(partition_info))
 
-        self.kafka.execute_reassign_partitions(partition_info,
-                                               throttle=throttle)
+        if(self.use_config_command is True):
+            self.kafka.configure_throttle(self.topic, throttle, self.num_brokers)
+            self.kafka.execute_reassign_partitions(partition_info)
+        else:
+            self.kafka.execute_reassign_partitions(partition_info, throttle=throttle)
         start = time.time()
         if bounce_brokers:
             # bounce a few brokers at the same time
@@ -137,12 +141,13 @@ class ThrottlingTest(ProduceConsumeValidateTest):
                 estimated_throttled_time,
                 time_taken))
 
-    @parametrize(bounce_brokers=False)
-    @parametrize(bounce_brokers=True)
-    def test_throttled_reassignment(self, bounce_brokers):
+    @parametrize(bounce_brokers=False, use_config_command=False)
+    @parametrize(bounce_brokers=False, use_config_command=True)
+    def test_throttled_reassignment(self, bounce_brokers, use_config_command):
         security_protocol = 'PLAINTEXT'
         self.kafka.security_protocol = security_protocol
         self.kafka.interbroker_security_protocol = security_protocol
+        self.use_config_command = use_config_command
 
         producer_id = 'bulk_producer'
         bulk_producer = ProducerPerformanceService(
