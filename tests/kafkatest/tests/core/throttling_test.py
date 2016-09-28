@@ -75,7 +75,7 @@ class ThrottlingTest(ProduceConsumeValidateTest):
         self.partition_size = (self.num_records * self.record_size) / self.num_partitions
         self.num_producers = 2
         self.num_consumers = 1
-        self.throttle = 4 * 1024 * 1024  # 2 MB/s
+        self.throttle = 4 * 1024 * 1024  # 4 MB/s
         self.use_config_command = True
 
     def setUp(self):
