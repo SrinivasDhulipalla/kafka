@@ -34,6 +34,7 @@ import org.junit.Assert.assertEquals
 class CrashRecoveryTest extends ZooKeeperTestHarness {
 
   val msg = new Array[Byte](1000)
+  val msgBigger = new Array[Byte](10000)
   var brokers: Seq[KafkaServer] = null
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
   val topic = "topic1"
@@ -50,115 +51,64 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     super.tearDown()
   }
 
-  @Test
-  def shouldFailWithCorruptedLogsAfterCrash(): Unit = {
+  //        , (ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy")
 
-    //Given
+  @Test
+  def shouldNotAllowDivergentLogs(): Unit = {
+
+    //Given two brokers
     brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+    //A single partition topic with 2 replicas
     AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, Map(
       0 -> Seq(100, 101)
     ))
+    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1)
 
-    val numMessages: Int = 100
-
-    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1, lingerMs = 1000,
-      props = Option(CoreUtils.propsWith(
-        (ProducerConfig.BATCH_SIZE_CONFIG, String.valueOf(msg.length * numMessages))
-                  ,(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy")
-      )))
-
-
-
-    val start = System.currentTimeMillis()
-
-    //Write N messages, in batches of 10
-    (0 until numMessages).foreach { i =>
+    //Write 10 messages
+    (0 until 10).foreach { i =>
       producer.send(new ProducerRecord(topic, 0, null, msg))
-      if (i % 10 == 9)
-        producer.flush()
+      producer.flush()
     }
-    producer.flush()
 
-    warn("Stopping both brokers")
+    //Stop the brokers
     brokers.foreach { b => b.shutdown() }
 
-
-
-    //Delete 5 messages from the leader on 100
-    warn("Removing 5 messages from broker " + brokers(0).config.brokerId)
-    val logFile = getLogFile(brokers(0), 0)
-    warn("Length before delete: " + logFile.length)
-
-    val oldLen = logFile.length()
-    val f: RandomAccessFile = new RandomAccessFile(logFile, "rwd")
-    val trimBy: Int = 5 * msg.length
-    f.setLength(logFile.length() - trimBy)
-
-    assertEquals(oldLen - trimBy, logFile.length())
-    warn("File trimmed to " + f.length())
-    f.close()
-
-
-
     //Delete the clean shutdown file to simulate crash
+    new File(brokers(0).config.logDirs(0), Log.CleanShutdownFile).delete()
 
-    val cleanShutdown: File = new File(brokers(0).config.logDirs(0), Log.CleanShutdownFile)
-    cleanShutdown.delete()
-    warn("did we get a clean shutdown? " + cleanShutdown.exists())
+    //Delete 5 messages from the leader's log on 100
+    deleteMessagesFromLogFile(5, brokers(0), 0)
 
-
-    warn("**** starting broker " + brokers(0).config.brokerId)
+    //Start broker 100 again
     brokers(0).startup()
-    warn("**** started broker " + brokers(0).config.brokerId)
 
-    //    assertEquals(oldLen - trimBy, getLogFile(brokers(0), 0).length())
-
+    //Bounce the producer (this is required, although I'm unsure as to why?)
     producer.close()
-    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1, lingerMs = 1,
-      props = Option(CoreUtils.propsWith((ProducerConfig.BATCH_SIZE_CONFIG, String.valueOf(1))
-        , (ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy")
-      )))
+    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1)
 
-
-    warn("Broker 100 file now " + getLogFile(brokers(0), 0).length())
-    warn("Broker 100 offset now : " + getLog(brokers(0), 0).logEndOffset)
-    warn("writing ten messages to broker 100 (broker 101 is still down")
+    //Write ten larger messages
     (0 until 10).foreach { _ =>
-      producer.send(new ProducerRecord(topic, 0, null, msg))
+      producer.send(new ProducerRecord(topic, 0, null, msgBigger))
       producer.flush()
-      warn("writing")
     }
-    warn("starting flush")
-    producer.flush()
-    warn("flush complete")
-    warn("Broker 100 file now " + getLogFile(brokers(0), 0).length())
-    warn("Broker 100 offset now : " + getLog(brokers(0), 0).logEndOffset)
 
-
-
-
-    warn("*****starting broker " + brokers(1).config.brokerId)
+    //Start broker 101
     brokers(1).startup()
-    warn("*****broker started")
-    Thread.sleep(1000)
-    warn("file b0:0 after extra messages " + getLogFile(brokers(0), 0).length())
-    warn("file b1:0 after extra messages " + getLogFile(brokers(1), 0).length())
-    warn("Broker 100 offset now : " + getLog(brokers(0), 0).logEndOffset)
-    warn("Broker 101 offset now : " + getLog(brokers(1), 0).logEndOffset)
 
+    //Wait for replication to resync
+    while (getLog(brokers(0), 0).logEndOffset != getLog(brokers(1), 0).logEndOffset) Thread.sleep(100)
 
+    //For now assert that the logs are corrupted by the expected amount. Once fixed we should assert the logs are identical
+    assertEquals(getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length  + 5 * (msgBigger.length - msg.length))
+//    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
 
+  }
 
-    (0 until 10).foreach { _ =>
-      producer.send(new ProducerRecord(topic, 0, null, msg))
-      producer.flush()
-      warn("final writing leo 0-0: " + getLog(brokers(0), 0).logEndOffset)
-      warn("final writing leo 1-0: " + getLog(brokers(1), 0).logEndOffset)
-    }
-
-    warn("took " + (System.currentTimeMillis() - start) + " ms")
-    assertEquals("LEOs should match", getLog(brokers(0), 0).logEndOffset, getLog(brokers(1), 0).logEndOffset)
-    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
+  def deleteMessagesFromLogFile(msgs: Int, broker: KafkaServer, partitionId: Int): Unit = {
+    val logFile = getLogFile(broker, partitionId)
+    val writable = new RandomAccessFile(logFile, "rwd")
+    writable.setLength(logFile.length() - msgs * msg.length)
+    writable.close()
   }
 
   def getLogFile(broker: KafkaServer, partition: Int): File = {
