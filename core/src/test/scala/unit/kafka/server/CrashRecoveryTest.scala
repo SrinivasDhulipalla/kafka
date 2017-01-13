@@ -18,18 +18,24 @@
 package unit.kafka.server
 
 import java.io.{File, RandomAccessFile}
+import java.util.Properties
 
+import collection.JavaConverters._
 import kafka.admin.AdminUtils
 import kafka.log.Log
 import kafka.server.KafkaConfig._
 import kafka.server.KafkaServer
+import kafka.tools.DumpLogSegments
 import kafka.utils.{CoreUtils, TestUtils}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.test.MockDeserializer
 import org.junit.{After, Before, Test}
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class CrashRecoveryTest extends ZooKeeperTestHarness {
 
@@ -38,6 +44,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
   var brokers: Seq[KafkaServer] = null
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
   val topic = "topic1"
+  var consumer: KafkaConsumer[Array[Byte], Array[Byte]] = null
 
   @Before
   override def setUp() {
@@ -51,7 +58,6 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     super.tearDown()
   }
 
-  //        , (ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy")
 
   @Test
   def shouldNotAllowDivergentLogs(): Unit = {
@@ -77,7 +83,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     new File(brokers(0).config.logDirs(0), Log.CleanShutdownFile).delete()
 
     //Delete 5 messages from the leader's log on 100
-    deleteMessagesFromLogFile(5, brokers(0), 0)
+    deleteMessagesFromLogFile(5 * msg.length, brokers(0), 0)
 
     //Start broker 100 again
     brokers(0).startup()
@@ -99,16 +105,118 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     while (getLog(brokers(0), 0).logEndOffset != getLog(brokers(1), 0).logEndOffset) Thread.sleep(100)
 
     //For now assert that the logs are corrupted by the expected amount. Once fixed we should assert the logs are identical
-    assertEquals(getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length  + 5 * (msgBigger.length - msg.length))
-//    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
+    assertEquals(getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length + 5 * (msgBigger.length - msg.length))
+    //    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
 
   }
 
-  def deleteMessagesFromLogFile(msgs: Int, broker: KafkaServer, partitionId: Int): Unit = {
+
+  //This is essentially the use case described in https://issues.apache.org/jira/browse/KAFKA-3919
+  @Test
+  def shouldCreateMonotonicOffsetsEvenOnHardFailureWithCompressedMessageSets(): Unit = {
+
+    //Given two brokers
+    brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+    //A single partition topic with 2 replicas
+    AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, Map(
+      0 -> Seq(100, 101)
+    ))
+    producer = bufferingProducer()
+
+    //Write 100 in batches of 10 messages
+    (0 until 10).foreach { i =>
+      (0 until 10).foreach { j =>
+        producer.send(new ProducerRecord(topic, 0, null, msg))
+      }
+      producer.flush()
+    }
+
+    //Stop the brokers
+    brokers.foreach { b => b.shutdown() }
+
+    //Delete the clean shutdown file to simulate crash
+    new File(brokers(0).config.logDirs(0), Log.CleanShutdownFile).delete()
+
+    //Delete half the messages from the log file
+    deleteMessagesFromLogFile(getLogFile(brokers(0), 0).length() / 2, brokers(0), 0)
+
+    //Start broker 100 again
+    brokers(0).startup()
+
+    //Bounce the producer (this is required, although I'm unsure as to why?)
+    producer.close()
+    producer = bufferingProducer()
+
+    //Write two large batches of messages.
+    (0 until 77).foreach { _ =>
+      producer.send(new ProducerRecord(topic, 0, null, msg))
+    }
+    producer.flush()
+    (0 until 77).foreach { _ =>
+      producer.send(new ProducerRecord(topic, 0, null, msg))
+    }
+    producer.flush()
+
+    printSegments()
+
+    //Start broker 101. When it comes up it should read a whole batch of messages from the leader.
+    //As the chronology is lost we should end up with non-monatonic offsets
+    brokers(1).startup()
+
+    //Wait for replication to resync
+    while (getLog(brokers(0), 0).logEndOffset != getLog(brokers(1), 0).logEndOffset) Thread.sleep(100)
+
+    printSegments()
+
+    //Shut down broker 100, so we read from broker 101 which should have corrupted
+    brokers(0).shutdown()
+
+    //Search to see if we have non-monatonic offsets in the log
+    startConsumer()
+    val records = consumer.poll(1000).asScala
+    var prevOffset = -1L
+    records.foreach { r =>
+      assertTrue(s"Offset $prevOffset came before ${r.offset} ", r.offset > prevOffset)
+      prevOffset = r.offset
+    }
+
+    //Are the files identical?
+    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
+  }
+
+
+  def printSegments(): Unit = {
+    println("Broker0:")
+    DumpLogSegments.main(Seq("--files", getLogFile(brokers(0), 0).getCanonicalPath).toArray)
+    println("Broker1:")
+    DumpLogSegments.main(Seq("--files", getLogFile(brokers(1), 0).getCanonicalPath).toArray)
+    println()
+  }
+
+  def startConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
+    val consumerConfig = new Properties()
+    consumerConfig.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, getBrokerListStrFromServers(brokers))
+    consumerConfig.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, String.valueOf(getLogFile(brokers(1), 0).length() * 2))
+    consumerConfig.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, String.valueOf(getLogFile(brokers(1), 0).length() * 2))
+    consumer = new KafkaConsumer(consumerConfig, new MockDeserializer, new MockDeserializer)
+    consumer.assign(List(new TopicPartition(topic, 0)).asJava)
+    consumer.seek(new TopicPartition(topic, 0), 0)
+    consumer
+  }
+
+  def deleteMessagesFromLogFile(bytes: Long, broker: KafkaServer, partitionId: Int): Unit = {
     val logFile = getLogFile(broker, partitionId)
     val writable = new RandomAccessFile(logFile, "rwd")
-    writable.setLength(logFile.length() - msgs * msg.length)
+    writable.setLength(logFile.length() - bytes)
     writable.close()
+  }
+
+  def bufferingProducer(): KafkaProducer[Array[Byte], Array[Byte]] = {
+    createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1, lingerMs = 10000,
+      props = Option(CoreUtils.propsWith(
+        (ProducerConfig.BATCH_SIZE_CONFIG, String.valueOf(msg.length * 1000))
+        , (ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy")
+      )))
   }
 
   def getLogFile(broker: KafkaServer, partition: Int): File = {
