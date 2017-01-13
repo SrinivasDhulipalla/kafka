@@ -171,7 +171,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     //Shut down broker 100, so we read from broker 101 which should have corrupted
     brokers(0).shutdown()
 
-    //Search to see if we have non-monatonic offsets in the log
+    //Search to see if we have non-monotonic offsets in the log
     startConsumer()
     val records = consumer.poll(1000).asScala
     var prevOffset = -1L
