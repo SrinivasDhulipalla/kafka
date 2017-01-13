@@ -113,7 +113,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
 
   //This is essentially the use case described in https://issues.apache.org/jira/browse/KAFKA-3919
   @Test
-  def shouldCreateMonotonicOffsetsEvenOnHardFailureWithCompressedMessageSets(): Unit = {
+  def offsetsShouldNotGoBackwards(): Unit = {
 
     //Given two brokers
     brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
@@ -123,7 +123,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     ))
     producer = bufferingProducer()
 
-    //Write 100 in batches of 10 messages
+    //Write 100 messages in batches of 10
     (0 until 10).foreach { i =>
       (0 until 10).foreach { j =>
         producer.send(new ProducerRecord(topic, 0, null, msg))
@@ -147,7 +147,8 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     producer.close()
     producer = bufferingProducer()
 
-    //Write two large batches of messages.
+    //Write two large batches of messages. This will ensure that the LeO of the follower's log aligns with the middle
+    //of the a compressed message set in the leader (which, when forwarded will result in offsets going backwards)
     (0 until 77).foreach { _ =>
       producer.send(new ProducerRecord(topic, 0, null, msg))
     }
