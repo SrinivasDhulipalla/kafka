@@ -146,6 +146,7 @@ public class MemoryRecordsTest {
             assertEquals(compression, shallowEntry.record().compressionType());
             assertEquals(magic == Record.MAGIC_VALUE_V0 ? TimestampType.NO_TIMESTAMP_TYPE : TimestampType.CREATE_TIME,
                     shallowEntry.record().timestampType());
+            assertEquals(Record.NO_LEADER_EPOCH, shallowEntry.record().leaderEpoch());
         }
 
         List<LogEntry> deepEntries = TestUtils.toList(filteredRecords.deepEntries().iterator());

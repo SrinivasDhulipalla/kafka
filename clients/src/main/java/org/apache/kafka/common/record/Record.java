@@ -40,9 +40,11 @@ public final class Record {
     public static final int MAGIC_LENGTH = 1;
     public static final int ATTRIBUTES_OFFSET = MAGIC_OFFSET + MAGIC_LENGTH;
     public static final int ATTRIBUTE_LENGTH = 1;
-    public static final int TIMESTAMP_OFFSET = ATTRIBUTES_OFFSET + ATTRIBUTE_LENGTH;
+    public static final int LEADER_EPOCH_OFFSET = ATTRIBUTES_OFFSET + ATTRIBUTE_LENGTH;
+    public static final int LEADER_EPOCH_LENGTH = 4;
+    public static final int TIMESTAMP_OFFSET = LEADER_EPOCH_OFFSET + LEADER_EPOCH_LENGTH;
     public static final int TIMESTAMP_LENGTH = 8;
-    public static final int KEY_SIZE_OFFSET_V0 = ATTRIBUTES_OFFSET + ATTRIBUTE_LENGTH;
+    public static final int KEY_SIZE_OFFSET_V0 = LEADER_EPOCH_OFFSET + LEADER_EPOCH_LENGTH;
     public static final int KEY_SIZE_OFFSET_V1 = TIMESTAMP_OFFSET + TIMESTAMP_LENGTH;
     public static final int KEY_SIZE_LENGTH = 4;
     public static final int KEY_OFFSET_V0 = KEY_SIZE_OFFSET_V0 + KEY_SIZE_LENGTH;
@@ -52,7 +54,7 @@ public final class Record {
     /**
      * The size for the record header
      */
-    public static final int HEADER_SIZE = CRC_LENGTH + MAGIC_LENGTH + ATTRIBUTE_LENGTH;
+    public static final int HEADER_SIZE = CRC_LENGTH + MAGIC_LENGTH + ATTRIBUTE_LENGTH + LEADER_EPOCH_LENGTH;
 
     /**
      * The amount of overhead bytes in a record
@@ -92,6 +94,7 @@ public final class Record {
      * Timestamp value for records without a timestamp
      */
     public static final long NO_TIMESTAMP = -1L;
+    public static final int NO_LEADER_EPOCH = -13;
 
     private final ByteBuffer buffer;
     private final Long wrapperRecordTimestamp;
@@ -239,6 +242,10 @@ public final class Record {
             else
                 return buffer.getLong(TIMESTAMP_OFFSET);
         }
+    }
+
+    public int leaderEpoch() {
+        return buffer.getInt(LEADER_EPOCH_OFFSET);
     }
 
     /**
@@ -506,9 +513,10 @@ public final class Record {
                               ByteBuffer value,
                               CompressionType compressionType,
                               TimestampType timestampType) throws IOException {
+        int leaderEpoch = NO_LEADER_EPOCH;
         byte attributes = computeAttributes(magic, compressionType, timestampType);
-        long crc = computeChecksum(magic, attributes, timestamp, key, value);
-        write(out, magic, crc, attributes, timestamp, key, value);
+        long crc = computeChecksum(magic, attributes, timestamp, leaderEpoch, key, value);
+        write(out, magic, crc, attributes, timestamp,leaderEpoch, key, value);
         return crc;
     }
 
@@ -523,7 +531,7 @@ public final class Record {
                              long timestamp,
                              byte[] key,
                              byte[] value) throws IOException {
-        write(out, magic, crc, attributes, timestamp, wrapNullable(key), wrapNullable(value));
+        write(out, magic, crc, attributes, timestamp, NO_LEADER_EPOCH, wrapNullable(key), wrapNullable(value));
     }
 
     // Write a record to the buffer, if the record's compression type is none, then
@@ -533,6 +541,7 @@ public final class Record {
                               long crc,
                               byte attributes,
                               long timestamp,
+                              int leaderEpoch,
                               ByteBuffer key,
                               ByteBuffer value) throws IOException {
         if (magic != MAGIC_VALUE_V0 && magic != MAGIC_VALUE_V1)
@@ -546,6 +555,8 @@ public final class Record {
         out.writeByte(magic);
         // write attributes
         out.writeByte(attributes);
+
+        out.writeInt(leaderEpoch);
 
         // maybe write timestamp
         if (magic > 0)
@@ -592,19 +603,23 @@ public final class Record {
     }
 
     // visible only for testing
-    public static long computeChecksum(byte magic, byte attributes, long timestamp, byte[] key, byte[] value) {
-        return computeChecksum(magic, attributes, timestamp, wrapNullable(key), wrapNullable(value));
+    public static long computeChecksum(byte magic, byte attributes, long timestamp, int leaderEpoch, byte[] key, byte[] value) {
+        return computeChecksum(magic, attributes, timestamp, leaderEpoch, wrapNullable(key), wrapNullable(value));
     }
 
     /**
      * Compute the checksum of the record from the attributes, key and value payloads
      */
-    private static long computeChecksum(byte magic, byte attributes, long timestamp, ByteBuffer key, ByteBuffer value) {
+    private static long computeChecksum(byte magic, byte attributes, long timestamp, int leaderEpoch, ByteBuffer key, ByteBuffer value) {
         Crc32 crc = new Crc32();
         crc.update(magic);
         crc.update(attributes);
+
+        crc.updateInt(leaderEpoch);
+
         if (magic > 0)
             crc.updateLong(timestamp);
+
         // update for the key
         if (key == null) {
             crc.updateInt(-1);

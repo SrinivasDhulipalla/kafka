@@ -82,6 +82,7 @@ public class RecordTest {
                 magic,
                 attributes,
                 this.timestamp,
+                Record.NO_LEADER_EPOCH,
                 this.key == null ? null : this.key.array(),
                 this.value == null ? null : this.value.array()
         ));

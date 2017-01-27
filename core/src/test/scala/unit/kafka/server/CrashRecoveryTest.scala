@@ -112,6 +112,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
 
 
   //This is essentially the use case described in https://issues.apache.org/jira/browse/KAFKA-3919
+  //Is currently in "failing mode"
   @Test
   def offsetsShouldNotGoBackwards(): Unit = {
 

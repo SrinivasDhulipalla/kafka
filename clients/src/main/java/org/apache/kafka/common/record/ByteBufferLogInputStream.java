@@ -109,6 +109,12 @@ class ByteBufferLogInputStream implements LogInputStream<ByteBufferLogInputStrea
             Utils.writeUnsignedInt(buffer, LOG_OVERHEAD + Record.CRC_OFFSET, crc);
         }
 
+        public void setLeaderEpoch(int leaderEpoch){
+            buffer.putInt(LOG_OVERHEAD + Record.LEADER_EPOCH_OFFSET, leaderEpoch);
+            long crc = record.computeChecksum();
+            Utils.writeUnsignedInt(buffer, LOG_OVERHEAD + Record.CRC_OFFSET, crc);
+        }
+
         public ByteBuffer buffer() {
             return buffer;
         }

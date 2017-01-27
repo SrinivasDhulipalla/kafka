@@ -67,13 +67,13 @@ class MessageCompressionTest extends JUnitSuite {
                                        new Message(bytes2k, Message.NoTimestamp, Message.MagicValue_V1),
                                        new Message(bytes3k, Message.NoTimestamp, Message.MagicValue_V1))
 
-    testCompressSize(GZIPCompressionCodec, messages, 396)
+    testCompressSize(GZIPCompressionCodec, messages, 406)
 
     if(isSnappyAvailable)
-      testCompressSize(SnappyCompressionCodec, messages, 1063)
+      testCompressSize(SnappyCompressionCodec, messages, 1092)
 
     if(isLZ4Available)
-      testCompressSize(LZ4CompressionCodec, messages, 387)
+      testCompressSize(LZ4CompressionCodec, messages, 397)
   }
 
   def testSimpleCompressDecompress(compressionCodec: CompressionCodec) {

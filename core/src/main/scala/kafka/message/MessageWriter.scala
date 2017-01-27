@@ -20,7 +20,7 @@ package kafka.message
 import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.kafka.common.record.TimestampType
+import org.apache.kafka.common.record.{Record, TimestampType}
 import org.apache.kafka.common.utils.Crc32
 
 class MessageWriter(segmentSize: Int) extends BufferingOutputStream(segmentSize) {
@@ -42,6 +42,10 @@ class MessageWriter(segmentSize: Int) extends BufferingOutputStream(segmentSize)
       if (magicValue > MagicValue_V0)
         attributes = timestampType.updateAttributes(attributes)
       write(attributes)
+
+      //just hack in for now
+      writeInt(Record.NO_LEADER_EPOCH)
+
       // Write timestamp
       if (magicValue > MagicValue_V0)
         writeLong(timestamp)

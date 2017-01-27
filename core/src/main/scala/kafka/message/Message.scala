@@ -39,10 +39,14 @@ object Message {
   val MagicLength = 1
   val AttributesOffset = MagicOffset + MagicLength
   val AttributesLength = 1
+  val LeaderEpochOffset = AttributesOffset + AttributesLength
+  val LeaderEpochLength = 4
+
   // Only message format version 1 has the timestamp field.
-  val TimestampOffset = AttributesOffset + AttributesLength
+  val TimestampOffset = LeaderEpochOffset + LeaderEpochLength
   val TimestampLength = 8
-  val KeySizeOffset_V0 = AttributesOffset + AttributesLength
+
+  val KeySizeOffset_V0 = LeaderEpochOffset + LeaderEpochLength
   val KeySizeOffset_V1 = TimestampOffset + TimestampLength
   val KeySizeLength = 4
   val KeyOffset_V0 = KeySizeOffset_V0 + KeySizeLength
@@ -50,8 +54,8 @@ object Message {
   val ValueSizeLength = 4
 
   private val MessageHeaderSizeMap = Map (
-    (0: Byte) -> (CrcLength + MagicLength + AttributesLength + KeySizeLength + ValueSizeLength),
-    (1: Byte) -> (CrcLength + MagicLength + AttributesLength + TimestampLength + KeySizeLength + ValueSizeLength))
+    (0: Byte) -> (CrcLength + MagicLength + AttributesLength + LeaderEpochLength + KeySizeLength + ValueSizeLength),
+    (1: Byte) -> (CrcLength + MagicLength + AttributesLength + LeaderEpochLength + TimestampLength + KeySizeLength + ValueSizeLength))
 
   /**
    * The amount of overhead bytes in a message
@@ -168,6 +172,7 @@ class Message(val buffer: ByteBuffer,
                              Message.AttributesLength +
                              (if (magicValue == Message.MagicValue_V0) 0
                               else Message.TimestampLength) +
+                             Message.LeaderEpochLength +
                              Message.KeySizeLength + 
                              (if(key == null) 0 else key.length) + 
                              Message.ValueSizeLength + 
@@ -183,6 +188,7 @@ class Message(val buffer: ByteBuffer,
         timestampType.updateAttributes((CompressionCodeMask & codec.codec).toByte)
       else 0
     buffer.put(attributes)
+    buffer.putInt(Record.NO_LEADER_EPOCH)
     // Only put timestamp when "magic" value is greater than 0
     if (magic > MagicValue_V0)
       buffer.putLong(timestamp)

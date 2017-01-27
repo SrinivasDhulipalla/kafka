@@ -117,6 +117,12 @@ private[kafka] object LogValidator {
       val offset = offsetCounter.getAndIncrement()
       entry.setOffset(offset)
 
+      // Temporarily we'll just hard code the leader epoch onto the message as we write it.
+      // Later this will be assigned from ZK.
+      // Currently we're ignoring compressed messages (as everything will change anyway when we
+      // move to leader epoch on the message set)
+      entry.setLeaderEpoch(TempLeaderEpochStuff.TEMP_FIXED_SERVER_ASSIGNED_LEADER_EPOCH)
+
       if (record.magic > Record.MAGIC_VALUE_V0) {
         validateTimestamp(record, now, timestampType, timestampDiffMaxMs)
 
