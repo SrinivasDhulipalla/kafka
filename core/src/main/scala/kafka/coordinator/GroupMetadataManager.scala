@@ -25,9 +25,10 @@ import java.util.concurrent.locks.ReentrantLock
 
 import com.yammer.metrics.core.Gauge
 import kafka.api.{ApiVersion, KAFKA_0_10_1_IV0}
+import kafka.cluster.Partition
 import kafka.common.{MessageFormatter, _}
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.ReplicaManager
+import kafka.server.{MetadataCache, ReplicaManager}
 import kafka.utils.CoreUtils.inLock
 import kafka.utils._
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -48,7 +49,9 @@ class GroupMetadataManager(val brokerId: Int,
                            val config: OffsetConfig,
                            replicaManager: ReplicaManager,
                            zkUtils: ZkUtils,
-                           time: Time) extends Logging with KafkaMetricsGroup {
+                           time: Time,
+                           metadataCache: MetadataCache
+                          ) extends Logging with KafkaMetricsGroup {
 
   private val compressionType: CompressionType = CompressionType.forId(config.offsetsTopicCompressionCodec.codec)
 
@@ -215,6 +218,7 @@ class GroupMetadataManager(val brokerId: Int,
       config.offsetCommitRequiredAcks,
       true, // allow appending to internal offset topic
       delayedStore.partitionRecords,
+      metadataCache,
       delayedStore.callback)
   }
 
@@ -586,9 +590,10 @@ class GroupMetadataManager(val brokerId: Int,
 
             if (tombstones.nonEmpty) {
               try {
+                val epochOverride = leaderEpoch(partition, metadataCache)
                 // do not need to require acks since even if the tombstone is lost,
                 // it will be appended again in the next purge cycle
-                partition.appendRecordsToLeader(MemoryRecords.withRecords(timestampType, compressionType, tombstones: _*))
+                partition.appendRecordsToLeader(MemoryRecords.withRecords(timestampType, compressionType, tombstones: _*), epochOverride)
                 offsetsRemoved += expiredOffsets.size
                 trace(s"Successfully appended ${tombstones.size} tombstones to $appendPartition for expired offsets and/or metadata for group $groupId")
               } catch {
@@ -605,6 +610,13 @@ class GroupMetadataManager(val brokerId: Int,
     }
 
     info(s"Removed $offsetsRemoved expired offsets in ${time.milliseconds() - startMs} milliseconds.")
+  }
+
+  private def leaderEpoch(tp: Partition, metadataCache: MetadataCache): Option[Int] = {
+    metadataCache.getPartitionInfo(tp.topic, tp.partitionId) match {
+      case Some(info) => Some(info.leaderIsrAndControllerEpoch.leaderAndIsr.leaderEpoch)
+      case _ => None
+    }
   }
 
   private def getHighWatermark(partitionId: Int): Long = {

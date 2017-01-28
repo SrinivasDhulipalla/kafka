@@ -42,7 +42,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
     val validatedRecords = validatedResults.validatedRecords
     assertEquals("number of messages should not change", records.deepEntries.asScala.size, validatedRecords.deepEntries.asScala.size)
     validatedRecords.deepEntries.asScala.foreach(logEntry => validateLogAppendTime(now, logEntry.record))
@@ -64,7 +65,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
     val validatedRecords = validatedResults.validatedRecords
 
     assertEquals("number of messages should not change", records.deepEntries.asScala.size, validatedRecords.deepEntries.asScala.size)
@@ -90,7 +92,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
     val validatedRecords = validatedResults.validatedRecords
 
     assertEquals("number of messages should not change", records.deepEntries.asScala.size,
@@ -120,7 +123,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
     val validatedRecords = validatingResults.validatedRecords
 
     var i = 0
@@ -153,7 +157,8 @@ class LogValidatorTest extends JUnitSuite {
         targetCodec = DefaultCompressionCodec,
         messageFormatVersion = Record.MAGIC_VALUE_V1,
         messageTimestampType = TimestampType.CREATE_TIME,
-        messageTimestampDiffMaxMs = 1000L)
+        messageTimestampDiffMaxMs = 1000L,
+        leaderEpochOverride = None)
     val validatedRecords = validatedResults.validatedRecords
 
     var i = 0
@@ -182,7 +187,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
   }
 
   @Test(expected = classOf[InvalidTimestampException])
@@ -198,7 +204,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 1000L)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None)
   }
   @Test
   def testAbsoluteOffsetAssignmentNonCompressed() {
@@ -212,7 +219,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V0,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 1000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test
@@ -227,7 +235,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V0,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 1000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test
@@ -242,7 +251,8 @@ class LogValidatorTest extends JUnitSuite {
       sourceCodec = NoCompressionCodec,
       targetCodec = NoCompressionCodec,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 5000L).validatedRecords
+      messageTimestampDiffMaxMs = 5000L,
+      leaderEpochOverride = None).validatedRecords
     checkOffsets(messageWithOffset, offset)
   }
 
@@ -259,7 +269,8 @@ class LogValidatorTest extends JUnitSuite {
       sourceCodec = DefaultCompressionCodec,
       targetCodec = DefaultCompressionCodec,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 5000L).validatedRecords
+      messageTimestampDiffMaxMs = 5000L,
+      leaderEpochOverride = None).validatedRecords
     checkOffsets(compressedMessagesWithOffset, offset)
   }
 
@@ -275,7 +286,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
-      messageTimestampDiffMaxMs = 1000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test
@@ -290,7 +302,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V1,
       messageTimestampType = TimestampType.LOG_APPEND_TIME,
-      messageTimestampDiffMaxMs = 1000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 1000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test
@@ -306,7 +319,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = NoCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V0,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 5000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 5000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test
@@ -322,7 +336,8 @@ class LogValidatorTest extends JUnitSuite {
       targetCodec = DefaultCompressionCodec,
       messageFormatVersion = Record.MAGIC_VALUE_V0,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 5000L).validatedRecords, offset)
+      messageTimestampDiffMaxMs = 5000L,
+      leaderEpochOverride = None).validatedRecords, offset)
   }
 
   @Test(expected = classOf[InvalidRecordException])
@@ -335,7 +350,8 @@ class LogValidatorTest extends JUnitSuite {
       sourceCodec = SnappyCompressionCodec,
       targetCodec = SnappyCompressionCodec,
       messageTimestampType = TimestampType.CREATE_TIME,
-      messageTimestampDiffMaxMs = 5000L)
+      messageTimestampDiffMaxMs = 5000L,
+      leaderEpochOverride = None)
   }
 
   private def createRecords(magicValue: Byte = Message.CurrentMagicValue,

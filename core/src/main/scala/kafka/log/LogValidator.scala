@@ -53,7 +53,8 @@ private[kafka] object LogValidator {
                                                       compactedTopic: Boolean = false,
                                                       messageFormatVersion: Byte = Record.CURRENT_MAGIC_VALUE,
                                                       messageTimestampType: TimestampType,
-                                                      messageTimestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                                      messageTimestampDiffMaxMs: Long,
+                                                      leaderEpochOverride: Option[Int]): ValidationAndOffsetAssignResult = {
     if (sourceCodec == NoCompressionCodec && targetCodec == NoCompressionCodec) {
       // check the magic value
       if (!records.hasMatchingShallowMagic(messageFormatVersion))
@@ -62,10 +63,10 @@ private[kafka] object LogValidator {
       else
         // Do in-place validation, offset assignment and maybe set timestamp
         assignOffsetsNonCompressed(records, offsetCounter, now, compactedTopic, messageTimestampType,
-          messageTimestampDiffMaxMs)
+          messageTimestampDiffMaxMs, leaderEpochOverride)
     } else {
       validateMessagesAndAssignOffsetsCompressed(records, offsetCounter, now, sourceCodec, targetCodec, compactedTopic,
-        messageFormatVersion, messageTimestampType, messageTimestampDiffMaxMs)
+        messageFormatVersion, messageTimestampType, messageTimestampDiffMaxMs, leaderEpochOverride)
     }
   }
 
@@ -105,7 +106,8 @@ private[kafka] object LogValidator {
                                          now: Long,
                                          compactedTopic: Boolean,
                                          timestampType: TimestampType,
-                                         timestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                         timestampDiffMaxMs: Long,
+                                         leaderEpochOverride: Option[Int]): ValidationAndOffsetAssignResult = {
     var maxTimestamp = Record.NO_TIMESTAMP
     var offsetOfMaxTimestamp = -1L
     val firstOffset = offsetCounter.value
@@ -117,11 +119,11 @@ private[kafka] object LogValidator {
       val offset = offsetCounter.getAndIncrement()
       entry.setOffset(offset)
 
-      // Temporarily we'll just hard code the leader epoch onto the message as we write it.
-      // Later this will be assigned from ZK.
-      // Currently we're ignoring compressed messages (as everything will change anyway when we
-      // move to leader epoch on the message set)
-      entry.setLeaderEpoch(TempLeaderEpochStuff.TEMP_FIXED_SERVER_ASSIGNED_LEADER_EPOCH)
+      // To move to leader epoch on message set once EoS change in
+      leaderEpochOverride match {
+        case Some(epoch) => entry.setLeaderEpoch(epoch)
+        case _ =>
+      }
 
       if (record.magic > Record.MAGIC_VALUE_V0) {
         validateTimestamp(record, now, timestampType, timestampDiffMaxMs)
@@ -162,13 +164,16 @@ private[kafka] object LogValidator {
                                                  compactedTopic: Boolean = false,
                                                  messageFormatVersion: Byte = Record.CURRENT_MAGIC_VALUE,
                                                  messageTimestampType: TimestampType,
-                                                 messageTimestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                                 messageTimestampDiffMaxMs: Long,
+                                                 leaderEpochOverride: Option[Int]): ValidationAndOffsetAssignResult = {
     // No in place assignment situation 1 and 2
     var inPlaceAssignment = sourceCodec == targetCodec && messageFormatVersion > Record.MAGIC_VALUE_V0
 
     var maxTimestamp = Record.NO_TIMESTAMP
     val expectedInnerOffset = new LongRef(0)
     val validatedRecords = new mutable.ArrayBuffer[Record]
+
+    //TODO - we need to assign compressed messages with a leaderEpoch, but that's going to mean decompressing them, so ignore compression for now.
 
     records.deepEntries(true).asScala.foreach { logEntry =>
       val record = logEntry.record

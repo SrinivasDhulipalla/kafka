@@ -345,7 +345,7 @@ class Log(@volatile var dir: File,
    * @throws KafkaStorageException If the append fails due to an I/O error.
    * @return Information about the appended messages including the first and last offset.
    */
-  def append(records: MemoryRecords, assignOffsets: Boolean = true): LogAppendInfo = {
+  def append(records: MemoryRecords, assignOffsets: Boolean = true, leaderEpochOverride: Option[Int] = None): LogAppendInfo = {
     val appendInfo = analyzeAndValidateRecords(records)
 
     // if we have any valid messages, append them to the log
@@ -373,7 +373,8 @@ class Log(@volatile var dir: File,
                                                           config.compact,
                                                           config.messageFormatVersion.messageFormatVersion,
                                                           config.messageTimestampType,
-                                                          config.messageTimestampDifferenceMaxMs)
+                                                          config.messageTimestampDifferenceMaxMs,
+                                                          leaderEpochOverride)
           } catch {
             case e: IOException => throw new KafkaException("Error in validating messages while appending to log '%s'".format(name), e)
           }

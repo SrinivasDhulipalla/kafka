@@ -6,7 +6,7 @@
   * (the "License"); you may not use this file except in compliance with
   * the License.  You may obtain a copy of the License at
   *
-  *    http://www.apache.org/licenses/LICENSE-2.0
+  * http://www.apache.org/licenses/LICENSE-2.0
   *
   * Unless required by applicable law or agreed to in writing, software
   * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,9 +16,8 @@
   */
 package unit.kafka.server
 
-import kafka.log.TempLeaderEpochStuff
-import kafka.server.{FetchDataInfo, KafkaConfig, KafkaServer}
-import kafka.utils.TestUtils
+import kafka.server.{KafkaConfig, KafkaServer}
+import kafka.utils.{Logging, TestUtils}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -26,7 +25,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.{After, Before, Test}
 
-class LeaderEpochTest extends ZooKeeperTestHarness  {
+class LeaderEpochTest extends ZooKeeperTestHarness  with Logging{
   var brokers: Seq[KafkaServer] = null
   val topic1 = "foo"
   val topic2 = "bar"
@@ -44,48 +43,71 @@ class LeaderEpochTest extends ZooKeeperTestHarness  {
     super.tearDown()
   }
 
-  //This test currently just checks that the server assigns a temp value
-  //to the message when it is written. This will change in future commits.
   @Test
-  def shouldReplicateLeaderEpoch() {
-    val partition = 0
-    val testMessageList1 = List("test1", "test2", "test3", "test4")
-    val testMessageList2 = List("test5", "test6", "test7", "test8")
-
-    // create a topic and partition and await leadership
-    for (topic <- List(topic1,topic2)) {
-      createTopic(zkUtils, topic, numPartitions = 1, replicationFactor = 2, servers = brokers)
+  def shouldAddCurrentLeaderEpochToMessagesAsTheyAreWrittenToBroker() {
+    // Given two topics with replication of a single partition
+    for (topic <- List(topic1, topic2)) {
+      createTopic(zkUtils, topic, Map(0 -> Seq(0, 1)), servers = brokers)
     }
 
-    // send test messages to leader
-    val producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers),
-      retries = 5,
-      keySerializer = new StringSerializer,
-      valueSerializer = new StringSerializer)
-    val records = testMessageList1.map(m => new ProducerRecord(topic1, m, m)) ++
-      testMessageList2.map(m => new ProducerRecord(topic2, m, m))
-    records.map(producer.send).foreach(_.get)
-    producer.close()
+    // When we send four messages
+    sendFourMessagesToEachTopic()
 
-    //Make sure the broker is setting the leader epoch and that propagates to the follower
-    def logsMatch(): Boolean = {
-      var result = true
-      for (topic <- List(topic1, topic2)) {
-        val tp = new TopicPartition(topic, partition)
-        val leo = brokers.head.getLogManager().getLog(tp).get.logEndOffset
-        result = result && leo > 0 && brokers.forall { broker =>
-          broker.getLogManager().getLog(tp).get.logSegments.iterator.forall{segment =>
-            val info: FetchDataInfo = segment.read(segment.baseOffset, None, Integer.MAX_VALUE)
-            val deepEntries = info.records.deepEntries.iterator()
-            scala.collection.JavaConversions.asScalaIterator(deepEntries).forall{ msg =>
-              println("Validated that leader epoch is " +  msg.record().leaderEpoch())
-              TempLeaderEpochStuff.TEMP_FIXED_SERVER_ASSIGNED_LEADER_EPOCH == msg.record().leaderEpoch()
-            }
+    //Then they should be stamped with Leader Epoch 0
+    var expectedLeaderEpoch = 0
+    waitUntilTrue(() => messagesHaveLeaderEpoch(expectedLeaderEpoch, 0), "Broker logs should be identical")
+
+    //Given we then bounce the leader
+    brokers(0).shutdown()
+    brokers(0).startup()
+
+    //Then LeaderEpoch should now have changed from 0 -> 1
+    expectedLeaderEpoch = 1
+    waitForEpochChangeTo(topic1, 0, expectedLeaderEpoch)
+    waitForEpochChangeTo(topic2, 0, expectedLeaderEpoch)
+
+    //Given we now send messages
+    sendFourMessagesToEachTopic()
+
+    //The new messages should be stamped with LeaderEpoch = 1
+    waitUntilTrue(() => messagesHaveLeaderEpoch(expectedLeaderEpoch, 4), "Broker logs should be identical")
+  }
+
+  def waitForEpochChangeTo(topic: String, partition: Int, epoch: Int): Boolean = {
+    TestUtils.waitUntilTrue(() => {
+      brokers(0).metadataCache.getPartitionInfo(topic, partition) match {
+        case Some(m) => m.leaderIsrAndControllerEpoch.leaderAndIsr.leaderEpoch == epoch
+        case None => false
+      }
+    }, "Epoch didn't change")
+  }
+
+  def messagesHaveLeaderEpoch(expectedLeaderEpoch: Int, minOffset: Int): Boolean = {
+    var result = true
+    for (topic <- List(topic1, topic2)) {
+      val tp = new TopicPartition(topic, 0)
+      val leo = brokers.head.getLogManager().getLog(tp).get.logEndOffset
+      result = result && leo > 0 && brokers.forall { broker =>
+        broker.getLogManager().getLog(tp).get.logSegments.iterator.forall { segment =>
+          val deepEntries = segment.read(minOffset, None, Integer.MAX_VALUE).records.deepEntries.iterator()
+          scala.collection.JavaConversions.asScalaIterator(deepEntries).forall { msg =>
+            info("tp:" + tp + " offset:" + msg.offset + " => LeaderEpoch: " + msg.record().leaderEpoch())
+            expectedLeaderEpoch == msg.record().leaderEpoch()
           }
         }
       }
-      result
     }
-    waitUntilTrue(logsMatch, "Broker logs should be identical")
+    result
+  }
+
+  def sendFourMessagesToEachTopic() = {
+    val testMessageList1 = List("test1", "test2", "test3", "test4")
+    val testMessageList2 = List("test5", "test6", "test7", "test8")
+    val producer = TestUtils.createNewProducer(TestUtils.getBrokerListStrFromServers(brokers), retries = 5, keySerializer = new StringSerializer, valueSerializer = new StringSerializer)
+    val records =
+      testMessageList1.map(m => new ProducerRecord(topic1, m, m)) ++
+        testMessageList2.map(m => new ProducerRecord(topic2, m, m))
+    records.map(producer.send).foreach(_.get)
+    producer.close()
   }
 }
