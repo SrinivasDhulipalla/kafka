@@ -108,7 +108,6 @@ class ReplicaManagerTest {
         requiredAcks = 3,
         internalTopicsAllowed = false,
         entriesPerPartition = Map(new TopicPartition("test1", 0) -> MemoryRecords.withRecords(Record.create("first message".getBytes))),
-        new MetadataCache(0),
         responseCallback = callback)
     } finally {
       rm.shutdown(checkpointHW = false)
@@ -162,7 +161,6 @@ class ReplicaManagerTest {
         requiredAcks = -1,
         internalTopicsAllowed = false,
         entriesPerPartition = Map(new TopicPartition(topic, 0) -> MemoryRecords.withRecords(Record.create("first message".getBytes()))),
-        new MetadataCache(0),
         responseCallback = produceCallback)
 
       // Fetch some messages
@@ -225,7 +223,6 @@ class ReplicaManagerTest {
           requiredAcks = -1,
           internalTopicsAllowed = false,
           entriesPerPartition = Map(new TopicPartition(topic, 0) -> MemoryRecords.withRecords(Record.create("message %d".format(i).getBytes))),
-          new MetadataCache(0),
           responseCallback = produceCallback)
       
       var fetchCallbackFired = false

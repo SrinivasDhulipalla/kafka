@@ -222,7 +222,7 @@ class KafkaServer(val config: KafkaConfig, time: Time = Time.SYSTEM, threadNameP
 
         /* start group coordinator */
         // Hardcode Time.SYSTEM for now as some Streams tests fail otherwise, it would be good to fix the underlying issue
-        groupCoordinator = GroupCoordinator(config, zkUtils, replicaManager, Time.SYSTEM, metadataCache)
+        groupCoordinator = GroupCoordinator(config, zkUtils, replicaManager, Time.SYSTEM)
         groupCoordinator.startup()
 
         /* Get the authorizer and initialize it if one is specified.*/

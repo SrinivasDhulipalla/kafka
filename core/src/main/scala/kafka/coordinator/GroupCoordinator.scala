@@ -766,11 +766,10 @@ object GroupCoordinator {
   def apply(config: KafkaConfig,
             zkUtils: ZkUtils,
             replicaManager: ReplicaManager,
-            time: Time,
-            metadataCache: MetadataCache): GroupCoordinator = {
+            time: Time): GroupCoordinator = {
     val heartbeatPurgatory = DelayedOperationPurgatory[DelayedHeartbeat]("Heartbeat", config.brokerId)
     val joinPurgatory = DelayedOperationPurgatory[DelayedJoin]("Rebalance", config.brokerId)
-    apply(config, zkUtils, replicaManager, heartbeatPurgatory, joinPurgatory, time, metadataCache)
+    apply(config, zkUtils, replicaManager, heartbeatPurgatory, joinPurgatory, time)
   }
 
   private[coordinator] def offsetConfig(config: KafkaConfig) = OffsetConfig(
@@ -791,15 +790,14 @@ object GroupCoordinator {
             replicaManager: ReplicaManager,
             heartbeatPurgatory: DelayedOperationPurgatory[DelayedHeartbeat],
             joinPurgatory: DelayedOperationPurgatory[DelayedJoin],
-            time: Time,
-            metadataCache: MetadataCache
+            time: Time
            ): GroupCoordinator = {
     val offsetConfig = this.offsetConfig(config)
     val groupConfig = GroupConfig(groupMinSessionTimeoutMs = config.groupMinSessionTimeoutMs,
       groupMaxSessionTimeoutMs = config.groupMaxSessionTimeoutMs)
 
     val groupMetadataManager = new GroupMetadataManager(config.brokerId, config.interBrokerProtocolVersion,
-      offsetConfig, replicaManager, zkUtils, time, metadataCache)
+      offsetConfig, replicaManager, zkUtils, time)
     new GroupCoordinator(config.brokerId, groupConfig, offsetConfig, groupMetadataManager, heartbeatPurgatory, joinPurgatory, time)
   }
 

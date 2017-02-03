@@ -14,18 +14,18 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server
+package unit.kafka.server.epoch
 
 import kafka.server.{KafkaConfig, KafkaServer}
-import kafka.utils.{Logging, TestUtils}
 import kafka.utils.TestUtils._
+import kafka.utils.{Logging, TestUtils}
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.{After, Before, Test}
 
-class LeaderEpochTest extends ZooKeeperTestHarness  with Logging{
+class LeaderEpochIntegrationTest extends ZooKeeperTestHarness  with Logging{
   var brokers: Seq[KafkaServer] = null
   val topic1 = "foo"
   val topic2 = "bar"

@@ -304,12 +304,11 @@ class ReplicaManager(val config: KafkaConfig,
                     requiredAcks: Short,
                     internalTopicsAllowed: Boolean,
                     entriesPerPartition: Map[TopicPartition, MemoryRecords],
-                    metadataCache: MetadataCache,
                     responseCallback: Map[TopicPartition, PartitionResponse] => Unit) {
 
     if (isValidRequiredAcks(requiredAcks)) {
       val sTime = time.milliseconds
-      val localProduceResults = appendToLocalLog(internalTopicsAllowed, entriesPerPartition, requiredAcks, metadataCache)
+      val localProduceResults = appendToLocalLog(internalTopicsAllowed, entriesPerPartition, requiredAcks)
       debug("Produce to local log in %d ms".format(time.milliseconds - sTime))
 
       val produceStatus = localProduceResults.map { case (topicPartition, result) =>
@@ -365,19 +364,13 @@ class ReplicaManager(val config: KafkaConfig,
     requiredAcks == -1 || requiredAcks == 1 || requiredAcks == 0
   }
 
-  private def epochOverride(tp: TopicPartition, metadataCache: MetadataCache): Option[Int] = {
-    metadataCache.getPartitionInfo(tp.topic, tp.partition) match {
-      case Some(maybeInfo) => Some(maybeInfo.leaderIsrAndControllerEpoch.leaderAndIsr.leaderEpoch)
-      case _ => None
-    }
-  }
 
   /**
    * Append the messages to the local replica logs
    */
   private def appendToLocalLog(internalTopicsAllowed: Boolean,
                                entriesPerPartition: Map[TopicPartition, MemoryRecords],
-                               requiredAcks: Short, metadataCache: MetadataCache): Map[TopicPartition, LogAppendResult] = {
+                               requiredAcks: Short): Map[TopicPartition, LogAppendResult] = {
     trace("Append [%s] to local log ".format(entriesPerPartition))
     entriesPerPartition.map { case (topicPartition, records) =>
       BrokerTopicStats.getBrokerTopicStats(topicPartition.topic).totalProduceRequestRate.mark()
@@ -393,7 +386,7 @@ class ReplicaManager(val config: KafkaConfig,
           val partitionOpt = getPartition(topicPartition)
           val info = partitionOpt match {
             case Some(partition) =>
-              partition.appendRecordsToLeader(records, epochOverride(topicPartition, metadataCache), requiredAcks)
+              partition.appendRecordsToLeader(records, requiredAcks)
             case None => throw new UnknownTopicOrPartitionException("Partition %s doesn't exist on %d"
               .format(topicPartition, localBrokerId))
           }

@@ -428,7 +428,6 @@ class KafkaApis(val requestChannel: RequestChannel,
         produceRequest.acks,
         internalTopicsAllowed,
         authorizedRequestInfo,
-        metadataCache,
         sendResponseCallback)
 
       // if the request is put into the purgatory, it will have a held reference
