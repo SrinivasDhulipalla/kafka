@@ -29,7 +29,7 @@ import static org.apache.kafka.common.record.Records.OFFSET_OFFSET;
  * A byte buffer backed log input stream. This class avoids the need to copy records by returning
  * slices from the underlying byte buffer.
  */
-class ByteBufferLogInputStream implements LogInputStream<ByteBufferLogInputStream.ByteBufferLogEntry> {
+public class ByteBufferLogInputStream implements LogInputStream<ByteBufferLogInputStream.ByteBufferLogEntry> {
     private final ByteBuffer buffer;
     private final int maxMessageSize;
 
