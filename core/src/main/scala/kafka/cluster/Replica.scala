@@ -21,9 +21,7 @@ import kafka.log.Log
 import kafka.utils.Logging
 import kafka.server.{LogOffsetMetadata, LogReadResult}
 import kafka.common.KafkaException
-import java.util.concurrent.atomic.AtomicLong
-
-import kafka.server.epoch.LeaderEpochTracker
+import kafka.server.epoch.{LeaderEpochCheckpointFile, LeaderEpochFile, SavedLeaderEpochs, LeaderEpochs}
 import org.apache.kafka.common.utils.Time
 
 class Replica(val brokerId: Int,
@@ -55,9 +53,11 @@ class Replica(val brokerId: Int,
 
   def lastCaughtUpTimeMs = _lastCaughtUpTimeMs
 
-  def epochs: Option[LeaderEpochTracker] =  log.isDefined match {
-    case true => Some(new LeaderEpochTracker(partition, log.get.dir, this))
-    case false => None //TODO what exactly is a Replica that is not on this broker??
+  val epochs: Option[LeaderEpochs] = log.isDefined match {
+    case true =>
+      val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.get.dir))
+      Some(new SavedLeaderEpochs(this, checkpoint))
+    case false => None
   }
 
   /*

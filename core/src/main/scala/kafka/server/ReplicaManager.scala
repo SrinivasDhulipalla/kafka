@@ -28,6 +28,7 @@ import kafka.controller.KafkaController
 import kafka.log.{LogAppendInfo, LogManager}
 import kafka.metrics.KafkaMetricsGroup
 import kafka.server.QuotaFactory.UnboundedQuota
+import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import kafka.utils._
 import org.apache.kafka.common.errors.{ControllerMovedException, CorruptRecordException, InvalidTimestampException, InvalidTopicException, NotLeaderForPartitionException, OffsetOutOfRangeException, RecordBatchTooLargeException, RecordTooLargeException, ReplicaNotAvailableException, UnknownTopicOrPartitionException}
 import org.apache.kafka.common.TopicPartition
@@ -39,6 +40,7 @@ import org.apache.kafka.common.requests.ProduceResponse.PartitionResponse
 import org.apache.kafka.common.utils.Time
 import org.apache.kafka.common.requests.FetchRequest.PartitionData
 
+import scala.Seq
 import scala.collection._
 import scala.collection.JavaConverters._
 
@@ -852,9 +854,6 @@ class ReplicaManager(val config: KafkaConfig,
           .format(localBrokerId, controllerId, epoch, correlationId, partition.topicPartition))
       }
 
-      logManager.truncateTo(partitionsToMakeFollower.map { partition =>
-        (partition.topicPartition, partition.getOrCreateReplica().highWatermark.messageOffset)
-      }.toMap)
       partitionsToMakeFollower.foreach { partition =>
         val topicPartitionOperationKey = new TopicPartitionOperationKey(partition.topicPartition)
         tryCompleteDelayedProduce(topicPartitionOperationKey)

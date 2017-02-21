@@ -15,27 +15,27 @@
   * limitations under the License.
   */
 
-package unit.kafka.server
+package unit.kafka.server.epoch
 
 import java.io.{File, RandomAccessFile}
 import java.util.Properties
 
-import collection.JavaConverters._
 import kafka.admin.AdminUtils
 import kafka.log.Log
 import kafka.server.KafkaConfig._
 import kafka.server.KafkaServer
 import kafka.tools.DumpLogSegments
-import kafka.utils.{CoreUtils, TestUtils}
+import kafka.utils.CoreUtils
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
-import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecords, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.test.MockDeserializer
+import org.junit.Assert.{assertEquals, assertTrue}
 import org.junit.{After, Before, Test}
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+
+import scala.collection.JavaConverters._
 
 class CrashRecoveryTest extends ZooKeeperTestHarness {
 
@@ -104,10 +104,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     //Wait for replication to resync
     while (getLog(brokers(0), 0).logEndOffset != getLog(brokers(1), 0).logEndOffset) Thread.sleep(100)
 
-    //For now assert that the logs are corrupted by the expected amount. Once fixed we should assert the logs are identical
-    assertEquals(getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length + 5 * (msgBigger.length - msg.length))
-    //    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
-
+    assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
   }
 
 
@@ -185,7 +182,6 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     //Are the files identical?
     assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
   }
-
 
   def printSegments(): Unit = {
     println("Broker0:")

@@ -25,20 +25,30 @@ import org.apache.kafka.common.utils.Utils
 
 import scala.collection._
 
-object LeaderEpochCheckpoint {
+object LeaderEpochCheckpointFile {
   private val WhiteSpacesPattern = Pattern.compile("\\s+")
   private val CurrentVersion = 0
 }
 
+trait LeaderEpochCheckpoint {
+  def write(epochs: Seq[EpochEntry])
+  def read(): Seq[EpochEntry]
+}
+
+object LeaderEpochFile {
+  private val LeaderEpochCheckpointFilename = "leader-epoch-checkpoint"
+  def newFile(dir: File) = {new File(dir, LeaderEpochCheckpointFilename)}
+}
+
 /**
  * This class saves out a map of LeaderEpoch=>offsets to a file for a certain replica
+  * TODO before merge we should merge this class with the offsets checkpoint file (currently C&P)
   *
-  * TODO we could probably merge this with the offsets checkpoint file
-  *
-  * TODO we should probably be appending to the file rather than always recreating it.
+  * TODO BUT - we should probably be appending to the file rather than always recreating it.
  */
-class LeaderEpochCheckpoint(val file: File) extends Logging {
-  import LeaderEpochCheckpoint._
+class LeaderEpochCheckpointFile(val file: File) extends LeaderEpochCheckpoint with Logging {
+
+  import LeaderEpochCheckpointFile._
   private val path = file.toPath.toAbsolutePath
   private val tempPath = Paths.get(path.toString + ".tmp")
   private val lock = new Object()
@@ -120,5 +130,4 @@ class LeaderEpochCheckpoint(val file: File) extends Logging {
       }
     }
   }
-  
 }

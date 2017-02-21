@@ -33,7 +33,7 @@ import org.apache.kafka.common.protocol.Errors
 
 import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
-import kafka.server.epoch.{EpochOverwriteAction, LeaderEpochTracker}
+import kafka.server.epoch.EpochSettingInterceptor
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.requests.PartitionState
@@ -150,6 +150,8 @@ class Partition(val topic: String,
     }
   }
 
+  //TODO maybe remove this as it's really a duplicate of what is stored in the
+  //tracker. Or maybe it is ok??
   def getLeaderEpoch: Int = this.leaderEpoch
 
   /**
@@ -164,18 +166,16 @@ class Partition(val topic: String,
       // to maintain the decision maker controller's epoch in the zookeeper path
       controllerEpoch = partitionStateInfo.controllerEpoch
       // add replicas that are new
-      allReplicas.foreach(replica => {
-        val rep = getOrCreateReplica(replica)
-        if(rep.isLocal)
-          rep.epochs.get.becomeLeader(leaderEpoch)
-      } //todo still not exactly sure why replicas get created without local logs.
-        //todo Should we be mutating?
-      )
       val newInSyncReplicas = partitionStateInfo.isr.asScala.map(r => getOrCreateReplica(r)).toSet
       // remove assigned replicas that have been removed by the controller
       (assignedReplicas.map(_.brokerId) -- allReplicas).foreach(removeReplica)
       inSyncReplicas = newInSyncReplicas
+
+      //We cache the leader epoch here, persisting it only if it's local (hence having a log dir)
       leaderEpoch = partitionStateInfo.leaderEpoch
+      allReplicas.map(id => getOrCreateReplica(id))
+          .filter(_.isLocal)
+              .foreach{replica => replica.epochs.get.becomeLeader(leaderEpoch)}
 
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =
@@ -220,14 +220,7 @@ class Partition(val topic: String,
       // to maintain the decision maker controller's epoch in the zookeeper path
       controllerEpoch = partitionStateInfo.controllerEpoch
       // add replicas that are new
-      allReplicas.foreach(r =>
-        //todo Should we be mutating?
-      {
-        val rep = getOrCreateReplica(r)
-        if(rep.isLocal)//todo not sure what this
-          rep.epochs.get.becomeFollower(leaderEpoch)
-      }
-      )
+      allReplicas.foreach(r => getOrCreateReplica(r))
       // remove assigned replicas that have been removed by the controller
       (assignedReplicas.map(_.brokerId) -- allReplicas).foreach(removeReplica)
       inSyncReplicas = Set.empty[Replica]
@@ -463,7 +456,7 @@ class Partition(val topic: String,
               .format(topicPartition, inSyncSize, minIsr))
           }
 
-          val info = log.append(records, assignOffsets = true, epoch = new EpochOverwriteAction(leaderEpoch))
+          val info = log.append(records, assignOffsets = true, interceptor = new EpochSettingInterceptor(leaderEpoch))
           // probably unblock some follower fetch requests since log end offset has been updated
           replicaManager.tryCompleteDelayedFetch(TopicPartitionOperationKey(this.topic, this.partitionId))
           // we may need to increment high watermark since ISR could be down to 1

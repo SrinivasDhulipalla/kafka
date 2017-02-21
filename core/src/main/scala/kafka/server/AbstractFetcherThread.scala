@@ -207,14 +207,27 @@ abstract class AbstractFetcherThread(name: String,
         !partitionStates.contains(tp)
       }.map { case (tp, offset) =>
         val fetchState =
-          if (PartitionTopicInfo.isOffsetInvalid(offset)) new PartitionFetchState(handleOffsetOutOfRange(tp))
-          else new PartitionFetchState(offset)
+          if (PartitionTopicInfo.isOffsetInvalid(offset)) new PartitionFetchState(handleOffsetOutOfRange(tp), true)
+          else new PartitionFetchState(offset, true)
         tp -> fetchState
       }
       val existingPartitionToState = partitionStates.partitionStates.asScala.map { state =>
         state.topicPartition -> state.value
       }.toMap
       partitionStates.set((existingPartitionToState ++ newPartitionToState).asJava)
+      partitionMapCond.signalAll()
+    } finally partitionMapLock.unlock()
+  }
+
+  //TODO currently this is only used by the replica fetcher thread but should be moved into the partition state
+  def makeActive(partitions: Seq[TopicPartition], newOffsets: Map[TopicPartition, Long]) {
+    partitionMapLock.lockInterruptibly()
+    try {
+      val existingPartitionToState = partitionStates.partitionStates.asScala.map { state =>
+        val overriddenOffset = newOffsets.getOrElse(state.topicPartition, state.value.offset)
+        state.topicPartition -> state.value.makeActive(overriddenOffset)
+      }.toMap
+      partitionStates.set(existingPartitionToState.asJava)
       partitionMapCond.signalAll()
     } finally partitionMapLock.unlock()
   }
@@ -347,13 +360,21 @@ case class ClientIdTopicPartition(clientId: String, topic: String, partitionId: 
 }
 
 /**
-  * case class to keep partition offset and its state(active, inactive)
+  * case class to keep partition offset and its state(inactive, initialising, active)
   */
-case class PartitionFetchState(offset: Long, delay: DelayedItem) {
+case class PartitionFetchState(offset: Long, delay: DelayedItem, initialising: Boolean = false) {
+  //TODO make this a tri-state with constructors for each state and valid transitions.
+  //i.e. loose the boolean. make tri state. enforce state with differnet builder methods etc.
+
+  def makeActive(offset: Long): PartitionFetchState = new PartitionFetchState(offset, delay, false)
+
+  def this(offset: Long, preFetch: Boolean) = this(offset, new DelayedItem(0), preFetch)
 
   def this(offset: Long) = this(offset, new DelayedItem(0))
 
   def isActive: Boolean = delay.getDelay(TimeUnit.MILLISECONDS) == 0
+
+  def isInitialising: Boolean = initialising
 
   override def toString = "%d-%b".format(offset, isActive)
 }

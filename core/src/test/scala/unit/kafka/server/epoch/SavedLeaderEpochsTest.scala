@@ -16,39 +16,15 @@
   */
 package unit.kafka.server.epoch
 
-import java.io.File
-
-import kafka.server.epoch.{EpochEntry, LeaderEpochCheckpointFile}
-import kafka.utils.Logging
 import org.junit.Test
-import org.scalatest.junit.JUnitSuite
-import org.junit.Assert._
 
-class LeaderEpochCheckpointTest extends JUnitSuite  with Logging{
 
-  @Test
-  def shouldPersistOverwriteAndReloadFile(): Unit ={
-    val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
-    file.deleteOnExit()
+class SavedLeaderEpochsTest {
 
-    val checkpoint = new LeaderEpochCheckpointFile(file)
+  @Test  //TODO finish me
+  def shouldSendEpochRequest(): Unit = {
+    //not easy to test as SavedLeaderEpochs replies on fat classes
 
-    //Given
-    val epochs = Seq(EpochEntry(0, 1L), EpochEntry(1, 2L), EpochEntry(2, 3L))
-
-    //When
-    checkpoint.write(epochs)
-
-    //Then
-    assertEquals(epochs, checkpoint.read())
-
-    //Given overwrite
-    val epochs2 = Seq(EpochEntry(3, 4L), EpochEntry(4, 5L))
-
-    //When
-    checkpoint.write(epochs2)
-
-    //Then
-    assertEquals(epochs2, checkpoint.read())
   }
+
 }

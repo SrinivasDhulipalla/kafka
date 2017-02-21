@@ -27,7 +27,7 @@ import org.scalatest.junit.JUnitSuite
 import org.junit.{After, Before, Test}
 import kafka.utils._
 import kafka.server.KafkaConfig
-import kafka.server.epoch.{EpochChangedAction, EpochOverwriteAction, LeaderEpochTracker}
+import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochs}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
 import org.easymock.EasyMock._
@@ -217,7 +217,7 @@ class LogTest extends JUnitSuite {
 
     //When appending messages as a leader
     for(i <- records.indices)
-      log.append(MemoryRecords.withRecords(records(i)), epoch = new EpochOverwriteAction(leaderEPockOverride))
+      log.append(MemoryRecords.withRecords(records(i)), interceptor = new EpochSettingInterceptor(leaderEPockOverride))
 
     //Then leader epoch should be set on messages
     for(i <- records.indices) {
@@ -230,14 +230,14 @@ class LogTest extends JUnitSuite {
   def shouldTrackEpochChangeFromFollower() {
     val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
     val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
-    val tracker = createMock(classOf[LeaderEpochTracker])
+    val epochs = createMock(classOf[LeaderEpochs])
 
     //Given
     val epochOnMessage = 72
     val epochInTracker = 71
 
     //Stubs
-    expect(tracker.epoch()).andStubReturn(epochInTracker)
+    expect(epochs.epoch()).andStubReturn(epochInTracker)
 
     //Stamp each message with the epoch
     def recordsForEpoch(i: Int): MemoryRecords = {
@@ -247,14 +247,14 @@ class LogTest extends JUnitSuite {
     }
 
     //Assert we update the epoch in the tracker, as the message from the leader contained a larger epoch
-    expect(tracker.appendEpoch(72, 0))
-    replay(tracker)
+    expect(epochs.appendEpoch(72, 0))
+    replay(epochs)
 
     //Run it
     for(i <- records.indices) {
-      log.append(recordsForEpoch(i), epoch = new EpochChangedAction(tracker))
+      log.append(recordsForEpoch(i), interceptor = new EpochTrackingInterceptor(epochs))
     }
-    verify(tracker)
+    verify(epochs)
   }
 
 
