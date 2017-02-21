@@ -16,12 +16,13 @@
   */
 package unit.kafka.server.epoch
 
-import kafka.server.{BlockingSend}
+import kafka.server.BlockingSend
 import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.requests.{AbstractRequest, EpochEndOffset, OffsetForLeaderEpochResponse}
+import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochResponse}
 import org.easymock.EasyMock._
+import org.junit.Assert._
 import org.junit.Test
 
 import scala.collection.JavaConverters._
@@ -29,39 +30,64 @@ import scala.collection.JavaConverters._
 
 class LeaderEpochFetcherTest {
 
-  @Test  //TODO finish me
-  def shouldSendEpochRequest(): Unit = {
+  @Test
+  def shouldProcessEpochResponseFromMultiplePartitions(): Unit = {
     val sender = createMock(classOf[BlockingSend])
     val clientResponse = createMock(classOf[ClientResponse])
 
-    expect(sender.sendRequest(anyObject().asInstanceOf[AbstractRequest.Builder[_ <: AbstractRequest]]))
-      .andStubReturn(clientResponse)
-
-    val response1 = createMock(classOf[OffsetForLeaderEpochResponse])
-    expect(response1.responses()).andStubReturn(Map("topic1" -> List(new EpochEndOffset(0, 0, 156)).asJava).asJava)
-
-    val response2 = createMock(classOf[OffsetForLeaderEpochResponse])
-    expect(response2.responses()).andStubReturn(Map("topic1" -> List(new EpochEndOffset(0, 1, 172)).asJava).asJava)
-
-    expect(clientResponse.responseBody()).andStubReturn(response1)
-    expect(clientResponse.responseBody()).andStubReturn(response2)
-
-    replay(sender)
-    replay(clientResponse)
-    replay(response1)
-    replay(response2)
-
-    val fetcher = new LeaderEpochFetcher(sender)
     val tp0 = new TopicPartition("topic1", 0)
     val tp1 = new TopicPartition("topic1", 1)
+
+    val offsets = Map("topic1" -> List(
+      new EpochEndOffset(0, 0, 156),
+      new EpochEndOffset(0, 1, 172)
+    ).asJava)
+
+    val epochResponse = createMock(classOf[OffsetForLeaderEpochResponse])
+
+    expect(epochResponse.responses()).andStubReturn(offsets.asJava)
+    expect(sender.sendRequest(anyObject())).andStubReturn(clientResponse)
+    expect(clientResponse.responseBody()).andStubReturn(epochResponse)
+    replay(sender, clientResponse, epochResponse)
+
+    val fetcher = new LeaderEpochFetcher(sender)
 
     val response = fetcher.fetchLeaderEpochs(Set(
       new PartitionEpoch(tp0, 5),
       new PartitionEpoch(tp1, 7))
     )
 
-//    assertEquals(Map(tp0 -> 156, tp1 -> 172), response)
+    assertEquals(Map(tp0 -> 156, tp1 -> 172), response)
+  }
 
+  @Test
+  def shouldProcessEpochResponseFromMultipleTopics(): Unit = {
+    val sender = createMock(classOf[BlockingSend])
+    val clientResponse = createMock(classOf[ClientResponse])
+
+    val tp0 = new TopicPartition("topic1", 0)
+    val tp1 = new TopicPartition("topic2", 0)
+
+    val offsets = Map(
+      "topic1" -> List(new EpochEndOffset(0, 0, 156)).asJava,
+      "topic2" -> List(new EpochEndOffset(0, 0, 172)).asJava
+    )
+
+    val epochResponse = createMock(classOf[OffsetForLeaderEpochResponse])
+
+    expect(epochResponse.responses()).andStubReturn(offsets.asJava)
+    expect(sender.sendRequest(anyObject())).andStubReturn(clientResponse)
+    expect(clientResponse.responseBody()).andStubReturn(epochResponse)
+    replay(sender, clientResponse, epochResponse)
+
+    val fetcher = new LeaderEpochFetcher(sender)
+
+    val response = fetcher.fetchLeaderEpochs(Set(
+      new PartitionEpoch(tp0, 5),
+      new PartitionEpoch(tp1, 7))
+    )
+
+    assertEquals(Map(tp0 -> 156, tp1 -> 172), response)
   }
 
 }
