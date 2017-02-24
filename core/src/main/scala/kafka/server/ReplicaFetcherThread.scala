@@ -17,9 +17,8 @@
 
 package kafka.server
 
-import org.apache.kafka.common.requests.{FetchRequest => JFetchRequest}
-import java.net.SocketTimeoutException
 import java.util
+
 import kafka.admin.AdminUtils
 import kafka.api.{KAFKA_0_10_0_IV0, KAFKA_0_10_1_IV1, KAFKA_0_10_1_IV2, KAFKA_0_9_0}
 import kafka.cluster.BrokerEndPoint
@@ -27,14 +26,12 @@ import kafka.common.KafkaStorageException
 import kafka.log.LogConfig
 import kafka.server.ReplicaFetcherThread._
 import kafka.server.epoch.{EpochTrackingInterceptor, LeaderEpochFetcher, PartitionEpoch}
-import org.apache.kafka.clients.{ClientResponse, ManualMetadataUpdater, NetworkClient}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
-import org.apache.kafka.common.network.{ChannelBuilders, LoginType, NetworkReceive, Selectable, Selector}
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.MemoryRecords
-import org.apache.kafka.common.requests.{AbstractRequest, FetchResponse, ListOffsetRequest, ListOffsetResponse}
+import org.apache.kafka.common.requests.{FetchResponse, ListOffsetRequest, ListOffsetResponse, FetchRequest => JFetchRequest}
 import org.apache.kafka.common.utils.Time
-import org.apache.kafka.common.{Node, TopicPartition}
 
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
@@ -46,15 +43,19 @@ class ReplicaFetcherThread(name: String,
                            replicaMgr: ReplicaManager,
                            metrics: Metrics,
                            time: Time,
-                           quota: ReplicationQuotaManager)
+                           quota: ReplicationQuotaManager,
+                           blockingSend: Option[BlockingSend] = None)
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
                                 fetchBackOffMs = brokerConfig.replicaFetchBackoffMs,
-                                isInterruptible = false) with BlockingSend {
+                                isInterruptible = false) {
 
   type REQ = FetchRequest
   type PD = PartitionData
+
+  val network = blockingSend
+    .getOrElse(new ReplicaFetcherBlockingSend(sourceBroker, brokerConfig, metrics, time, fetcherId, clientId))
 
   private val fetchRequestVersion: Short =
     if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_10_1_IV1) 3
@@ -70,11 +71,9 @@ class ReplicaFetcherThread(name: String,
 
   private def clientId = name
 
-  private val sourceNode = new Node(sourceBroker.id, sourceBroker.host, sourceBroker.port)
-
   override def shutdown(): Unit = {
     super.shutdown()
-    networkClient.close()
+    network.close()
   }
 
   // process fetched data
@@ -198,7 +197,7 @@ class ReplicaFetcherThread(name: String,
   }
 
   protected def fetch(fetchRequest: FetchRequest): Seq[(TopicPartition, PartitionData)] = {
-    val clientResponse = sendRequest(fetchRequest.underlying)
+    val clientResponse = network.sendRequest(fetchRequest.underlying)
     val fetchResponse = clientResponse.responseBody.asInstanceOf[FetchResponse]
     fetchResponse.responseData.asScala.toSeq.map { case (key, value) =>
       key -> new PartitionData(value)
@@ -217,7 +216,7 @@ class ReplicaFetcherThread(name: String,
             setOffsetData(partitions.asJava).
             setVersion(0)
       }
-    val clientResponse = sendRequest(requestBuilder)
+    val clientResponse = network.sendRequest(requestBuilder)
     val response = clientResponse.responseBody.asInstanceOf[ListOffsetResponse]
     val partitionData = response.responseData.get(topicPartition)
     Errors.forCode(partitionData.errorCode) match {
@@ -230,9 +229,18 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-  protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
-    maybeTruncate(partitionMap)
+  override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
+    val initialisingPartitions = partitionMap.filter(_._2.isInitialising)
+      .map { case (tp, state) =>
+        val replica = replicaMgr.getReplica(tp, brokerConfig.brokerId)
+        PartitionEpoch(tp, replica.get.epochs.get.epoch)
+      }.toSet
 
+    if(!initialisingPartitions.isEmpty)
+      truncate(fetchEpochs(initialisingPartitions))
+  }
+
+  protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
     val requestMap = new util.LinkedHashMap[TopicPartition, JFetchRequest.PartitionData]
 
     partitionMap.foreach { case (topicPartition, partitionFetchState) =>
@@ -244,18 +252,6 @@ class ReplicaFetcherThread(name: String,
         setReplicaId(replicaId).setMaxBytes(maxBytes)
     requestBuilder.setVersion(fetchRequestVersion)
     new FetchRequest(requestBuilder)
-  }
-
-  def maybeTruncate(partitions: Seq[(TopicPartition, PartitionFetchState)]): Unit = {
-    val initialisingPartitions = partitions.filter(_._2.isInitialising)
-      .map { case (tp, state) =>
-      replicaMgr.getReplica(tp).get.epochs match {
-        case Some(epochs) => new PartitionEpoch(tp, epochs.epoch())
-        case _ => PartitionEpoch(tp, 0)
-      }
-    }.toSet
-
-    truncate(fetchEpochs(initialisingPartitions))
   }
 
   def truncate(partitionEpochOffsets: Map[TopicPartition, Long]) = {
@@ -280,58 +276,9 @@ class ReplicaFetcherThread(name: String,
   }
 
   def fetchEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, Long] = {
-    new LeaderEpochFetcher(this).fetchLeaderEpochs(partitions)
+    new LeaderEpochFetcher(network).fetchLeaderEpochs(partitions)
   }
 
-  val networkClient = {
-    val channelBuilder = ChannelBuilders.clientChannelBuilder(
-      brokerConfig.interBrokerSecurityProtocol,
-      LoginType.SERVER,
-      brokerConfig.values,
-      brokerConfig.saslMechanismInterBrokerProtocol,
-      brokerConfig.saslInterBrokerHandshakeRequestEnable
-    )
-    val selector = new Selector(
-      NetworkReceive.UNLIMITED,
-      brokerConfig.connectionsMaxIdleMs,
-      metrics,
-      time,
-      "replica-fetcher",
-      Map("broker-id" -> sourceBroker.id.toString, "fetcher-id" -> fetcherId.toString).asJava,
-      false,
-      channelBuilder
-    )
-    new NetworkClient(
-      selector,
-      new ManualMetadataUpdater(),
-      clientId,
-      1,
-      0,
-      Selectable.USE_DEFAULT_BUFFER_SIZE,
-      brokerConfig.replicaSocketReceiveBufferBytes,
-      brokerConfig.requestTimeoutMs,
-      time,
-      false
-    )
-  }
-
-  def sendRequest(requestBuilder: AbstractRequest.Builder[_ <: AbstractRequest]): ClientResponse = {
-    import kafka.utils.NetworkClientBlockingOps._
-    try {
-      if (!networkClient.blockingReady(sourceNode, socketTimeout)(time))
-        throw new SocketTimeoutException(s"Failed to connect within $socketTimeout ms")
-      else {
-        val clientRequest = networkClient.newClientRequest(sourceBroker.id.toString, requestBuilder,
-          time.milliseconds(), true)
-        networkClient.blockingSendAndReceive(clientRequest)(time)
-      }
-    }
-    catch {
-      case e: Throwable =>
-        networkClient.close(sourceBroker.id.toString)
-        throw e
-    }
-  }
 }
 
 object ReplicaFetcherThread {
@@ -356,11 +303,5 @@ object ReplicaFetcherThread {
       case Errors.NONE => None
       case e => Some(e.exception)
     }
-
   }
-
-}
-
-trait BlockingSend {
-  def sendRequest(requestBuilder: AbstractRequest.Builder[_ <: AbstractRequest]): ClientResponse
 }

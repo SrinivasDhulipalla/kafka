@@ -58,7 +58,6 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     super.tearDown()
   }
 
-
   @Test
   def shouldNotAllowDivergentLogs(): Unit = {
 

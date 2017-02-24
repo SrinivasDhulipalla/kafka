@@ -16,7 +16,7 @@
   */
 package kafka.server.epoch
 
-import kafka.cluster.{Partition, Replica}
+import kafka.cluster.Replica
 
 trait LeaderEpochs{
   def becomeLeader(leaderEpoch: Int)

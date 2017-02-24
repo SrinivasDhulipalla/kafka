@@ -27,7 +27,6 @@ import org.junit.Test
 
 import scala.collection.JavaConverters._
 
-
 class LeaderEpochFetcherTest {
 
   @Test

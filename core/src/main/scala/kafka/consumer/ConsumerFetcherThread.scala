@@ -111,6 +111,10 @@ class ConsumerFetcherThread(name: String,
     simpleConsumer.fetch(fetchRequest.underlying).data.map { case (TopicAndPartition(t, p), value) =>
       new TopicPartition(t, p) -> new PartitionData(value)
     }
+
+  override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
+    super.makeActive(partitionMap.toMap.keySet.toSeq, Map[TopicPartition, Long]())
+  }
 }
 
 object ConsumerFetcherThread {

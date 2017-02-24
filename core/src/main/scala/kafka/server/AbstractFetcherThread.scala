@@ -71,6 +71,8 @@ abstract class AbstractFetcherThread(name: String,
   // deal with partitions with errors, potentially due to leadership changes
   def handlePartitionsWithErrors(partitions: Iterable[TopicPartition])
 
+  protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)])
+
   protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): REQ
 
   protected def fetch(fetchRequest: REQ): Seq[(TopicPartition, PD)]
@@ -88,11 +90,13 @@ abstract class AbstractFetcherThread(name: String,
   }
 
   override def doWork() {
-
     val fetchRequest = inLock(partitionMapLock) {
-      val fetchRequest = buildFetchRequest(partitionStates.partitionStates.asScala.map { state =>
+      val states = partitionStates.partitionStates.asScala.map { state =>
         state.topicPartition -> state.value
-      })
+      }
+      preFetch(states)
+
+      val fetchRequest = buildFetchRequest(states)
       if (fetchRequest.isEmpty) {
         trace("There are no active partitions. Back off for %d ms before sending a fetch request".format(fetchBackOffMs))
         partitionMapCond.await(fetchBackOffMs, TimeUnit.MILLISECONDS)
