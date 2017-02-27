@@ -232,7 +232,7 @@ class ReplicaFetcherThread(name: String,
   override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
     val initialisingPartitions = partitionMap.filter(_._2.isInitialising)
       .map { case (tp, state) =>
-        val replica = replicaMgr.getReplica(tp, brokerConfig.brokerId)
+        val replica = replicaMgr.getReplica(tp)
         PartitionEpoch(tp, replica.get.epochs.get.epoch)
       }.toSet
 

@@ -223,7 +223,6 @@ abstract class AbstractFetcherThread(name: String,
     } finally partitionMapLock.unlock()
   }
 
-  //TODO currently this is only used by the replica fetcher thread but should be moved into the partition state
   def makeActive(partitions: Seq[TopicPartition], newOffsets: Map[TopicPartition, Long]) {
     partitionMapLock.lockInterruptibly()
     try {
@@ -364,7 +363,7 @@ case class ClientIdTopicPartition(clientId: String, topic: String, partitionId: 
 }
 
 /**
-  * case class to keep partition offset and its state(inactive, initialising, active)
+  * case class to keep partition offset and its state(initialising, active, delayed)
   */
 case class PartitionFetchState(offset: Long, delay: DelayedItem, initialising: Boolean = false) {
   //TODO make this a tri-state with constructors for each state and valid transitions.

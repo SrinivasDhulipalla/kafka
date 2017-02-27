@@ -295,8 +295,10 @@ class ReplicaManager(val config: KafkaConfig,
     }
   }
 
-  def getReplica(topicPartition: TopicPartition, replicaId: Int = localBrokerId): Option[Replica] =
+  def getReplica(topicPartition: TopicPartition, replicaId: Int): Option[Replica] =
     getPartition(topicPartition).flatMap(_.getReplica(replicaId))
+
+  def getReplica(tp: TopicPartition): Option[Replica] = getReplica(tp, localBrokerId)
 
   /**
    * Append messages to leader replicas of the partition, and wait for them to be replicated to other replicas;
