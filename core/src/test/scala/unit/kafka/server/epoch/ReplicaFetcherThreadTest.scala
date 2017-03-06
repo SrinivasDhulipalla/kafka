@@ -16,16 +16,18 @@
   */
 package unit.kafka.server.epoch
 
-import kafka.server.epoch.LeaderEpochs
-import org.apache.kafka.common.protocol.ApiKeys
+import kafka.server.epoch.{LeaderEpochs, OffsetsForLeaderEpoch}
+import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 import org.apache.kafka.common.requests.FetchResponse
 import org.apache.kafka.common.requests.FetchResponse.PartitionData
 import kafka.cluster.{BrokerEndPoint, Replica}
 import kafka.server._
+import kafka.server.epoch.OffsetsForLeaderEpoch._
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.{ClientRequest, ClientResponse, MockClient}
 import org.apache.kafka.common.{Node, TopicPartition}
 import org.apache.kafka.common.metrics.Metrics
+import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.AbstractRequest.Builder
 import org.apache.kafka.common.requests.{AbstractRequest, EpochEndOffset, OffsetForLeaderEpochResponse}
 import org.apache.kafka.common.utils.{SystemTime, Time}
@@ -70,7 +72,7 @@ class ReplicaFetcherThreadTest {
     val thread = new ReplicaFetcherThread("bob", 0, endPoint, config, replicaManager, new Metrics(), new SystemTime(), quota, Some(mockNetwork))
     thread.addPartitions(Map(tp1 -> 0, tp2 -> 0))
 
-    //Loop 1 just initialises
+    //Loop 1 just initialises, fetching the epoch and truncating
     thread.doWork()
     assertEquals(1, mockNetwork.epochFetchCount)
     assertEquals(0, mockNetwork.fetchCount)
@@ -167,7 +169,7 @@ class ReplicaFetcherThreadTest {
         new EpochEndOffset(0, 0, 156)
       ).asJava,
       "topic2" -> List(
-        new EpochEndOffset(0, 1, -1) //TODO should this be -1 or an error code?
+        new EpochEndOffset(NOT_LEADER_FOR_PARTITION.code(), 1, UNDEFINED_OFFSET)
       ).asJava
     ).asJava
 
@@ -186,7 +188,6 @@ class ReplicaFetcherThreadTest {
   }
 
 }
-
 
 class ReplicaFetcherMockBlockingSend(offsets: java.util.Map[String, java.util.List[EpochEndOffset]], destination: BrokerEndPoint, time: Time) extends BlockingSend {
   private val client = new MockClient(new SystemTime)

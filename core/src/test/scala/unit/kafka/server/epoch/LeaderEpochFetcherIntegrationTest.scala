@@ -20,14 +20,14 @@ import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
-import org.apache.kafka.common.{Node, TopicPartition}
 import org.apache.kafka.common.metrics.Metrics
+import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.utils.SystemTime
+import org.apache.kafka.common.{Node, TopicPartition}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
+import kafka.server.epoch.OffsetsForLeaderEpoch
 import unit.kafka.server.epoch.util.TestSender
-
-import scala.collection.JavaConverters._
 
 class LeaderEpochFetcherIntegrationTest extends ZooKeeperTestHarness {
   var brokers: Seq[KafkaServer] = null
@@ -73,11 +73,18 @@ class LeaderEpochFetcherIntegrationTest extends ZooKeeperTestHarness {
     //When
     val responses = fetcher.fetchLeaderEpochs(epochsRequested)
 
-    //Then
-    assertEquals(0, responses.get(tp1).get)
-    assertEquals(-1, responses.get(tp2).get)
+    //Then end offset should be defined as 0 for tp1
+    assertEquals(0, responses.get(tp1).get.endOffset)
+
+    //Then end offset should be undefined for tp2, as well as reporting an error
+    assertTrue(responses.get(tp2).get.hasError)
+    assertEquals(Errors.REPLICA_NOT_AVAILABLE.code(), responses.get(tp2).get.error)
+    assertEquals(OffsetsForLeaderEpoch.UNDEFINED_OFFSET, responses.get(tp2).get.endOffset)
+
     assertEquals(2, responses.size)
   }
+
+  //TODO more here please
 
   def sender(broker: KafkaServer): TestSender = {
     val endPoint = broker.metadataCache.getAliveBrokers.find(_.id == 100).get.getBrokerEndPoint(broker.config.interBrokerListenerName)

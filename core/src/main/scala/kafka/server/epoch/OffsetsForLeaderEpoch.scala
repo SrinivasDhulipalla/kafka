@@ -20,9 +20,14 @@ import java.util
 
 import kafka.server.ReplicaManager
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.{Epoch, EpochEndOffset, OffsetForLeaderEpochRequest}
 
 import scala.collection.JavaConverters._
+
+object OffsetsForLeaderEpoch {
+  val UNDEFINED_OFFSET = -1
+}
 
 class OffsetsForLeaderEpoch(replicaManager: ReplicaManager) {
 
@@ -34,15 +39,15 @@ class OffsetsForLeaderEpoch(replicaManager: ReplicaManager) {
 
   private def lastOffsetsByEpoch(topic: String, epochs: util.List[Epoch]): util.List[EpochEndOffset] = {
     epochs.asScala.map { epoch =>
-      new EpochEndOffset(0, epoch.partitionId, lastOffsetFor(topic, epoch))
+      replicaManager.getPartition(new TopicPartition(topic, epoch.partitionId)) match {
+        case Some(p) =>
+          if (p.getReplica().isDefined) {
+            val offset = p.getReplica().get.epochs.get.lastOffsetFor(epoch.epoch)
+            new EpochEndOffset(0, epoch.partitionId, offset)
+          } else
+            new EpochEndOffset(NOT_LEADER_FOR_PARTITION.code(), epoch.partitionId, OffsetsForLeaderEpoch.UNDEFINED_OFFSET)
+        case None => new EpochEndOffset(REPLICA_NOT_AVAILABLE.code(), epoch.partitionId, OffsetsForLeaderEpoch.UNDEFINED_OFFSET)
+      }
     }.asJava
-  }
-
-  private def lastOffsetFor(topic: String, epoch: Epoch): Long = {
-    replicaManager.getPartition(new TopicPartition(topic, epoch.partitionId)) match {
-      case Some(p) =>
-        p.getReplica().get.epochs.get.lastOffsetFor(epoch.epoch)
-      case None => -1L
-    }
   }
 }

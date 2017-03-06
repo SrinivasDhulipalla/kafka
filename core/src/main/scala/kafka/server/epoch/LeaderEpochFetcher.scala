@@ -21,15 +21,17 @@ import java.util.{List => JList}
 
 import kafka.cluster.{BrokerEndPoint, Partition}
 import kafka.server.BlockingSend
+import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.requests._
+import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochResponse, _}
 
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 
-class LeaderEpochFetcher(sender: BlockingSend) {
+class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
 
-  def fetchLeaderEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, Long] = {
+  def fetchLeaderEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
     val epochsByTopic = translate(partitions)
     fetchLeaderEpochs(epochsByTopic)
   }
@@ -42,21 +44,28 @@ class LeaderEpochFetcher(sender: BlockingSend) {
       }.asJava
   }
 
-  private def fetchLeaderEpochs(epochsByTopic: util.Map[String, util.List[Epoch]]): Map[TopicPartition, Long] = {
+  private def fetchLeaderEpochs(epochsByTopic: util.Map[String, util.List[Epoch]]): Map[TopicPartition, EpochEndOffset] = {
     val requestBuilder = new OffsetForLeaderEpochRequest.Builder(epochsByTopic)
     parseEpochs(
       sender.sendRequest(requestBuilder).responseBody.asInstanceOf[OffsetForLeaderEpochResponse]
     )
   }
 
-  private def parseEpochs(response: OffsetForLeaderEpochResponse): Map[TopicPartition, Long] = {
+  private def parseEpochs(response: OffsetForLeaderEpochResponse): Map[TopicPartition, EpochEndOffset] = {
     response
       .responses.asScala
       .flatMap { case (topic, offsets) =>
-        offsets.asScala.flatMap {
-          epoch => Map(new TopicPartition(topic, epoch.partitionId) -> epoch.endOffset)
+        offsets.asScala.flatMap { epoch =>
+          maybeWarn(epoch)
+          Map(new TopicPartition(topic, epoch.partitionId) -> epoch)
         }
       }.toMap
+  }
+
+  def maybeWarn(epochOffset: EpochEndOffset): Unit = {
+    if (epochOffset.error > 0)
+      warn(s"OffsetForLeaderEpoch request returned an error. High Watermark will be used for truncation. The error was: "
+        + Errors.forCode(epochOffset.error))
   }
 }
 

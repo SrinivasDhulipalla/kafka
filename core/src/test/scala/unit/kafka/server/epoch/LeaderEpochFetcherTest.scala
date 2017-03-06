@@ -56,7 +56,7 @@ class LeaderEpochFetcherTest {
       new PartitionEpoch(tp1, 7))
     )
 
-    assertEquals(Map(tp0 -> 156, tp1 -> 172), response)
+    assertEquals(Map(tp0 -> EEO(tp0, 156), tp1 -> EEO(tp1, 172)), response)
   }
 
   @Test
@@ -86,7 +86,10 @@ class LeaderEpochFetcherTest {
       new PartitionEpoch(tp1, 7))
     )
 
-    assertEquals(Map(tp0 -> 156, tp1 -> 172), response)
+    assertEquals(Map(tp0 -> EEO(tp0, 156), tp1 -> EEO(tp1, 172)), response)
   }
 
+  def EEO(tp: TopicPartition, offset: Int): EpochEndOffset = {
+    new EpochEndOffset(0, tp.partition, offset)
+  }
 }

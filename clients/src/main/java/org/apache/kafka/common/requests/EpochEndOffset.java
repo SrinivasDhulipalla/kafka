@@ -35,6 +35,10 @@ public class EpochEndOffset {
         return error;
     }
 
+    public boolean hasError() {
+        return error > 0;
+    }
+
     public int partitionId() {
         return partitionId;
     }

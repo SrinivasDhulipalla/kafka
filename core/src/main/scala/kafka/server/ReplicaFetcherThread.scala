@@ -30,7 +30,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.MemoryRecords
-import org.apache.kafka.common.requests.{FetchResponse, ListOffsetRequest, ListOffsetResponse, FetchRequest => JFetchRequest}
+import org.apache.kafka.common.requests.{EpochEndOffset, FetchResponse, ListOffsetRequest, ListOffsetResponse, OffsetForLeaderEpochResponse, FetchRequest => JFetchRequest}
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.JavaConverters._
@@ -256,11 +256,13 @@ class ReplicaFetcherThread(name: String,
     new FetchRequest(requestBuilder)
   }
 
-  def truncate(partitionEpochOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
+  def truncate(partitionEpochOffsets: Map[TopicPartition, EpochEndOffset]): Map[TopicPartition, Long] = {
     val truncationPoints = partitionEpochOffsets.map { case (tp, epochOffset) =>
-      val truncateTo: Long = if (epochOffset < 0)
-        replicaMgr.getReplica(tp).get.highWatermark.messageOffset
-      else epochOffset
+      val truncateTo =
+        if (epochOffset.hasError)
+          replicaMgr.getReplica(tp).get.highWatermark.messageOffset
+        else
+          epochOffset.endOffset
       (tp, truncateTo)
     }.toMap
 
@@ -277,7 +279,7 @@ class ReplicaFetcherThread(name: String,
     quota.isThrottled(topicPartition) && quota.isQuotaExceeded && !isReplicaInSync
   }
 
-  def fetchEpochsFromLeader(partitions: Set[PartitionEpoch]): Map[TopicPartition, Long] = {
+  def fetchEpochsFromLeader(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
     new LeaderEpochFetcher(network).fetchLeaderEpochs(partitions)
   }
 }

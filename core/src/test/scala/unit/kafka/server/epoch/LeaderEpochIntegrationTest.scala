@@ -25,7 +25,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringSerializer
 import org.junit.{After, Before, Test}
 
-class LeaderEpochIntegrationTest extends ZooKeeperTestHarness  with Logging{
+class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
   var brokers: Seq[KafkaServer] = null
   val topic1 = "foo"
   val topic2 = "bar"
@@ -89,10 +89,14 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness  with Logging{
       val leo = brokers.head.getLogManager().getLog(tp).get.logEndOffset
       result = result && leo > 0 && brokers.forall { broker =>
         broker.getLogManager().getLog(tp).get.logSegments.iterator.forall { segment =>
-          val deepEntries = segment.read(minOffset, None, Integer.MAX_VALUE).records.deepEntries.iterator()
-          scala.collection.JavaConversions.asScalaIterator(deepEntries).forall { msg =>
-            info("tp:" + tp + " offset:" + msg.offset + " => LeaderEpoch: " + msg.record().leaderEpoch())
-            expectedLeaderEpoch == msg.record().leaderEpoch()
+          if (segment.read(minOffset, None, Integer.MAX_VALUE) == null) {
+            false
+          } else {
+            val deepEntries = segment.read(minOffset, None, Integer.MAX_VALUE).records.deepEntries.iterator()
+            scala.collection.JavaConversions.asScalaIterator(deepEntries).forall { msg =>
+              info("tp:" + tp + " offset:" + msg.offset + " => LeaderEpoch: " + msg.record().leaderEpoch())
+              expectedLeaderEpoch == msg.record().leaderEpoch()
+            }
           }
         }
       }
