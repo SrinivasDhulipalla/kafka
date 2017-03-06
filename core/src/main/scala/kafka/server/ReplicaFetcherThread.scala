@@ -49,6 +49,7 @@ class ReplicaFetcherThread(name: String,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
                                 fetchBackOffMs = brokerConfig.replicaFetchBackoffMs,
+                                includePartitionInitialisation = true,
                                 isInterruptible = false) {
 
   type REQ = FetchRequest
@@ -229,15 +230,16 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-  override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
-    val initialisingPartitions = partitionMap.filter(_._2.isInitialising)
-      .map { case (tp, state) =>
-        val replica = replicaMgr.getReplica(tp)
-        PartitionEpoch(tp, replica.get.epochs.get.epoch)
-      }.toSet
+  override protected def initialisePartitions(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
+    val epochRequests = partitionMap
+      .filter { case (_, state) => state.isInitialising }
+      .map { case (tp, state) => PartitionEpoch(tp, replicaMgr.getReplica(tp).get.epochs.get.epoch) }.toSet
 
-    if(!initialisingPartitions.isEmpty)
-      truncate(fetchEpochs(initialisingPartitions))
+    if (!epochRequests.isEmpty) {
+      val epochs = fetchEpochsFromLeader(epochRequests)
+      val truncationPoints = truncate(epochs)
+      initialisationComplete(epochs.keySet.toSeq, truncationPoints)
+    }
   }
 
   protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
@@ -254,7 +256,7 @@ class ReplicaFetcherThread(name: String,
     new FetchRequest(requestBuilder)
   }
 
-  def truncate(partitionEpochOffsets: Map[TopicPartition, Long]) = {
+  def truncate(partitionEpochOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
     val truncationPoints = partitionEpochOffsets.map { case (tp, epochOffset) =>
       val truncateTo: Long = if (epochOffset < 0)
         replicaMgr.getReplica(tp).get.highWatermark.messageOffset
@@ -263,7 +265,7 @@ class ReplicaFetcherThread(name: String,
     }.toMap
 
     replicaMgr.logManager.truncateTo(truncationPoints)
-    super.makeActive(partitionEpochOffsets.keySet.toSeq, truncationPoints)
+    truncationPoints
   }
 
   /**
@@ -275,10 +277,9 @@ class ReplicaFetcherThread(name: String,
     quota.isThrottled(topicPartition) && quota.isQuotaExceeded && !isReplicaInSync
   }
 
-  def fetchEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, Long] = {
+  def fetchEpochsFromLeader(partitions: Set[PartitionEpoch]): Map[TopicPartition, Long] = {
     new LeaderEpochFetcher(network).fetchLeaderEpochs(partitions)
   }
-
 }
 
 object ReplicaFetcherThread {

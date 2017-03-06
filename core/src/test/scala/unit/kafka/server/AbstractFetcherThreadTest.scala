@@ -105,7 +105,7 @@ class AbstractFetcherThreadTest {
                            clientId: String,
                            sourceBroker: BrokerEndPoint,
                            fetchBackOffMs: Int = 0)
-    extends AbstractFetcherThread(name, clientId, sourceBroker, fetchBackOffMs) {
+    extends AbstractFetcherThread(name, clientId, sourceBroker, fetchBackOffMs, false) {
 
     type REQ = DummyFetchRequest
     type PD = PartitionData
@@ -124,7 +124,7 @@ class AbstractFetcherThreadTest {
     override protected def buildFetchRequest(partitionMap: collection.Seq[(TopicPartition, PartitionFetchState)]): DummyFetchRequest =
       new DummyFetchRequest(partitionMap.map { case (k, v) => (k, v.offset) }.toMap)
 
-    override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): Unit = {}
+    override protected def initialisePartitions(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): Unit = {}
   }
 
 

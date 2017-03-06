@@ -37,6 +37,7 @@ class ConsumerFetcherThread(name: String,
                                       clientId = config.clientId,
                                       sourceBroker = sourceBroker,
                                       fetchBackOffMs = config.refreshLeaderBackoffMs,
+                                      includePartitionInitialisation = false,
                                       isInterruptible = true) {
 
   type REQ = FetchRequest
@@ -112,9 +113,7 @@ class ConsumerFetcherThread(name: String,
       new TopicPartition(t, p) -> new PartitionData(value)
     }
 
-  override protected def preFetch(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
-    super.makeActive(partitionMap.toMap.keySet.toSeq, Map[TopicPartition, Long]())
-  }
+  override protected def initialisePartitions(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {}
 }
 
 object ConsumerFetcherThread {

@@ -44,7 +44,7 @@ class ReplicaFetcherThreadTest {
 
   @Test
   def shouldFetchLeaderEpochOnFirstFetchOnly(): Unit = {
-    val configs = TestUtils.createBrokerConfigs(1, "localhost:1234").map(KafkaConfig.fromProps)
+    val config = KafkaConfig.fromProps(TestUtils.createBrokerConfig(1, "localhost:1234"))
 
     //Setup all dependencies
     val quota = createNiceMock(classOf[kafka.server.ReplicationQuotaManager])
@@ -53,7 +53,7 @@ class ReplicaFetcherThreadTest {
     val replica = createNiceMock(classOf[Replica])
     val replicaManager = createMock(classOf[kafka.server.ReplicaManager])
 
-    expect(logManager.truncateTo(anyObject())).once //This one is important
+    expect(logManager.truncateTo(anyObject())).once //***This one is important***
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(leaderEpochs.epoch).andReturn(5)
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
@@ -67,19 +67,26 @@ class ReplicaFetcherThreadTest {
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
     val mockNetwork = new ReplicaFetcherMockBlockingSend(offsets, endPoint, new SystemTime())
-    val thread = new ReplicaFetcherThread("bob", 0, endPoint, configs(0), replicaManager, new Metrics(), new SystemTime(), quota, Some(mockNetwork))
+    val thread = new ReplicaFetcherThread("bob", 0, endPoint, config, replicaManager, new Metrics(), new SystemTime(), quota, Some(mockNetwork))
     thread.addPartitions(Map(tp1 -> 0, tp2 -> 0))
 
-    //Do two loops
+    //Loop 1 just initialises
     thread.doWork()
+    assertEquals(1, mockNetwork.epochFetchCount)
+    assertEquals(0, mockNetwork.fetchCount)
+
+    //Loop 2 does fetch
     thread.doWork()
+    assertEquals(1, mockNetwork.epochFetchCount)
+    assertEquals(1, mockNetwork.fetchCount)
 
-    //Assert that truncate to is called only once (despite two loops)
-    verify(logManager)
-
-    //Assert we only send one epoch request but two regular fetches
+    //Loop 3 does fetch
+    thread.doWork()
     assertEquals(1, mockNetwork.epochFetchCount)
     assertEquals(2, mockNetwork.fetchCount)
+
+    //Assert that truncate to is called exactly once (despite two loops)
+    verify(logManager)
   }
 
 
