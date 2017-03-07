@@ -53,7 +53,7 @@ class Replica(val brokerId: Int,
 
   def lastCaughtUpTimeMs = _lastCaughtUpTimeMs
 
-  val epochs: Option[LeaderEpochs] = log.isDefined match {
+  val epochs: Option[LeaderEpochs] = isLocal match {
     case true =>
       val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.get.dir))
       Some(new SavedLeaderEpochs(this, checkpoint))
