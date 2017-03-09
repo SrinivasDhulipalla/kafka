@@ -118,7 +118,7 @@ class ProducerBounceTest extends KafkaServerTestHarness {
       consumer.close
       response
     }
-    val messages = fetchResponses.flatMap(r => r.iterator.toList.map(_.message))
+    val messages = fetchResponses.flatMap(r => r.iterator.toList.map(_.message)).map(_.payload)
     val uniqueMessages = messages.toSet
     val uniqueMessageSize = uniqueMessages.size
 
