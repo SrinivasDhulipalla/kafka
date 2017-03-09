@@ -93,7 +93,7 @@ abstract class AbstractFetcherThread(name: String,
 
   override def doWork() {
     val fetchRequest = inLock(partitionMapLock) {
-      val states = partitionStates.partitionStates.asScala.map { state =>
+      var states = partitionStates.partitionStates.asScala.map { state =>
         state.topicPartition -> state.value
       }
       initialisePartitions(states)
@@ -225,7 +225,7 @@ abstract class AbstractFetcherThread(name: String,
     } finally partitionMapLock.unlock()
   }
 
-  def initialisationComplete(partitions: Seq[TopicPartition], newOffsets: Map[TopicPartition, Long]) {
+  def initialisationComplete(partitions: Seq[TopicPartition], newOffsets: Map[TopicPartition, Long] = Map[TopicPartition, Long]()) {
     partitionMapLock.lockInterruptibly()
     try {
       val existingPartitionToState = partitionStates.partitionStates.asScala.map { state =>

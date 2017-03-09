@@ -231,15 +231,18 @@ class ReplicaFetcherThread(name: String,
   }
 
   override protected def initialisePartitions(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
-    val epochRequests = partitionMap
-      .filter { case (_, state) => state.isInitialising }
+    val intitialisingPartitions = partitionMap
+      .filter { case (_, state) => state.isInitialising }.toMap
+    val epochRequests = intitialisingPartitions
       .map { case (tp, state) => PartitionEpoch(tp, replicaMgr.getReplica(tp).get.epochs.get.epoch) }.toSet
 
-    if (!epochRequests.isEmpty) {
+    //TODO refactor me
+    if (!intitialisingPartitions.isEmpty) {
       val epochs = fetchEpochsFromLeader(epochRequests)
       val truncationPoints = truncate(epochs)
-      initialisationComplete(epochs.keySet.toSeq, truncationPoints)
+      initialisationComplete(intitialisingPartitions.keySet.toSeq, truncationPoints)
     }
+
   }
 
   protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
@@ -256,11 +259,20 @@ class ReplicaFetcherThread(name: String,
     new FetchRequest(requestBuilder)
   }
 
+  /**
+    * if there is an error we truncate to the HWM
+    * if the leader's offset is greater, we stick with the Log End Offset
+    * otherwise we truncate to the leaders offset.
+    */
   def truncate(partitionEpochOffsets: Map[TopicPartition, EpochEndOffset]): Map[TopicPartition, Long] = {
-    val truncationPoints = partitionEpochOffsets.map { case (tp, epochOffset) =>
+    val truncationPoints = partitionEpochOffsets
+      .map { case (tp, epochOffset) =>
+      val replica = replicaMgr.getReplica(tp).get
       val truncateTo =
         if (epochOffset.hasError)
-          replicaMgr.getReplica(tp).get.highWatermark.messageOffset
+          replica.highWatermark.messageOffset
+        else if(epochOffset.endOffset() > replica.logEndOffset.messageOffset)
+          replica.logEndOffset.messageOffset
         else
           epochOffset.endOffset
       (tp, truncateTo)
