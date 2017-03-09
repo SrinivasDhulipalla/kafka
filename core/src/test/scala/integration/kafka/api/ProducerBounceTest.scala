@@ -118,7 +118,7 @@ class ProducerBounceTest extends KafkaServerTestHarness {
       consumer.close
       response
     }
-    val messages = fetchResponses.flatMap(r => r.iterator.toList.map(_.message)).map(_.payload)
+    val messages = fetchResponses.flatMap(r => r.iterator.toList.map(_.message)).map(_.payload) //Remove me before PR (as i'm only needed because epoch is on message right now)
     val uniqueMessages = messages.toSet
     val uniqueMessageSize = uniqueMessages.size
 
