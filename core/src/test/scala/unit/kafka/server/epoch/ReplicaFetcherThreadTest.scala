@@ -77,17 +77,17 @@ class ReplicaFetcherThreadTest {
     //Loop 1 just initialises, fetching the epoch and truncating
     thread.doWork()
     assertEquals(1, mockNetwork.epochFetchCount)
-    assertEquals(0, mockNetwork.fetchCount)
+    assertEquals(1, mockNetwork.fetchCount)
 
     //Loop 2 does fetch
     thread.doWork()
     assertEquals(1, mockNetwork.epochFetchCount)
-    assertEquals(1, mockNetwork.fetchCount)
+    assertEquals(2, mockNetwork.fetchCount)
 
     //Loop 3 does fetch
     thread.doWork()
     assertEquals(1, mockNetwork.epochFetchCount)
-    assertEquals(2, mockNetwork.fetchCount)
+    assertEquals(3, mockNetwork.fetchCount)
 
     //Assert that truncate to is called exactly once (despite two loops)
     verify(logManager)

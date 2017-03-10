@@ -91,11 +91,12 @@ abstract class AbstractFetcherThread(name: String,
     fetcherLagStats.unregister()
   }
 
+  def states(): Seq[(TopicPartition, PartitionFetchState)] = partitionStates.partitionStates.asScala.map { state =>
+    state.topicPartition -> state.value
+  }
+
   override def doWork() {
     val fetchRequest = inLock(partitionMapLock) {
-      var states = partitionStates.partitionStates.asScala.map { state =>
-        state.topicPartition -> state.value
-      }
       initialisePartitions(states)
 
       val fetchRequest = buildFetchRequest(states)
