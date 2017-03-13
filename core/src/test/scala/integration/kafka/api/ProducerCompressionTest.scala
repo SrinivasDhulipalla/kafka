@@ -66,7 +66,6 @@ class ProducerCompressionTest(compression: String) extends ZooKeeperTestHarness 
    */
   @Test
   def testCompression() {
-    println("running for type: "  + compression)
     val props = new Properties()
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, TestUtils.getBrokerListStrFromServers(Seq(server)))
     props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compression)
