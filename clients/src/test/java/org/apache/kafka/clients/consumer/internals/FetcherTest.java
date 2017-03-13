@@ -228,7 +228,7 @@ public class FetcherTest {
 
         int size = Record.recordSize(key, value);
         byte attributes = Record.computeAttributes(magic, CompressionType.NONE, TimestampType.CREATE_TIME);
-        long crc = Record.computeChecksum(magic, attributes, timestamp, key, value);
+        long crc = Record.computeChecksum(magic, attributes, timestamp, Record.NO_LEADER_EPOCH, key, value);
 
         // write one valid record
         out.writeLong(offset);

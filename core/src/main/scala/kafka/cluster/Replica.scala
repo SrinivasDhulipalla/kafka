@@ -21,8 +21,7 @@ import kafka.log.Log
 import kafka.utils.Logging
 import kafka.server.{LogOffsetMetadata, LogReadResult}
 import kafka.common.KafkaException
-import java.util.concurrent.atomic.AtomicLong
-
+import kafka.server.epoch.{LeaderEpochCheckpointFile, LeaderEpochFile, SavedLeaderEpochs, LeaderEpochs}
 import org.apache.kafka.common.utils.Time
 
 class Replica(val brokerId: Int,
@@ -53,6 +52,13 @@ class Replica(val brokerId: Int,
   def isLocal: Boolean = log.isDefined
 
   def lastCaughtUpTimeMs = _lastCaughtUpTimeMs
+
+  val epochs: Option[LeaderEpochs] = isLocal match {
+    case true =>
+      val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.get.dir))
+      Some(new SavedLeaderEpochs(this, checkpoint))
+    case false => None
+  }
 
   /*
    * If the FetchRequest reads up to the log end offset of the leader when the current fetch request is received,

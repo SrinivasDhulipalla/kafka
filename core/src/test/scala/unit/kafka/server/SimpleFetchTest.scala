@@ -19,7 +19,6 @@ package kafka.server
 import kafka.api._
 import kafka.utils._
 import kafka.cluster.Replica
-import kafka.common.TopicAndPartition
 import kafka.log.Log
 import kafka.server.QuotaFactory.UnboundedQuota
 import org.apache.kafka.common.metrics.Metrics
@@ -77,6 +76,7 @@ class SimpleFetchTest {
     // create the log which takes read with either HW max offset or none max offset
     val log = EasyMock.createMock(classOf[Log])
     EasyMock.expect(log.logEndOffset).andReturn(leaderLEO).anyTimes()
+    EasyMock.expect(log.dir).andReturn(TestUtils.tempDir()).anyTimes()
     EasyMock.expect(log.logEndOffsetMetadata).andReturn(new LogOffsetMetadata(leaderLEO)).anyTimes()
     EasyMock.expect(log.read(0, fetchSize, Some(partitionHW), true)).andReturn(
       FetchDataInfo(

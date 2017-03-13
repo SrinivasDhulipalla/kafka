@@ -25,6 +25,7 @@ import org.apache.kafka.common.record._
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
+import kafka.server.epoch.{MessageAppendInterceptor}
 
 private[kafka] object LogValidator {
 
@@ -53,7 +54,8 @@ private[kafka] object LogValidator {
                                                       compactedTopic: Boolean = false,
                                                       messageFormatVersion: Byte = Record.CURRENT_MAGIC_VALUE,
                                                       messageTimestampType: TimestampType,
-                                                      messageTimestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                                      messageTimestampDiffMaxMs: Long,
+                                                      interceptor: MessageAppendInterceptor): ValidationAndOffsetAssignResult = {
     if (sourceCodec == NoCompressionCodec && targetCodec == NoCompressionCodec) {
       // check the magic value
       if (!records.hasMatchingShallowMagic(messageFormatVersion))
@@ -62,10 +64,10 @@ private[kafka] object LogValidator {
       else
         // Do in-place validation, offset assignment and maybe set timestamp
         assignOffsetsNonCompressed(records, offsetCounter, now, compactedTopic, messageTimestampType,
-          messageTimestampDiffMaxMs)
+          messageTimestampDiffMaxMs, interceptor)
     } else {
       validateMessagesAndAssignOffsetsCompressed(records, offsetCounter, now, sourceCodec, targetCodec, compactedTopic,
-        messageFormatVersion, messageTimestampType, messageTimestampDiffMaxMs)
+        messageFormatVersion, messageTimestampType, messageTimestampDiffMaxMs, interceptor)
     }
   }
 
@@ -105,7 +107,8 @@ private[kafka] object LogValidator {
                                          now: Long,
                                          compactedTopic: Boolean,
                                          timestampType: TimestampType,
-                                         timestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                         timestampDiffMaxMs: Long,
+                                         interceptor: MessageAppendInterceptor): ValidationAndOffsetAssignResult = {
     var maxTimestamp = Record.NO_TIMESTAMP
     var offsetOfMaxTimestamp = -1L
     val firstOffset = offsetCounter.value
@@ -116,6 +119,9 @@ private[kafka] object LogValidator {
 
       val offset = offsetCounter.getAndIncrement()
       entry.setOffset(offset)
+
+      // TODO move to leader epoch on message set once EoS change in
+      interceptor.onMessage(entry)
 
       if (record.magic > Record.MAGIC_VALUE_V0) {
         validateTimestamp(record, now, timestampType, timestampDiffMaxMs)
@@ -156,13 +162,16 @@ private[kafka] object LogValidator {
                                                          compactedTopic: Boolean = false,
                                                          messageFormatVersion: Byte = Record.CURRENT_MAGIC_VALUE,
                                                          messageTimestampType: TimestampType,
-                                                         messageTimestampDiffMaxMs: Long): ValidationAndOffsetAssignResult = {
+                                                         messageTimestampDiffMaxMs: Long,
+                                                         epoch: MessageAppendInterceptor): ValidationAndOffsetAssignResult = {
     // No in place assignment situation 1 and 2
     var inPlaceAssignment = sourceCodec == targetCodec && messageFormatVersion > Record.MAGIC_VALUE_V0
 
     var maxTimestamp = Record.NO_TIMESTAMP
     val expectedInnerOffset = new LongRef(0)
     val validatedRecords = new mutable.ArrayBuffer[Record]
+
+    //TODO - we need to assign compressed messages with a leaderEpoch, but that's going to mean decompressing them, so ignore compression for now.
 
     records.deepEntries(true).asScala.foreach { logEntry =>
       val record = logEntry.record

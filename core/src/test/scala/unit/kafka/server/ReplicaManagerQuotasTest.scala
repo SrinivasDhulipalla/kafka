@@ -146,7 +146,7 @@ class ReplicaManagerQuotasTest {
     val scheduler = createNiceMock(classOf[KafkaScheduler])
 
     //Create log which handles both a regular read and a 0 bytes read
-    val log = createMock(classOf[Log])
+    val log = createNiceMock(classOf[Log])
     expect(log.logEndOffset).andReturn(20L).anyTimes()
     expect(log.logEndOffsetMetadata).andReturn(new LogOffsetMetadata(20L)).anyTimes()
 

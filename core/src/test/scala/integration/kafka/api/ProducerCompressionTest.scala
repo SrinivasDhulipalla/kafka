@@ -17,21 +17,21 @@
 
 package kafka.api.test
 
-import java.util.{Properties, Collection, ArrayList}
+import java.util.{ArrayList, Collection, Properties}
 
 import org.junit.runners.Parameterized
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized.Parameters
 import org.junit.{After, Before, Test}
-import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer, ProducerConfig}
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig, ProducerRecord}
 import org.junit.Assert._
-
 import kafka.api.FetchRequestBuilder
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.consumer.SimpleConsumer
 import kafka.message.Message
 import kafka.zk.ZooKeeperTestHarness
 import kafka.utils.{CoreUtils, TestUtils}
+import org.apache.kafka.common.record.Record
 
 
 @RunWith(value = classOf[Parameterized])
@@ -66,7 +66,7 @@ class ProducerCompressionTest(compression: String) extends ZooKeeperTestHarness 
    */
   @Test
   def testCompression() {
-
+    println("running for type: "  + compression)
     val props = new Properties()
     props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, TestUtils.getBrokerListStrFromServers(Seq(server)))
     props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compression)
@@ -102,7 +102,10 @@ class ProducerCompressionTest(compression: String) extends ZooKeeperTestHarness 
 
       var index = 0
       for (message <- messages) {
-        assertEquals(new Message(bytes = message, now, Message.MagicValue_V1), messageSet(index).message)
+        if(compression == "none")
+          assertEquals(new Message(bytes = message, now, Message.MagicValue_V1, 0), messageSet(index).message)
+        else
+          assertEquals(new Message(bytes = message, now, Message.MagicValue_V1, Record.NO_LEADER_EPOCH), messageSet(index).message) //Don't merge me. All messages should be leader epoch 0. This is just because we don't currently support leader epoch on compressed messages.
         assertEquals(index.toLong, messageSet(index).offset)
         index += 1
       }

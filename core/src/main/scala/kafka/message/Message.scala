@@ -40,10 +40,14 @@ object Message {
   val MagicLength = 1
   val AttributesOffset = MagicOffset + MagicLength
   val AttributesLength = 1
+  val LeaderEpochOffset = AttributesOffset + AttributesLength
+  val LeaderEpochLength = 4
+
   // Only message format version 1 has the timestamp field.
-  val TimestampOffset = AttributesOffset + AttributesLength
+  val TimestampOffset = LeaderEpochOffset + LeaderEpochLength
   val TimestampLength = 8
-  val KeySizeOffset_V0 = AttributesOffset + AttributesLength
+
+  val KeySizeOffset_V0 = LeaderEpochOffset + LeaderEpochLength
   val KeySizeOffset_V1 = TimestampOffset + TimestampLength
   val KeySizeLength = 4
   val KeyOffset_V0 = KeySizeOffset_V0 + KeySizeLength
@@ -51,8 +55,8 @@ object Message {
   val ValueSizeLength = 4
 
   private val MessageHeaderSizeMap = Map (
-    (0: Byte) -> (CrcLength + MagicLength + AttributesLength + KeySizeLength + ValueSizeLength),
-    (1: Byte) -> (CrcLength + MagicLength + AttributesLength + TimestampLength + KeySizeLength + ValueSizeLength))
+    (0: Byte) -> (CrcLength + MagicLength + AttributesLength + LeaderEpochLength + KeySizeLength + ValueSizeLength),
+    (1: Byte) -> (CrcLength + MagicLength + AttributesLength + LeaderEpochLength + TimestampLength + KeySizeLength + ValueSizeLength))
 
   /**
    * The amount of overhead bytes in a message
@@ -163,12 +167,15 @@ class Message(val buffer: ByteBuffer,
            codec: CompressionCodec, 
            payloadOffset: Int, 
            payloadSize: Int,
-           magicValue: Byte) = {
+           magicValue: Byte,
+           leaderEpoch: Int = Record.NO_LEADER_EPOCH
+          ) = {
     this(ByteBuffer.allocate(Message.CrcLength +
                              Message.MagicLength +
                              Message.AttributesLength +
                              (if (magicValue == Message.MagicValue_V0) 0
                               else Message.TimestampLength) +
+                             Message.LeaderEpochLength +
                              Message.KeySizeLength + 
                              (if(key == null) 0 else key.length) + 
                              Message.ValueSizeLength + 
@@ -184,6 +191,7 @@ class Message(val buffer: ByteBuffer,
         timestampType.updateAttributes((CompressionCodeMask & codec.codec).toByte)
       else 0
     buffer.put(attributes)
+    buffer.putInt(leaderEpoch)
     // Only put timestamp when "magic" value is greater than 0
     if (magic > MagicValue_V0)
       buffer.putLong(timestamp)
@@ -206,7 +214,7 @@ class Message(val buffer: ByteBuffer,
   }
   
   def this(bytes: Array[Byte], key: Array[Byte], timestamp: Long, codec: CompressionCodec, magicValue: Byte) =
-    this(bytes = bytes, key = key, timestamp = timestamp, timestampType = TimestampType.CREATE_TIME, codec = codec, payloadOffset = 0, payloadSize = -1, magicValue = magicValue)
+    this(bytes = bytes, key = key, timestamp = timestamp, timestampType = TimestampType.CREATE_TIME, codec = codec, payloadOffset = 0, payloadSize = -1, magicValue = magicValue, leaderEpoch = Record.NO_LEADER_EPOCH)
   
   def this(bytes: Array[Byte], timestamp: Long, codec: CompressionCodec, magicValue: Byte) =
     this(bytes = bytes, key = null, timestamp = timestamp, codec = codec, magicValue = magicValue)
@@ -216,6 +224,9 @@ class Message(val buffer: ByteBuffer,
     
   def this(bytes: Array[Byte], timestamp: Long, magicValue: Byte) =
     this(bytes = bytes, key = null, timestamp = timestamp, codec = NoCompressionCodec, magicValue = magicValue)
+
+  def this(bytes: Array[Byte], timestamp: Long, magicValue: Byte, leaderEpoch: Int) =
+    this(bytes = bytes, key = null, timestamp = timestamp, timestampType = TimestampType.CREATE_TIME, codec = NoCompressionCodec, payloadOffset = 0, payloadSize = -1, magicValue = magicValue, leaderEpoch = leaderEpoch)
 
   def this(bytes: Array[Byte]) =
     this(bytes = bytes, key = null, timestamp = Message.NoTimestamp, codec = NoCompressionCodec, magicValue = Message.CurrentMagicValue)
@@ -230,7 +241,9 @@ class Message(val buffer: ByteBuffer,
    * Retrieve the previously computed CRC for this message
    */
   def checksum: Long = ByteUtils.readUnsignedInt(buffer, CrcOffset)
-  
+
+  def leaderEpoch: Int = buffer.getInt(LeaderEpochOffset)
+
     /**
    * Returns true if the crc stored with the message matches the crc computed off the message contents
    */
@@ -369,9 +382,9 @@ class Message(val buffer: ByteBuffer,
 
   override def toString: String = {
     if (magic == MagicValue_V0)
-      s"Message(magic = $magic, attributes = $attributes, crc = $checksum, key = $key, payload = $payload)"
+      s"Message(magic = $magic, attributes = $attributes, epoch = $leaderEpoch, crc = $checksum, key = $key, payload = $payload)"
     else
-      s"Message(magic = $magic, attributes = $attributes, $timestampType = $timestamp, crc = $checksum, key = $key, payload = $payload)"
+      s"Message(magic = $magic, attributes = $attributes, epoch = $leaderEpoch, $timestampType = $timestamp, crc = $checksum, key = $key, payload = $payload)"
   }
 
   override def equals(any: Any): Boolean = {

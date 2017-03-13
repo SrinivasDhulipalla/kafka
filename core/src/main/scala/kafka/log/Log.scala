@@ -36,6 +36,7 @@ import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
+import kafka.server.epoch.{EmptyEpochInterceptor, MessageAppendInterceptor}
 import org.apache.kafka.common.TopicPartition
 
 object LogAppendInfo {
@@ -349,7 +350,8 @@ class Log(@volatile var dir: File,
    * @throws KafkaStorageException If the append fails due to an I/O error.
    * @return Information about the appended messages including the first and last offset.
    */
-  def append(records: MemoryRecords, assignOffsets: Boolean = true): LogAppendInfo = {
+  def append(records: MemoryRecords, assignOffsets: Boolean = true, interceptor: MessageAppendInterceptor = EmptyEpochInterceptor): LogAppendInfo = {
+    //TODO - should probably loose the defualt epoch action but the number of tests of this method is pretty massive
     val appendInfo = analyzeAndValidateRecords(records)
 
     // if we have any valid messages, append them to the log
@@ -377,7 +379,8 @@ class Log(@volatile var dir: File,
                                                           config.compact,
                                                           config.messageFormatVersion.messageFormatVersion,
                                                           config.messageTimestampType,
-                                                          config.messageTimestampDifferenceMaxMs)
+                                                          config.messageTimestampDifferenceMaxMs,
+                                                          interceptor)
           } catch {
             case e: IOException => throw new KafkaException("Error in validating messages while appending to log '%s'".format(name), e)
           }

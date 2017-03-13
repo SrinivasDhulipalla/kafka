@@ -27,8 +27,10 @@ import org.scalatest.junit.JUnitSuite
 import org.junit.{After, Before, Test}
 import kafka.utils._
 import kafka.server.KafkaConfig
+import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochs}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
+import org.easymock.EasyMock._
 
 import scala.collection.JavaConverters._
 
@@ -205,6 +207,59 @@ class LogTest extends JUnitSuite {
     }
     assertEquals("Reading beyond the last message returns nothing.", 0, log.read(records.length, 100, None).records.shallowEntries.asScala.size)
   }
+
+
+  //TODO there should be a comparable test for compressed messages
+  @Test
+  def shouldApplyEpochToMessageOnAppendIfLeader() {
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+    val records = (0 until 100 by 2).map(id => Record.create(id.toString.getBytes)).toArray
+
+    //Given this partition is on leader epoch 72
+    val leaderEPockOverride = 72
+
+    //When appending messages as a leader
+    for(i <- records.indices)
+      log.append(MemoryRecords.withRecords(records(i)), interceptor = new EpochSettingInterceptor(leaderEPockOverride))
+
+    //Then leader epoch should be set on messages
+    for(i <- records.indices) {
+      val read = log.read(i, 100, Some(i+1)).records.shallowEntries.iterator.next()
+      assertEquals("Should have set leader epoch", 72, read.record.leaderEpoch())
+    }
+  }
+
+  @Test
+  def shouldTrackEpochChangeFromFollower() {
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+    val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
+    val epochs = createMock(classOf[LeaderEpochs])
+
+    //Given
+    val epochOnMessage = 72
+    val epochInTracker = 71
+
+    //Stubs
+    expect(epochs.epoch()).andStubReturn(epochInTracker)
+
+    //Stamp each message with the epoch
+    def recordsForEpoch(i: Int): MemoryRecords = {
+      val withRecords = MemoryRecords.withRecords(records(i))
+      withRecords.shallowEntries().asScala.foreach(x => x.setLeaderEpoch(epochOnMessage))
+      withRecords
+    }
+
+    //Assert we update the epoch in the tracker, as the message from the leader contained a larger epoch
+    expect(epochs.appendEpoch(72, 0))
+    replay(epochs)
+
+    //Run it
+    for(i <- records.indices) {
+      log.append(recordsForEpoch(i), interceptor = new EpochTrackingInterceptor(epochs))
+    }
+    verify(epochs)
+  }
+
 
   /**
    * This test appends a bunch of messages with non-sequential offsets and checks that we can read the correct message
@@ -385,7 +440,7 @@ class LogTest extends JUnitSuite {
   def testCompressedMessages() {
     /* this log should roll after every messageset */
     val logProps = new Properties()
-    logProps.put(LogConfig.SegmentBytesProp, 100: java.lang.Integer)
+    logProps.put(LogConfig.SegmentBytesProp, 101: java.lang.Integer)
     val log = new Log(logDir, LogConfig(logProps), recoveryPoint = 0L, time.scheduler, time = time)
 
     /* append 2 compressed message sets, each with two messages giving offsets 0, 1, 2, 3 */
