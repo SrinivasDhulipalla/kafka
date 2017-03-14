@@ -21,7 +21,7 @@ import java.io._
 import java.util.Properties
 
 import kafka.common._
-import kafka.server.checkpoints.OffsetCheckpoint
+import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.OffsetOutOfRangeException
@@ -288,7 +288,7 @@ class LogManagerTest {
     })
 
     logManager.checkpointRecoveryPointOffsets()
-    val checkpoints = new OffsetCheckpoint(new File(logDir, logManager.RecoveryPointCheckpointFile)).read()
+    val checkpoints = new OffsetCheckpointFile(new File(logDir, logManager.RecoveryPointCheckpointFile)).read()
 
     topicPartitions.zip(logs).foreach {
       case(tp, log) => {

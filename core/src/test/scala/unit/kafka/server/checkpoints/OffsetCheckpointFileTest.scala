@@ -19,7 +19,7 @@ package unit.kafka.server.checkpoints
 import java.io.File
 import java.util.regex.Pattern
 
-import kafka.server.checkpoints.{OffsetCheckpoint}
+import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
 import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
 import org.junit.Assert._
@@ -36,7 +36,7 @@ class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
     val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
     file.deleteOnExit()
 
-    val checkpoint = new OffsetCheckpoint(file)
+    val checkpoint = new OffsetCheckpointFile(file)
 
     //Given
     val offsets = Map(new TopicPartition("foo", 1) -> 5L, new TopicPartition("bar", 2) -> 10L)

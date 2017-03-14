@@ -45,9 +45,9 @@ object LeaderEpochFile {
 /**
   * This class saves out a map of LeaderEpoch=>offsets to a file for a certain replica
   */
-class LeaderEpochCheckpointFile(val f: File) extends CommonCheckpointFile[EpochEntry](f, LeaderEpochCheckpointFile.CurrentVersion)
-with LeaderEpochCheckpoint
-{
+class LeaderEpochCheckpointFile(val f: File) extends Serializer[EpochEntry] with LeaderEpochCheckpoint {
+  val checkpoint = new CommonCheckpointFile[EpochEntry](f, OffsetCheckpoint.CurrentVersion, this)
+
   override def serialize(entry: EpochEntry): String = {
     s"${entry.epoch} ${entry.startOffset}"
   }
@@ -61,10 +61,10 @@ with LeaderEpochCheckpoint
   }
 
   def write(epochs: Seq[EpochEntry]) = {
-    super.writeInternal(epochs)
+    checkpoint.write(epochs)
   }
 
   def read(): Seq[EpochEntry] = {
-    super.readInternal()
+    checkpoint.read()
   }
 }

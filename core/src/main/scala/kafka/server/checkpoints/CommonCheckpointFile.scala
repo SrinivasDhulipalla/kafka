@@ -25,18 +25,20 @@ import scala.collection.{Seq, mutable}
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-abstract class CommonCheckpointFile[T](val file: File, version: Int) extends Logging {
 
+trait Serializer[T]{
   def serialize(entry: T): String
 
   def deserialze(line: String): Option[T]
+}
 
+class CommonCheckpointFile[T] (val file: File, version: Int, serializer: Serializer[T]) extends Logging {
   private val path = file.toPath.toAbsolutePath
   private val tempPath = Paths.get(path.toString + ".tmp")
   private val lock = new Object()
   file.createNewFile()
 
-  protected def writeInternal(entries: Seq[T]) {
+  def write(entries: Seq[T]) {
     lock synchronized {
       // write to temp file and then swap with the existing file
       val fileOutputStream = new FileOutputStream(tempPath.toFile)
@@ -49,7 +51,7 @@ abstract class CommonCheckpointFile[T](val file: File, version: Int) extends Log
         writer.newLine()
 
         entries.foreach { entry =>
-          writer.write(serialize(entry))
+          writer.write(serializer.serialize(entry))
           writer.newLine()
         }
 
@@ -70,8 +72,7 @@ abstract class CommonCheckpointFile[T](val file: File, version: Int) extends Log
     }
   }
 
-  protected def readInternal(): Seq[T] = {
-
+  def read(): Seq[T] = {
     def malformedLineException(line: String) =
       new IOException(s"Malformed line in offset checkpoint file: $line'")
 
@@ -92,7 +93,7 @@ abstract class CommonCheckpointFile[T](val file: File, version: Int) extends Log
             val entries = mutable.Buffer[T]()
             line = reader.readLine()
             while (line != null) {
-              val entry = deserialze(line)
+              val entry = serializer.deserialze(line)
               entry match {
                 case Some(e) =>
                   entries += e

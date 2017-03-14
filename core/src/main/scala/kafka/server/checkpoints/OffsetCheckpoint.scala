@@ -19,6 +19,7 @@ package kafka.server.checkpoints
 import java.io._
 import java.util.regex.Pattern
 
+import kafka.server.epoch.EpochEntry
 import org.apache.kafka.common.TopicPartition
 
 import scala.collection._
@@ -28,12 +29,17 @@ private object OffsetCheckpoint {
   val CurrentVersion = 0
 }
 
+trait OffsetCheckpoint {
+  def write(epochs: Seq[EpochEntry])
+  def read(): Seq[EpochEntry]
+}
+
 /**
   * This class saves out a map of topic/partition=>offsets to a file
   */
-class OffsetCheckpoint(val f: File)
-  extends CommonCheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion)
-{
+class OffsetCheckpointFile(val f: File) extends Serializer[(TopicPartition, Long)]{
+  val checkpoint = new CommonCheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion, this)
+
   override def serialize(entry: (TopicPartition, Long)): String = {
     s"${entry._1.topic} ${entry._1.partition} ${entry._2}"
   }
@@ -47,10 +53,10 @@ class OffsetCheckpoint(val f: File)
   }
 
   def write(offsets: Map[TopicPartition, Long]) = {
-    super.writeInternal(offsets.toSeq)
+    checkpoint.write(offsets.toSeq)
   }
 
   def read(): Map[TopicPartition, Long] = {
-    readInternal().toMap
+    checkpoint.read().toMap
   }
 }
