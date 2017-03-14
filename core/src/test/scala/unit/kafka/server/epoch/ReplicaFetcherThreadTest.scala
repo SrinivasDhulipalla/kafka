@@ -16,24 +16,20 @@
   */
 package unit.kafka.server.epoch
 
-import kafka.server.epoch.{LeaderEpochs}
-import org.apache.kafka.common.protocol.{ApiKeys}
-import org.apache.kafka.common.requests.FetchResponse
-import org.apache.kafka.common.requests.FetchResponse.PartitionData
 import kafka.cluster.{BrokerEndPoint, Replica}
 import kafka.server._
+import kafka.server.epoch.LeaderEpochs
 import kafka.utils.TestUtils
-import org.apache.kafka.clients.{ClientRequest, ClientResponse, MockClient}
-import org.apache.kafka.common.{Node, TopicPartition}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors._
-import org.apache.kafka.common.requests.AbstractRequest.Builder
-import org.apache.kafka.common.requests.{AbstractRequest, EpochEndOffset, OffsetForLeaderEpochResponse}
-import org.apache.kafka.common.utils.{SystemTime, Time}
-import org.easymock.{Capture, CaptureType}
+import org.apache.kafka.common.requests.EpochEndOffset
+import org.apache.kafka.common.utils.SystemTime
 import org.easymock.EasyMock._
-import org.junit.Test
+import org.easymock.{Capture, CaptureType}
 import org.junit.Assert._
+import org.junit.Test
+import unit.kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -67,7 +63,7 @@ class ReplicaFetcherThreadTest {
     //Define the offsets for the OffsetsForLeaderEpochResponse
     val offsets = Map("topic1" -> List(new EpochEndOffset(0, 1), new EpochEndOffset(1, 1)).asJava).asJava
 
-    //Create the thread
+    //Create the fetcher thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
     val mockNetwork = new ReplicaFetcherMockBlockingSend(offsets, endPoint, new SystemTime())
     val thread = new ReplicaFetcherThread("bob", 0, endPoint, config, replicaManager, new Metrics(), new SystemTime(), quota, Some(mockNetwork))
@@ -192,47 +188,4 @@ class ReplicaFetcherThreadTest {
     assertEquals(highWaterMark, truncated.getValue.get(t2p1).get)
     assertEquals(156, truncated.getValue.get(t1p0).get)
   }
-
-}
-
-class ReplicaFetcherMockBlockingSend(offsets: java.util.Map[String, java.util.List[EpochEndOffset]], destination: BrokerEndPoint, time: Time) extends BlockingSend {
-  private val client = new MockClient(new SystemTime)
-  var fetchCount = 0
-  var epochFetchCount = 0
-
-  override def sendRequest(requestBuilder: Builder[_ <: AbstractRequest]): ClientResponse = {
-
-    //Send the request to the mock client
-    val clientRequest = request(requestBuilder)
-    client.send(clientRequest, time.milliseconds())
-
-    //Create a suitable response based on the API key
-    val response = requestBuilder.apiKey() match {
-      case ApiKeys.OFFSET_FOR_LEADER_EPOCH =>
-        epochFetchCount += 1
-//        new OffsetForLeaderEpochResponse(
-//          new OffsetForLeaderEpochResponse(offsets).toStruct(0.toShort))
-          new OffsetForLeaderEpochResponse(offsets)
-
-      case ApiKeys.FETCH =>
-        fetchCount += 1
-//        new FetchResponse(
-//          new FetchResponse(new java.util.LinkedHashMap[TopicPartition, PartitionData], 0).toStruct)
-          new FetchResponse(new java.util.LinkedHashMap[TopicPartition, PartitionData], 0)
-    }
-
-    //Use mock client to create the appropriate response object
-    client.respondFrom(response, new Node(destination.id, destination.host, destination.port))
-    client.poll(30, time.milliseconds()).iterator().next()
-  }
-
-  private def request(requestBuilder: Builder[_ <: AbstractRequest]): ClientRequest = {
-    client.newClientRequest(
-      destination.id.toString,
-      requestBuilder,
-      time.milliseconds(),
-      true)
-  }
-
-  override def close(): Unit = {}
 }
