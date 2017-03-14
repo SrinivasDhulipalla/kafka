@@ -25,7 +25,7 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
 
-class OffsetForLeaderEpochRequestIntegrationTest extends BaseRequestTest {
+class OffsetForLeaderEpochRequestTest extends BaseRequestTest {
   override def numBrokers: Int = 1
 
   val topic = "test-topic"
@@ -61,7 +61,7 @@ class OffsetForLeaderEpochRequestIntegrationTest extends BaseRequestTest {
     val response = parse(send(request, ApiKeys.OFFSET_FOR_LEADER_EPOCH, plaintextSocket), 0)
 
     //We expect it to come back with leader epoch 0, but offset 100
-    val expected = Map(topic -> List(new EpochEndOffset(0, 0, 100)).asJava).asJava
+    val expected = Map(topic -> List(new EpochEndOffset(0, 100)).asJava).asJava
     assertTrue(response.responses.containsKey(topic))
     assertEquals(expected, response.responses)
   }

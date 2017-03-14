@@ -63,9 +63,9 @@ class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
   }
 
   def maybeWarn(epochOffset: EpochEndOffset): Unit = {
-    if (epochOffset.error > 0)
+    if (epochOffset.hasError)
       warn(s"OffsetForLeaderEpoch request returned an error. High Watermark will be used for truncation. The error was: "
-        + Errors.forCode(epochOffset.error))
+        + epochOffset.error.message())
   }
 }
 

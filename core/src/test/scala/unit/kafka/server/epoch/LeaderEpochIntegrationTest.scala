@@ -18,7 +18,6 @@ package unit.kafka.server.epoch
 
 import kafka.admin.AdminUtils
 import kafka.server.KafkaConfig._
-import kafka.server.epoch.OffsetsForLeaderEpoch._
 import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.TestUtils._
@@ -27,6 +26,7 @@ import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors._
+import org.apache.kafka.common.requests.EpochEndOffset._
 import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.SystemTime
 import org.apache.kafka.common.{Node, TopicPartition}
@@ -118,7 +118,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     assertEquals(0, responses(tp1).endOffset)
 
     assertTrue(responses(tp2).hasError)
-    assertEquals(REPLICA_NOT_AVAILABLE.code(), responses(tp2).error)
+    assertEquals(REPLICA_NOT_AVAILABLE, responses(tp2).error)
     assertEquals(UNDEFINED_OFFSET, responses(tp2).endOffset)
 
     assertEquals(2, responses.size)

@@ -17,6 +17,7 @@
 package org.apache.kafka.common.requests;
 
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Struct;
 
@@ -41,10 +42,10 @@ public class OffsetForLeaderEpochResponse extends AbstractResponse {
             List<EpochEndOffset> epochs = new ArrayList();
             for (Object e : topicAndEpochs.getArray(PARTITIONS)) {
                 Struct partitionAndEpoch = (Struct) e;
-                short errorId = partitionAndEpoch.getShort(ERROR_ID);
+                Errors error = Errors.forCode(partitionAndEpoch.getShort(ERROR_ID));
                 int partitionId = partitionAndEpoch.getInt(PARTITION_ID);
                 long endOffset = partitionAndEpoch.getLong(END_OFFSET);
-                epochs.add(new EpochEndOffset(errorId, partitionId, endOffset));
+                epochs.add(new EpochEndOffset(error, partitionId, endOffset));
             }
             epochsByTopic.put(topic, epochs);
         }
@@ -59,7 +60,7 @@ public class OffsetForLeaderEpochResponse extends AbstractResponse {
     }
 
     public static OffsetForLeaderEpochResponse parse(ByteBuffer buffer, short versionId) {
-        return new OffsetForLeaderEpochResponse(ApiKeys.OFFSET_FOR_LEADER_EPOCH.parseResponse(versionId, buffer));
+        return new OffsetForLeaderEpochResponse(ApiKeys.OFFSET_FOR_LEADER_EPOCH.responseSchema(versionId).read(buffer));
     }
 
     @Override
@@ -74,7 +75,7 @@ public class OffsetForLeaderEpochResponse extends AbstractResponse {
             List<Struct> paritions = new ArrayList<>(paritionEpochs.size());
             for (EpochEndOffset epoch : paritionEpochs) {
                 Struct partitionRow = partition.instance(PARTITIONS);
-                partitionRow.set(ERROR_ID, epoch.error());
+                partitionRow.set(ERROR_ID, epoch.error().code());
                 partitionRow.set(PARTITION_ID, epoch.partitionId());
                 partitionRow.set(END_OFFSET, epoch.endOffset());
                 paritions.add(partitionRow);

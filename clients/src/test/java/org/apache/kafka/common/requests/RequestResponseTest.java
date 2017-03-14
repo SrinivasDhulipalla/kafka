@@ -693,22 +693,18 @@ public class RequestResponseTest {
 
     private OffsetForLeaderEpochRequest createLeaderEpochRequest() {
         Map<String, List<Epoch>> epochsByTopic = new HashMap<>();
-        epochsByTopic.put("topic1", Arrays.asList(new Epoch[]{new Epoch(0,0), new Epoch(1,1)}));
-        epochsByTopic.put("topic2", Arrays.asList(new Epoch[]{new Epoch(2,2), new Epoch(3,3)}));
+        epochsByTopic.put("topic1", Arrays.asList(new Epoch[]{new Epoch(0, 0), new Epoch(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new Epoch[]{new Epoch(2, 2), new Epoch(3, 3)}));
 
         return new OffsetForLeaderEpochRequest.Builder(epochsByTopic).build();
     }
 
     private OffsetForLeaderEpochResponse createLeaderEpochResponse() {
         Map<String, List<EpochEndOffset>> epochsByTopic = new HashMap<>();
-        epochsByTopic.put("topic1", Arrays.asList(new EpochEndOffset[]{eeo(0, 0), eeo(1, 1)}));
-        epochsByTopic.put("topic2", Arrays.asList(new EpochEndOffset[]{eeo(2, 2), eeo(3, 3)}));
+        epochsByTopic.put("topic1", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(0, 0), new EpochEndOffset(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(2, 2), new EpochEndOffset(3, 3)}));
 
         return new OffsetForLeaderEpochResponse(epochsByTopic);
-    }
-
-    private EpochEndOffset eeo(int error, int partitionId) {
-        return new EpochEndOffset((short)error, partitionId, partitionId);
     }
 
     private static class ByteBufferChannel implements GatheringByteChannel {

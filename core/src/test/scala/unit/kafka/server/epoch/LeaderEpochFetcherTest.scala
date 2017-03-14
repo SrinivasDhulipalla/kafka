@@ -20,6 +20,8 @@ import kafka.server.BlockingSend
 import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.protocol.Errors
+import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochResponse}
 import org.easymock.EasyMock._
 import org.junit.Assert._
@@ -38,8 +40,8 @@ class LeaderEpochFetcherTest {
     val tp1 = new TopicPartition("topic1", 1)
 
     val offsets = Map("topic1" -> List(
-      new EpochEndOffset(0, 0, 156),
-      new EpochEndOffset(0, 1, 172)
+      new EpochEndOffset(0, 156),
+      new EpochEndOffset(1, 172)
     ).asJava)
 
     val epochResponse = createMock(classOf[OffsetForLeaderEpochResponse])
@@ -68,8 +70,8 @@ class LeaderEpochFetcherTest {
     val tp1 = new TopicPartition("topic2", 0)
 
     val offsets = Map(
-      "topic1" -> List(new EpochEndOffset(0, 0, 156)).asJava,
-      "topic2" -> List(new EpochEndOffset(0, 0, 172)).asJava
+      "topic1" -> List(new EpochEndOffset(0, 156)).asJava,
+      "topic2" -> List(new EpochEndOffset(0, 172)).asJava
     )
 
     val epochResponse = createMock(classOf[OffsetForLeaderEpochResponse])
@@ -90,6 +92,6 @@ class LeaderEpochFetcherTest {
   }
 
   def EEO(tp: TopicPartition, offset: Int): EpochEndOffset = {
-    new EpochEndOffset(0, tp.partition, offset)
+    new EpochEndOffset(tp.partition, offset)
   }
 }

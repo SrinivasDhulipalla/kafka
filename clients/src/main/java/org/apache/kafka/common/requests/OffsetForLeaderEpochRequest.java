@@ -16,12 +16,8 @@
  */
 package org.apache.kafka.common.requests;
 
-import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.errors.UnsupportedVersionException;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.types.Struct;
-import org.apache.kafka.common.utils.Utils;
-
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,18 +37,34 @@ public class OffsetForLeaderEpochRequest extends AbstractRequest {
         return epochsByTopic;
     }
 
-
     public static class Builder extends AbstractRequest.Builder<OffsetForLeaderEpochRequest> {
-        private Map<String, List<Epoch>> epochsByTopic;
+        private Map<String, List<Epoch>> epochsByTopic = new HashMap();
+
+        public Builder() {
+            super(ApiKeys.OFFSET_FOR_LEADER_EPOCH);
+        }
 
         public Builder(Map<String, List<Epoch>> epochsByTopic) {
             super(ApiKeys.OFFSET_FOR_LEADER_EPOCH);
             this.epochsByTopic = epochsByTopic;
         }
 
+        public Builder add(String topic, Epoch epoch){
+            List<Epoch> epochs = epochsByTopic.get(topic);
+            if(epochs == null)
+                epochs = new ArrayList<>();
+            epochs.add(epoch);
+            epochsByTopic.put(topic, epochs);
+            return this;
+        }
+
         @Override
         public OffsetForLeaderEpochRequest build(short version) {
             return new OffsetForLeaderEpochRequest(epochsByTopic, version);
+        }
+
+        public static OffsetForLeaderEpochRequest parse(ByteBuffer buffer, short version) {
+            return new OffsetForLeaderEpochRequest(ApiKeys.OFFSET_FOR_LEADER_EPOCH.parseRequest(version, buffer), version);
         }
 
         @Override

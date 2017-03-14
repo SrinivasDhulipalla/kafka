@@ -16,27 +16,43 @@
  */
 package org.apache.kafka.common.requests;
 
+import org.apache.kafka.common.protocol.Errors;
+
 /**
  * Data Transfer Object for the  Offsets for Leader Epoch Response.
  */
 
 public class EpochEndOffset {
-    private short error;
+    public static final long UNDEFINED_OFFSET = -1;
+
+    private Errors error;
     private int partitionId;
     private long endOffset;
 
-    public EpochEndOffset(short error, int partitionId, long endOffset) {
+    public EpochEndOffset(Errors error, int partitionId, long endOffset) {
         this.error = error;
         this.partitionId = partitionId;
         this.endOffset = endOffset;
     }
 
-    public short error() {
+    public EpochEndOffset(Errors error, int partitionId) {
+        this.error = error;
+        this.partitionId = partitionId;
+        this.endOffset = UNDEFINED_OFFSET;
+    }
+
+    public EpochEndOffset(int partitionId, long endOffset) {
+        this.error = Errors.NONE;
+        this.partitionId = partitionId;
+        this.endOffset = endOffset;
+    }
+
+    public Errors error() {
         return error;
     }
 
     public boolean hasError() {
-        return error > 0;
+        return error != Errors.NONE;
     }
 
     public int partitionId() {
@@ -71,7 +87,7 @@ public class EpochEndOffset {
 
     @Override
     public int hashCode() {
-        int result = (int) error;
+        int result = (int) error.code();
         result = 31 * result + partitionId;
         result = 31 * result + (int) (endOffset ^ (endOffset >>> 32));
         return result;

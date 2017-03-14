@@ -16,13 +16,12 @@
   */
 package unit.kafka.server.epoch
 
-import kafka.server.epoch.{LeaderEpochs, OffsetsForLeaderEpoch}
-import org.apache.kafka.common.protocol.{ApiKeys, Errors}
+import kafka.server.epoch.{LeaderEpochs}
+import org.apache.kafka.common.protocol.{ApiKeys}
 import org.apache.kafka.common.requests.FetchResponse
 import org.apache.kafka.common.requests.FetchResponse.PartitionData
 import kafka.cluster.{BrokerEndPoint, Replica}
 import kafka.server._
-import kafka.server.epoch.OffsetsForLeaderEpoch._
 import kafka.utils.TestUtils
 import org.apache.kafka.clients.{ClientRequest, ClientResponse, MockClient}
 import org.apache.kafka.common.{Node, TopicPartition}
@@ -66,7 +65,7 @@ class ReplicaFetcherThreadTest {
     replay(leaderEpochs, replicaManager, logManager, quota, replica)
 
     //Define the offsets for the OffsetsForLeaderEpochResponse
-    val offsets = Map("topic1" -> List(new EpochEndOffset(0, 0, 1), new EpochEndOffset(0, 1, 1)).asJava).asJava
+    val offsets = Map("topic1" -> List(new EpochEndOffset(0, 1), new EpochEndOffset(1, 1)).asJava).asJava
 
     //Create the thread
     val endPoint = new BrokerEndPoint(0, "localhost", 1000)
@@ -122,10 +121,10 @@ class ReplicaFetcherThreadTest {
     //Define the offsets for the OffsetsForLeaderEpochResponse, these are used for truncation
     val offsetsReply = Map(
       "topic1" -> List(
-        new EpochEndOffset(0, 0, 156)
+        new EpochEndOffset(0, 156)
       ).asJava,
       "topic2" -> List(
-        new EpochEndOffset(0, 1, 172)
+        new EpochEndOffset(1, 172)
       ).asJava
     ).asJava
 
@@ -173,10 +172,10 @@ class ReplicaFetcherThreadTest {
     //Define the offsets for the OffsetsForLeaderEpochResponse, these are used for truncation
     val offsetsReply = Map(
       "topic1" -> List(
-        new EpochEndOffset(0, 0, 156)
+        new EpochEndOffset(NONE, 0, 156)
       ).asJava,
       "topic2" -> List(
-        new EpochEndOffset(NOT_LEADER_FOR_PARTITION.code(), 1, UNDEFINED_OFFSET)
+        new EpochEndOffset(NOT_LEADER_FOR_PARTITION, 1, EpochEndOffset.UNDEFINED_OFFSET)
       ).asJava
     ).asJava
 

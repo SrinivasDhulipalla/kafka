@@ -1255,19 +1255,22 @@ class KafkaApis(val requestChannel: RequestChannel,
     }
   }
 
-  def handleHandleOffsetForLeaderEpochRequest(request: RequestChannel.Request): Unit ={
-    //TODO add authentication etc before merge
+  def handleHandleOffsetForLeaderEpochRequest(request: RequestChannel.Request): Unit = {
     val offsetForEpoch = request.body[OffsetForLeaderEpochRequest]
+    val requestInfo = offsetForEpoch.epochsByTopic().asScala
     info(s"Received OffsetForEpoch Request for ${offsetForEpoch.epochsByTopic()} from ${request.session.clientAddress}")
 
-    val cmd = new OffsetsForLeaderEpoch(replicaManager)
+    val authorised = authorize(request.session, ClusterAction, Resource.ClusterResource)
+    val epochFinder = new OffsetsForLeaderEpoch(replicaManager)
+
     val responseBody = new OffsetForLeaderEpochResponse(
-      cmd.getOffsetsForEpochs(offsetForEpoch)
+      epochFinder.getOffsetsForEpochs(requestInfo, authorised)
     )
 
     info(s"Returning OffsetForEpoch Request for $responseBody")
     requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
   }
+
 
   def authorizeClusterAction(request: RequestChannel.Request): Unit = {
     if (!authorize(request.session, ClusterAction, Resource.ClusterResource))
