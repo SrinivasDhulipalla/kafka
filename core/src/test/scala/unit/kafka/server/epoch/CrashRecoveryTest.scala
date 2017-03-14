@@ -37,6 +37,12 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
 
+/**
+  *
+  * These tets prove that KIP-101 fixes the problems with the replication protocol
+  * All tests failed prior to the
+  *
+  */
 class CrashRecoveryTest extends ZooKeeperTestHarness with Logging {
 
   val msg = new Array[Byte](1000)
@@ -180,6 +186,54 @@ class CrashRecoveryTest extends ZooKeeperTestHarness with Logging {
 
     //Are the files identical?
     assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
+  }
+
+
+  @Test
+  def shouldSurviveFastLeaderChange(): Unit ={
+
+    //Given 2 brokers
+    brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+
+    //A single partition topic with 2 replicas
+    AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, Map(0 -> Seq(100, 101)))
+    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 50, acks = -1)
+
+    //Kick off with a single record
+    producer.send(new ProducerRecord(topic, 0, null, msg))
+    producer.flush()
+    var messagesWritten = 1
+
+    //Now invoke the farst leader change bug
+    (0 until 5).foreach{i =>
+      val leaderId = zkUtils.getLeaderForPartition(topic, 0).get
+      val leader = brokers.filter(_.config.brokerId == leaderId)(0)
+      val follower = brokers.filter(_.config.brokerId != leaderId)(0)
+
+      //Send a message
+      producer.send(new ProducerRecord(topic, 0, null, msg))
+      producer.flush()
+      messagesWritten += 1
+
+      //As soon as it replicates, bounce the follower
+      follower.shutdown()
+      follower.startup()
+
+      //Then bounce the leader
+      leader.shutdown()
+      leader.startup()
+
+      //Wait for logs to match
+      while(
+        getLog(brokers(0), 0).logEndOffset != getLog(brokers(1), 0).logEndOffset
+      ) Thread.sleep(100)
+
+      println("leos are: "+brokers.map(getLog(_,0).logEndOffset))
+      println("messages written "+messagesWritten)
+
+      //Ensure no data was lost
+      assertTrue(brokers.forall{broker => getLog(broker, 0).logEndOffset == messagesWritten})
+    }
   }
 
   def printSegments(): Unit = {
