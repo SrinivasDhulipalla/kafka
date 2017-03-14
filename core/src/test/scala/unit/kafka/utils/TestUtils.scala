@@ -37,6 +37,7 @@ import kafka.producer._
 import kafka.security.auth.{Acl, Authorizer, Resource}
 import kafka.serializer.{DefaultEncoder, Encoder, StringEncoder}
 import kafka.server._
+import kafka.server.checkpoints.OffsetCheckpoint
 import kafka.utils.ZkUtils._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{KafkaConsumer, RangeAssignor}

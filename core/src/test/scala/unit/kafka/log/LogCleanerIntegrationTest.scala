@@ -21,7 +21,7 @@ import java.io.File
 import java.util.Properties
 
 import kafka.api.{KAFKA_0_10_0_IV1, KAFKA_0_9_0}
-import kafka.server.OffsetCheckpoint
+import kafka.server.checkpoints.OffsetCheckpoint
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record}

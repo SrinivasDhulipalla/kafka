@@ -25,9 +25,10 @@ import kafka.utils._
 import scala.collection._
 import scala.collection.JavaConverters._
 import kafka.common.{KafkaException, KafkaStorageException}
-import kafka.server.{BrokerState, OffsetCheckpoint, RecoveringFromUncleanShutdown}
+import kafka.server.{BrokerState, RecoveringFromUncleanShutdown}
 import java.util.concurrent.{ExecutionException, ExecutorService, Executors, Future}
 
+import kafka.server.checkpoints.OffsetCheckpoint
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Time
 

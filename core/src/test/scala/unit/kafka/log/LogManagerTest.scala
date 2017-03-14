@@ -21,7 +21,7 @@ import java.io._
 import java.util.Properties
 
 import kafka.common._
-import kafka.server.OffsetCheckpoint
+import kafka.server.checkpoints.OffsetCheckpoint
 import kafka.utils._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.OffsetOutOfRangeException

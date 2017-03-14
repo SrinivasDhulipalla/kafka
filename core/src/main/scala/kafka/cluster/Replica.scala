@@ -21,7 +21,8 @@ import kafka.log.Log
 import kafka.utils.Logging
 import kafka.server.{LogOffsetMetadata, LogReadResult}
 import kafka.common.KafkaException
-import kafka.server.epoch.{LeaderEpochCheckpointFile, LeaderEpochFile, SavedLeaderEpochs, LeaderEpochs}
+import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
+import kafka.server.epoch.{LeaderEpochs, SavedLeaderEpochs}
 import org.apache.kafka.common.utils.Time
 
 class Replica(val brokerId: Int,

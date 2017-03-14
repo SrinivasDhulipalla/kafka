@@ -14,17 +14,19 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server.epoch
+package unit.kafka.server.checkpoints
 
 import java.io.File
 
-import kafka.server.epoch.{EpochEntry, LeaderEpochCheckpointFile}
+import kafka.server.checkpoints.LeaderEpochCheckpointFile
+import kafka.server.epoch.EpochEntry
 import kafka.utils.Logging
+import org.junit.Assert._
 import org.junit.Test
 import org.scalatest.junit.JUnitSuite
-import org.junit.Assert._
 
-class LeaderEpochCheckpointTest extends JUnitSuite  with Logging{
+
+class LeaderEpochCheckpointFileTest extends JUnitSuite  with Logging{
 
   @Test
   def shouldPersistOverwriteAndReloadFile(): Unit ={

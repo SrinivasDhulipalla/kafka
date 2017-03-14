@@ -17,6 +17,7 @@
 package kafka.server.epoch
 
 import kafka.cluster.Replica
+import kafka.server.checkpoints.LeaderEpochCheckpoint
 
 trait LeaderEpochs{
   def becomeLeader(leaderEpoch: Int)
