@@ -39,11 +39,14 @@ import scala.collection.JavaConverters._
 
 /**
   *
-  * These tets prove that KIP-101 fixes the problems with the replication protocol
-  * All tests failed prior to the
+  * These tests were written to assert the addition of leader epochs to messages solve the
+  * problems with the replication protocol described in KIP-101.
+  *
+  * The tests map to the two scenarios described in the KIP:
+  * https://cwiki.apache.org/confluence/display/KAFKA/KIP-101+-+Alter+Replication+Protocol+to+use+Leader+Epoch+rather+than+High+Watermark+for+Truncation
   *
   */
-class CrashRecoveryTest extends ZooKeeperTestHarness with Logging {
+class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness with Logging {
 
   val msg = new Array[Byte](1000)
   val msgBigger = new Array[Byte](10000)
