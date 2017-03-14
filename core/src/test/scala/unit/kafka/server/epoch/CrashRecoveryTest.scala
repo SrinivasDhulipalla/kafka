@@ -25,7 +25,7 @@ import kafka.log.Log
 import kafka.server.KafkaConfig._
 import kafka.server.KafkaServer
 import kafka.tools.DumpLogSegments
-import kafka.utils.CoreUtils
+import kafka.utils.{CoreUtils, Logging}
 import kafka.utils.TestUtils._
 import kafka.zk.ZooKeeperTestHarness
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
@@ -37,7 +37,7 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
 
-class CrashRecoveryTest extends ZooKeeperTestHarness {
+class CrashRecoveryTest extends ZooKeeperTestHarness with Logging {
 
   val msg = new Array[Byte](1000)
   val msgBigger = new Array[Byte](10000)
@@ -58,7 +58,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
     super.tearDown()
   }
 
-//  @Test
+  @Test
   def shouldNotAllowDivergentLogs(): Unit = {
 
     //Given two brokers
@@ -109,7 +109,7 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
 
   //This is essentially the use case described in https://issues.apache.org/jira/browse/KAFKA-3919
   //Is currently in "failing mode"
-//  @Test
+  @Test
   def offsetsShouldNotGoBackwards(): Unit = {
 
     //Given two brokers
@@ -183,11 +183,10 @@ class CrashRecoveryTest extends ZooKeeperTestHarness {
   }
 
   def printSegments(): Unit = {
-    println("Broker0:")
+    info("Broker0:")
     DumpLogSegments.main(Seq("--files", getLogFile(brokers(0), 0).getCanonicalPath).toArray)
-    println("Broker1:")
+    info("Broker1:")
     DumpLogSegments.main(Seq("--files", getLogFile(brokers(1), 0).getCanonicalPath).toArray)
-    println()
   }
 
   def startConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
