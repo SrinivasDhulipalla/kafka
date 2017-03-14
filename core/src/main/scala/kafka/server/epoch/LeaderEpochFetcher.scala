@@ -32,8 +32,9 @@ import scala.collection.{Map, Set}
 class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
 
   def fetchLeaderEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
-    val epochsByTopic = translate(partitions)
-    fetchLeaderEpochs(epochsByTopic)
+    fetchLeaderEpochs(
+      translate(partitions)
+    )
   }
 
   private def translate(partitions: Set[PartitionEpoch]): util.Map[String, JList[Epoch]] = {
@@ -62,7 +63,7 @@ class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
       }.toMap
   }
 
-  def maybeWarn(epochOffset: EpochEndOffset): Unit = {
+  private def maybeWarn(epochOffset: EpochEndOffset): Unit = {
     if (epochOffset.hasError)
       warn(s"OffsetForLeaderEpoch request returned an error. High Watermark will be used for truncation. The error was: "
         + epochOffset.error.message())

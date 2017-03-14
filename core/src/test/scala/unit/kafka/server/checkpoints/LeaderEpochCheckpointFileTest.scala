@@ -29,7 +29,7 @@ import org.scalatest.junit.JUnitSuite
 class LeaderEpochCheckpointFileTest extends JUnitSuite  with Logging{
 
   @Test
-  def shouldPersistOverwriteAndReloadFile(): Unit ={
+  def shouldPersistAndOverwriteAndReloadFile(): Unit ={
     val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
     file.deleteOnExit()
 

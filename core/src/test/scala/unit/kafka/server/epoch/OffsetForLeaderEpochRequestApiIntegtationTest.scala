@@ -25,7 +25,7 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
 
-class OffsetForLeaderEpochRequestTest extends BaseRequestTest {
+class OffsetForLeaderEpochRequestApiIntegtationTest extends BaseRequestTest {
   override def numBrokers: Int = 1
 
   val topic = "test-topic"
@@ -47,7 +47,6 @@ class OffsetForLeaderEpochRequestTest extends BaseRequestTest {
     super.tearDown()
   }
 
-  //TODO all the extra bits like authentication etc.
   @Test
   def shouldGetAResponse(): Unit = {
     val plaintextSocket = connect(protocol = securityProtocol)
@@ -65,5 +64,4 @@ class OffsetForLeaderEpochRequestTest extends BaseRequestTest {
     assertTrue(response.responses.containsKey(topic))
     assertEquals(expected, response.responses)
   }
-
 }

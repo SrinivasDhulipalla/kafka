@@ -30,9 +30,8 @@ import scala.collection.Map
 
 class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
 
-
   @Test
-  def shouldPersistOverwriteAndReloadFile(): Unit ={
+  def shouldPersistAndOverwriteAndReloadFile(): Unit ={
     val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
     file.deleteOnExit()
 
@@ -57,12 +56,26 @@ class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
     assertEquals(offsets2, checkpoint.read())
   }
 
-
   @Test
-  def shouldExceptionIfMalformed(): Unit ={
-    fail()
+  def shouldHandleMultipleLines(): Unit ={
+    val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
+    file.deleteOnExit()
+
+    val checkpoint = new OffsetCheckpointFile(file)
+
+    //Given
+    val offsets = Map(
+      new TopicPartition("foo", 1) -> 5L, new TopicPartition("bar", 6) -> 10L,
+      new TopicPartition("foo", 2) -> 5L, new TopicPartition("bar", 7) -> 10L,
+      new TopicPartition("foo", 3) -> 5L, new TopicPartition("bar", 8) -> 10L,
+      new TopicPartition("foo", 4) -> 5L, new TopicPartition("bar", 9) -> 10L,
+      new TopicPartition("foo", 5) -> 5L, new TopicPartition("bar", 10) -> 10L
+    )
+
+    //When
+    checkpoint.write(offsets)
+
+    //Then
+    assertEquals(offsets, checkpoint.read())
   }
-
-
-
 }

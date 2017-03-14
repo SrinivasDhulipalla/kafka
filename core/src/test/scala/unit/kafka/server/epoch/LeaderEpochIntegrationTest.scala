@@ -124,8 +124,6 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     assertEquals(2, responses.size)
   }
 
-  //TODO more here please
-
   def sender(broker: KafkaServer): TestSender = {
     val endPoint = broker.metadataCache.getAliveBrokers.find(_.id == 100).get.getBrokerEndPoint(broker.config.interBrokerListenerName)
     val destinationNode = new Node(endPoint.id, endPoint.host, endPoint.port)

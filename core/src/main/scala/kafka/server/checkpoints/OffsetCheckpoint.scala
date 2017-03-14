@@ -37,14 +37,14 @@ trait OffsetCheckpoint {
 /**
   * This class saves out a map of topic/partition=>offsets to a file
   */
-class OffsetCheckpointFile(val f: File) extends Serializer[(TopicPartition, Long)]{
-  val checkpoint = new CommonCheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion, this)
+class OffsetCheckpointFile(val f: File) extends CheckpointFileFormatter[(TopicPartition, Long)]{
+  val checkpoint = new CheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion, this)
 
-  override def serialize(entry: (TopicPartition, Long)): String = {
+  override def toLine(entry: (TopicPartition, Long)): String = {
     s"${entry._1.topic} ${entry._1.partition} ${entry._2}"
   }
 
-  override def deserialze(line: String): Option[(TopicPartition, Long)] = {
+  override def fromLine(line: String): Option[(TopicPartition, Long)] = {
     OffsetCheckpoint.WhiteSpacesPattern.split(line) match {
       case Array(topic, partition, offset) =>
         Some(new TopicPartition(topic, partition.toInt), offset.toLong)

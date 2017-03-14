@@ -26,13 +26,13 @@ import scala.collection.{Seq, mutable}
   * limitations under the License.
   */
 
-trait Serializer[T]{
-  def serialize(entry: T): String
+trait CheckpointFileFormatter[T]{
+  def toLine(entry: T): String
 
-  def deserialze(line: String): Option[T]
+  def fromLine(line: String): Option[T]
 }
 
-class CommonCheckpointFile[T] (val file: File, version: Int, serializer: Serializer[T]) extends Logging {
+class CheckpointFile[T](val file: File, version: Int, formatter: CheckpointFileFormatter[T]) extends Logging {
   private val path = file.toPath.toAbsolutePath
   private val tempPath = Paths.get(path.toString + ".tmp")
   private val lock = new Object()
@@ -51,7 +51,7 @@ class CommonCheckpointFile[T] (val file: File, version: Int, serializer: Seriali
         writer.newLine()
 
         entries.foreach { entry =>
-          writer.write(serializer.serialize(entry))
+          writer.write(formatter.toLine(entry))
           writer.newLine()
         }
 
@@ -93,7 +93,7 @@ class CommonCheckpointFile[T] (val file: File, version: Int, serializer: Seriali
             val entries = mutable.Buffer[T]()
             line = reader.readLine()
             while (line != null) {
-              val entry = serializer.deserialze(line)
+              val entry = formatter.fromLine(line)
               entry match {
                 case Some(e) =>
                   entries += e

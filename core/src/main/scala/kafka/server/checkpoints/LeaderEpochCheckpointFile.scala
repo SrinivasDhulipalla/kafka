@@ -45,14 +45,14 @@ object LeaderEpochFile {
 /**
   * This class saves out a map of LeaderEpoch=>offsets to a file for a certain replica
   */
-class LeaderEpochCheckpointFile(val f: File) extends Serializer[EpochEntry] with LeaderEpochCheckpoint {
-  val checkpoint = new CommonCheckpointFile[EpochEntry](f, OffsetCheckpoint.CurrentVersion, this)
+class LeaderEpochCheckpointFile(val f: File) extends CheckpointFileFormatter[EpochEntry] with LeaderEpochCheckpoint {
+  val checkpoint = new CheckpointFile[EpochEntry](f, OffsetCheckpoint.CurrentVersion, this)
 
-  override def serialize(entry: EpochEntry): String = {
+  override def toLine(entry: EpochEntry): String = {
     s"${entry.epoch} ${entry.startOffset}"
   }
 
-  override def deserialze(line: String): Option[EpochEntry] = {
+  override def fromLine(line: String): Option[EpochEntry] = {
     OffsetCheckpoint.WhiteSpacesPattern.split(line) match {
       case Array(epoch, offset) =>
         Some(EpochEntry(epoch.toInt, offset.toLong))
