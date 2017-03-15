@@ -41,10 +41,8 @@ class EpochSettingInterceptor(epoch: Int) extends MessageAppendInterceptor {
   */
 class EpochTrackingInterceptor(epochs: LeaderEpochs) extends MessageAppendInterceptor {
   override def onMessage(entry: ByteBufferLogEntry): Unit = {
-    //Check to see if epoch has changed, record it if it has
-    val epochOnReplicatedMessage = entry.record.leaderEpoch()
-    if (epochOnReplicatedMessage > epochs.latestEpoch())
-      epochs.maybeUpdate(epochOnReplicatedMessage, entry.offset())
+    //TODO post message format merge we should check we handle the case of old messages that don't have the epoch
+    epochs.maybeUpdate(entry.record.leaderEpoch(), entry.offset())
   }
 }
 
