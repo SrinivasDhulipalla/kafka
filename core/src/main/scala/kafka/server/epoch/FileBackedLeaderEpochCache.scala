@@ -16,10 +16,13 @@
   */
 package kafka.server.epoch
 
+import java.util.concurrent.locks.ReentrantReadWriteLock
+
 import kafka.server.LogOffsetMetadata
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.Constants.{UNSUPPORTED_EPOCH, UNSUPPORTED_EPOCH_OFFSET}
-import kafka.utils.Logging
+import kafka.utils.CoreUtils._
+import kafka.utils.{CoreUtils, Logging}
 import org.apache.kafka.common.requests.EpochEndOffset
 
 import scala.collection.mutable.ListBuffer
@@ -27,6 +30,7 @@ import scala.collection.mutable.ListBuffer
 trait LeaderEpochCache {
   /**
     * Updates the epoch store with new epochs and the log end offset
+    *
     * @param leaderEpoch
     * @param offset
     */
@@ -34,6 +38,7 @@ trait LeaderEpochCache {
 
   /**
     * Updates the epoch store with new epochs and offset
+    *
     * @param leaderEpoch
     * @param offset
     */
@@ -41,6 +46,7 @@ trait LeaderEpochCache {
 
   /**
     * Returns the current epoch for this replica
+    *
     * @return
     */
   def latestEpoch(): Int
@@ -57,6 +63,7 @@ trait LeaderEpochCache {
   /**
     * Remove all epoch entries from the store where startOffset < offset passed
     * This matches the logic in Log.truncateTo()
+    *
     * @param leaderEpoch
     * @param offset
     */
@@ -69,40 +76,52 @@ object Constants {
 }
 
 class FileBackedLeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
-  private[epoch] var epochs = ListBuffer(checkpoint.read(): _*)
+  private val lock = new ReentrantReadWriteLock()
+  private[epoch] var epochs = lock synchronized {ListBuffer(checkpoint.read(): _*)}
+
 
   override def maybeUpdate(epoch: Int) = {
     maybeUpdate(epoch, leo().messageOffset)
   }
 
   override def maybeUpdate(epoch: Int, offset: Long): Unit = {
-    if (epoch >= 0 && epoch > latestEpoch()) {
-      epochs += EpochEntry(epoch, offset)
-      flush()
+    inWriteLock(lock) {
+      if (epoch >= 0 && epoch > latestEpoch()) {
+        epochs += EpochEntry(epoch, offset)
+        flush()
+      }
     }
   }
 
-  override def latestEpoch(): Int ={if(epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch}
+  override def latestEpoch(): Int = {
+    inReadLock(lock) {
+      if (epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch
+    }
+  }
 
   override def endOffsetFor(requestedEpoch: Int): Long = {
-    //Use LEO if current epoch
-    if (requestedEpoch == latestEpoch) {
-      leo().messageOffset
-    }
-    else {
-      //Use the start offset of the first subsequent epoch otherwise
-      val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
-      if (subsequentEpochs.isEmpty)
-        UNSUPPORTED_EPOCH_OFFSET
-      else
-        subsequentEpochs.head.startOffset
+    inReadLock(lock) {
+      //Use LEO if current epoch
+      if (requestedEpoch == latestEpoch) {
+        leo().messageOffset
+      }
+      else {
+        //Use the start offset of the first subsequent epoch otherwise
+        val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
+        if (subsequentEpochs.isEmpty)
+          UNSUPPORTED_EPOCH_OFFSET
+        else
+          subsequentEpochs.head.startOffset
+      }
     }
   }
 
   override def resetTo(offset: Long): Unit = {
-    if (offset >= latestEpoch) {
-      epochs = epochs.filter(entry => entry.startOffset < offset)
-      flush()
+    inWriteLock(lock) {
+      if (offset >= latestEpoch) {
+        epochs = epochs.filter(entry => entry.startOffset < offset)
+        flush()
+      }
     }
   }
 
