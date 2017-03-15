@@ -27,7 +27,7 @@ import org.scalatest.junit.JUnitSuite
 import org.junit.{After, Before, Test}
 import kafka.utils._
 import kafka.server.KafkaConfig
-import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochs}
+import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochCache}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
 import org.easymock.EasyMock._
@@ -233,7 +233,7 @@ class LogTest extends JUnitSuite {
   def shouldTrackEpochChangeFromFollower() {
     val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
     val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
-    val epochs = createMock(classOf[LeaderEpochs])
+    val epochs = createMock(classOf[LeaderEpochCache])
 
     //Given
     val epochOnMessage = 72

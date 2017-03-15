@@ -23,15 +23,43 @@ import kafka.utils.Logging
 
 import scala.collection.mutable.ListBuffer
 
-trait LeaderEpochs {
-
+trait LeaderEpochCache {
+  /**
+    * Updates the epoch store with new epochs and the log end offset
+    * @param leaderEpoch
+    * @param offset
+    */
   def maybeUpdate(leaderEpoch: Int)
 
+  /**
+    * Updates the epoch store with new epochs and offset
+    * @param leaderEpoch
+    * @param offset
+    */
   def maybeUpdate(leaderEpoch: Int, offset: Long)
 
+  /**
+    * Returns the current epoch for this replica
+    * @return
+    */
   def latestEpoch(): Int
 
+  /**
+    * Returns the start offset of the first Leader Epoch larger than the Leader Epoch passed
+    * or the Log End Offset, if the leader's current epoch is equal to the one passed
+    *
+    * @param epoch
+    * @return offset
+    */
   def endOffsetFor(epoch: Int): Long
+
+  /**
+    * Remove all epoch entries from the store where startOffset < offset passed
+    * This matches the logic in Log.truncateTo()
+    * @param leaderEpoch
+    * @param offset
+    */
+  def resetTo(offset: Long)
 }
 
 object Constants {
@@ -39,36 +67,29 @@ object Constants {
   val UNSUPPORTED_EPOCH = -1
 }
 
-class LeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochs with Logging {
+class FileBackedLeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
   private[epoch] var epochs = ListBuffer(checkpoint.read(): _*)
 
-  def maybeUpdate(epoch: Int) = {
+  override def maybeUpdate(epoch: Int) = {
     maybeUpdate(epoch, leo().messageOffset)
   }
 
-  def maybeUpdate(epoch: Int, offset: Long): Unit = {
+  override def maybeUpdate(epoch: Int, offset: Long): Unit = {
     if (epoch >= 0 && epoch > latestEpoch()) {
       epochs += EpochEntry(epoch, offset)
       flush()
     }
   }
 
-  def latestEpoch(): Int = if(epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch
+  override def latestEpoch(): Int ={if(epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch}
 
-  /**
-    * LastOffset will be the start offset of the first Leader Epoch larger than the Leader Epoch passed
-    * in the request or the Log End Offset if the leader's current epoch is equal to the one requested
-    *
-    * @param epoch
-    * @return
-    */
-  def endOffsetFor(requestedEpoch: Int): Long = {
-    //Use LEO if requested current epoch
-    if (requestedEpoch == latestEpoch()) {
+  override def endOffsetFor(requestedEpoch: Int): Long = {
+    //Use LEO if current epoch
+    if (requestedEpoch == latestEpoch) {
       leo().messageOffset
     }
     else {
-      //Return the start offset of the first subsequent epoch
+      //Use the start offset of the first subsequent epoch otherwise
       val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
       if (subsequentEpochs.isEmpty)
         UNSUPPORTED_EPOCH_OFFSET
@@ -77,18 +98,17 @@ class LeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochChec
     }
   }
 
+  override def resetTo(offset: Long): Unit = {
+    if (offset >= latestEpoch) {
+      epochs = epochs.filter(entry => entry.startOffset < offset)
+      flush()
+    }
+  }
+
   private def flush(): Unit = {
     checkpoint.write(epochs)
   }
 
-  //TODO we will need this later...
-  private def resetTo(leaderEpoch: Int, offset: Long): Unit = {
-    //are there older offsets? if so delete all older offsets and take this one. flush file.
-    if (epochs.last.startOffset > offset) {
-      epochs = epochs.filter(entry => entry.startOffset > offset)
-      flush()
-    }
-  }
 }
 
 // Mapping of epoch to the first offset of the subsequent epoch

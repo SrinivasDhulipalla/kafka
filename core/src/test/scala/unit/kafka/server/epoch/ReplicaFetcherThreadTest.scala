@@ -18,7 +18,6 @@ package kafka.server.epoch
 
 import kafka.cluster.{BrokerEndPoint, Replica}
 import kafka.server._
-import kafka.server.epoch.LeaderEpochs
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
@@ -46,7 +45,7 @@ class ReplicaFetcherThreadTest {
 
     //Setup all dependencies
     val quota = createNiceMock(classOf[kafka.server.ReplicationQuotaManager])
-    val leaderEpochs = createNiceMock(classOf[LeaderEpochs])
+    val leaderEpochs = createNiceMock(classOf[LeaderEpochCache])
     val logManager = createMock(classOf[kafka.log.LogManager])
     val replica = createNiceMock(classOf[Replica])
     val replicaManager = createMock(classOf[kafka.server.ReplicaManager])
@@ -89,7 +88,7 @@ class ReplicaFetcherThreadTest {
   }
 
   @Test
-  def shouldTruncateToOffsetSpecifiedInEpochOffsetResponse(): Unit = {
+  def shouldTruncateToOffsetSpecifiedInEpochOffsetResponseAndCleanEpochCache(): Unit = {
 
     //Create a capture to track what partitions/offsets are truncated
     val truncated: Capture[Map[TopicPartition, Long]] = newCapture(CaptureType.ALL)
@@ -97,20 +96,26 @@ class ReplicaFetcherThreadTest {
     // Setup all the dependencies
     val configs = TestUtils.createBrokerConfigs(1, "localhost:1234").map(KafkaConfig.fromProps)
     val quota = createNiceMock(classOf[kafka.server.ReplicationQuotaManager])
-    val leaderEpochs = createNiceMock(classOf[LeaderEpochs])
+    val leaderEpochs = createMock(classOf[LeaderEpochCache])
     val logManager = createMock(classOf[kafka.log.LogManager])
     val replica = createNiceMock(classOf[Replica])
     val replicaManager = createMock(classOf[kafka.server.ReplicaManager])
 
     val initialLEO = 200
 
+    //Stubs
     expect(logManager.truncateTo(capture(truncated))).once
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(replica.logEndOffset).andReturn(new LogOffsetMetadata(initialLEO)).anyTimes()
-    expect(leaderEpochs.latestEpoch).andReturn(5)
+    expect(leaderEpochs.latestEpoch).andReturn(5).anyTimes()
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t2p1)).andReturn(Some(replica)).anyTimes()
+
+    //Expectations
+    expect(leaderEpochs.resetTo(156)).once()
+    expect(leaderEpochs.resetTo(172)).once()
+
     replay(leaderEpochs, replicaManager, logManager, quota, replica)
 
     //Define the offsets for the OffsetsForLeaderEpochResponse, these are used for truncation
@@ -146,7 +151,7 @@ class ReplicaFetcherThreadTest {
     // Setup all the dependencies
     val configs = TestUtils.createBrokerConfigs(1, "localhost:1234").map(KafkaConfig.fromProps)
     val quota = createNiceMock(classOf[kafka.server.ReplicationQuotaManager])
-    val leaderEpochs = createNiceMock(classOf[LeaderEpochs])
+    val leaderEpochs = createNiceMock(classOf[LeaderEpochCache])
     val logManager = createMock(classOf[kafka.log.LogManager])
     val replica = createNiceMock(classOf[Replica])
     val replicaManager = createMock(classOf[kafka.server.ReplicaManager])

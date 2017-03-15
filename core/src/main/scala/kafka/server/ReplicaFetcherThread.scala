@@ -23,21 +23,11 @@ import kafka.admin.AdminUtils
 import kafka.api.{KAFKA_0_10_0_IV0, KAFKA_0_10_1_IV1, KAFKA_0_10_1_IV2, KAFKA_0_9_0}
 import kafka.cluster.BrokerEndPoint
 import kafka.common.KafkaStorageException
-import ReplicaFetcherThread._
 import kafka.utils.Exit
-import org.apache.kafka.clients.{ClientResponse, ManualMetadataUpdater, NetworkClient}
 import org.apache.kafka.common.internals.FatalExitError
-import org.apache.kafka.common.network.{ChannelBuilders, NetworkReceive, Selectable, Selector}
-import org.apache.kafka.common.requests.{AbstractRequest, FetchResponse, ListOffsetRequest, ListOffsetResponse}
-import org.apache.kafka.common.requests.{FetchRequest => JFetchRequest}
-import org.apache.kafka.common.{Node, TopicPartition}
-import org.apache.kafka.common.metrics.Metrics
-import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.record.MemoryRecords
-import org.apache.kafka.common.security.JaasContext
 import kafka.log.LogConfig
 import kafka.server.ReplicaFetcherThread._
-import kafka.server.epoch.{EpochTrackingInterceptor, LeaderEpochFetcher, PartitionEpoch}
+import kafka.server.epoch.{EpochTrackingInterceptor, LeaderEpochFetcher, LeaderEpochCache, PartitionEpoch}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
@@ -238,20 +228,22 @@ class ReplicaFetcherThread(name: String,
     }
   }
 
-  override protected def initialisePartitions(partitionMap: Seq[(TopicPartition, PartitionFetchState)]) = {
-    val intitialisingPartitions = partitionMap
-      .filter { case (_, state) => state.isInitialising }.toMap
-    val epochRequests = intitialisingPartitions
-      .map { case (tp, state) => PartitionEpoch(tp, replicaMgr.getReplica(tp).get.epochs.get.latestEpoch) }.toSet
+  private def epochCache(tp: TopicPartition): LeaderEpochCache =  replicaMgr.getReplica(tp).get.epochs.get
 
-    //TODO refactor me
-    if (!intitialisingPartitions.isEmpty) {
-      val epochs = fetchEpochsFromLeader(epochRequests)
-      val truncationPoints = truncate(epochs)
-      initialisationComplete(intitialisingPartitions.keySet.toSeq, truncationPoints)
+  override protected def initialisePartitions(allPartitions: Seq[(TopicPartition, PartitionFetchState)]) = {
+    val partitions = allPartitions.filter { case (_, state) => state.isInitialising }.toMap
+    val epochRequests = partitions.map { case (tp, state) => PartitionEpoch(tp, epochCache(tp).latestEpoch) }.toSet
+
+    if (!partitions.isEmpty) {
+      val leaderEpochs = fetchEpochsFromLeader(epochRequests)
+      val truncationPoints = truncate(leaderEpochs)
+      resetLocalEpochHistory(leaderEpochs)
+      initialisationComplete(partitions.keySet.toSeq, truncationPoints)
     }
-
   }
+
+  def resetLocalEpochHistory(leaderEpochs: Map[TopicPartition, EpochEndOffset]): Iterable[Unit] =
+    leaderEpochs.map { case (tp, epoch) => epochCache(tp).resetTo(epoch.endOffset) }
 
   protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
     val requestMap = new util.LinkedHashMap[TopicPartition, JFetchRequest.PartitionData]
@@ -271,19 +263,19 @@ class ReplicaFetcherThread(name: String,
     * if the leader's offset is greater, we stick with the Log End Offset
     * otherwise we truncate to the leaders offset.
     */
-  def truncate(partitionEpochOffsets: Map[TopicPartition, EpochEndOffset]): Map[TopicPartition, Long] = {
-    val truncationPoints = partitionEpochOffsets
+  def truncate(epochOffsets: Map[TopicPartition, EpochEndOffset]): Map[TopicPartition, Long] = {
+    val truncationPoints = epochOffsets
       .map { case (tp, epochOffset) =>
-      val replica = replicaMgr.getReplica(tp).get
-      val truncateTo =
-        if (epochOffset.hasError)
-          replica.highWatermark.messageOffset
-        else if(epochOffset.endOffset() > replica.logEndOffset.messageOffset)
-          replica.logEndOffset.messageOffset
-        else
-          epochOffset.endOffset
-      (tp, truncateTo)
-    }.toMap
+        val replica = replicaMgr.getReplica(tp).get
+        val truncateTo =
+          if (epochOffset.hasError)
+            replica.highWatermark.messageOffset
+          else if (epochOffset.endOffset() > replica.logEndOffset.messageOffset)
+            replica.logEndOffset.messageOffset
+          else
+            epochOffset.endOffset
+        (tp, truncateTo)
+      }.toMap
 
     replicaMgr.logManager.truncateTo(truncationPoints)
     truncationPoints

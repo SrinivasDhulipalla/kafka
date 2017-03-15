@@ -22,7 +22,7 @@ import kafka.utils.Logging
 import kafka.server.{LogOffsetMetadata, LogReadResult}
 import kafka.common.KafkaException
 import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
-import kafka.server.epoch.{LeaderEpochs, LeaderEpochCache}
+import kafka.server.epoch.{LeaderEpochCache, FileBackedLeaderEpochCache}
 import org.apache.kafka.common.utils.Time
 
 class Replica(val brokerId: Int,
@@ -54,10 +54,10 @@ class Replica(val brokerId: Int,
 
   def lastCaughtUpTimeMs = _lastCaughtUpTimeMs
 
-  val epochs: Option[LeaderEpochs] = isLocal match {
+  val epochs: Option[LeaderEpochCache] = isLocal match {
     case true =>
       val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.get.dir))
-      Some(new LeaderEpochCache(() => logEndOffset, checkpoint))
+      Some(new FileBackedLeaderEpochCache(() => logEndOffset, checkpoint))
     case false => None
   }
 
