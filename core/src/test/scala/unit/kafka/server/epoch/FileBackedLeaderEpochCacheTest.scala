@@ -341,11 +341,27 @@ class FileBackedLeaderEpochCacheTest {
     //When reset to offset on epoch boundary
     cache.resetTo(offset = 8)
 
-    println("cache is "+cache.epochs)
-
     //Then should remove that epoch
     assertEquals(2, cache.latestEpoch())
     assertEquals(ListBuffer(EpochEntry(2, 6)), cache.epochs)
+  }
+
+  @Test
+  def shouldNotResetEpochHistoryIfUndefinedPassed(): Unit ={
+    var leo = 0
+    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new FileBackedLeaderEpochCache(() => leoFinder, checkpoint)
+    cache.maybeUpdate(epoch = 2, offset = 6);  leo = 7
+    cache.maybeUpdate(epoch = 3, offset = 8);  leo = 9
+    cache.maybeUpdate(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset on epoch boundary
+    cache.resetTo(offset = UNSUPPORTED_EPOCH_OFFSET)
+
+    //Then should do nothing
+    assertEquals(3, cache.epochs.size)
   }
 
   @Before

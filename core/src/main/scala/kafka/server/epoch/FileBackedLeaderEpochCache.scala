@@ -20,6 +20,7 @@ import kafka.server.LogOffsetMetadata
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.Constants.{UNSUPPORTED_EPOCH, UNSUPPORTED_EPOCH_OFFSET}
 import kafka.utils.Logging
+import org.apache.kafka.common.requests.EpochEndOffset
 
 import scala.collection.mutable.ListBuffer
 
@@ -63,7 +64,7 @@ trait LeaderEpochCache {
 }
 
 object Constants {
-  val UNSUPPORTED_EPOCH_OFFSET = -1
+  val UNSUPPORTED_EPOCH_OFFSET = EpochEndOffset.UNDEFINED_OFFSET
   val UNSUPPORTED_EPOCH = -1
 }
 

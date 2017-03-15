@@ -50,13 +50,17 @@ class ReplicaFetcherThreadTest {
     val replica = createNiceMock(classOf[Replica])
     val replicaManager = createMock(classOf[kafka.server.ReplicaManager])
 
-    expect(logManager.truncateTo(anyObject())).once //***This one is important***
+    //Stubs
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(replica.logEndOffset).andReturn(new LogOffsetMetadata(0)).anyTimes()
     expect(leaderEpochs.latestEpoch).andReturn(5)
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t1p1)).andReturn(Some(replica)).anyTimes()
+
+    //Expectations
+    expect(logManager.truncateTo(anyObject())).once
+
     replay(leaderEpochs, replicaManager, logManager, quota, replica)
 
     //Define the offsets for the OffsetsForLeaderEpochResponse
@@ -159,6 +163,7 @@ class ReplicaFetcherThreadTest {
     val highWaterMark = 100
     val initialLeo = 300
 
+    //Stubs
     expect(replica.highWatermark).andReturn(new LogOffsetMetadata(highWaterMark)).anyTimes()
     expect(logManager.truncateTo(capture(truncated))).once
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
