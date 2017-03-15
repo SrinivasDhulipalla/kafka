@@ -15,12 +15,8 @@
   * limitations under the License.
   */
 package unit.kafka.server.checkpoints
-
-import java.io.File
-import java.util.regex.Pattern
-
-import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
-import kafka.utils.Logging
+import kafka.server.checkpoints.{OffsetCheckpointFile}
+import kafka.utils.{Logging, TestUtils}
 import org.apache.kafka.common.TopicPartition
 import org.junit.Assert._
 import org.junit.Test
@@ -28,14 +24,12 @@ import org.scalatest.junit.JUnitSuite
 
 import scala.collection.Map
 
-class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
+class OffsetCheckpointFileTest extends JUnitSuite with Logging {
 
   @Test
-  def shouldPersistAndOverwriteAndReloadFile(): Unit ={
-    val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
-    file.deleteOnExit()
+  def shouldPersistAndOverwriteAndReloadFile(): Unit = {
 
-    val checkpoint = new OffsetCheckpointFile(file)
+    val checkpoint = new OffsetCheckpointFile(TestUtils.tempFile())
 
     //Given
     val offsets = Map(new TopicPartition("foo", 1) -> 5L, new TopicPartition("bar", 2) -> 10L)
@@ -57,11 +51,9 @@ class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
   }
 
   @Test
-  def shouldHandleMultipleLines(): Unit ={
-    val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
-    file.deleteOnExit()
+  def shouldHandleMultipleLines(): Unit = {
 
-    val checkpoint = new OffsetCheckpointFile(file)
+    val checkpoint = new OffsetCheckpointFile(TestUtils.tempFile())
 
     //Given
     val offsets = Map(
@@ -77,5 +69,21 @@ class OffsetCheckpointFileTest extends JUnitSuite  with Logging{
 
     //Then
     assertEquals(offsets, checkpoint.read())
+  }
+
+  @Test
+  def shouldReturnEmptyMapForEmptyFile(): Unit = {
+
+    //When
+    val checkpoint = new OffsetCheckpointFile(TestUtils.tempFile())
+
+    //Then
+    assertEquals(Map(), checkpoint.read())
+
+    //When
+    checkpoint.write(Map())
+
+    //Then
+    assertEquals(Map(), checkpoint.read())
   }
 }

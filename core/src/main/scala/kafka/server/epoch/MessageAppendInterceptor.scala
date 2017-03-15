@@ -43,8 +43,8 @@ class EpochTrackingInterceptor(epochs: LeaderEpochs) extends MessageAppendInterc
   override def onMessage(entry: ByteBufferLogEntry): Unit = {
     //Check to see if epoch has changed, record it if it has
     val epochOnReplicatedMessage = entry.record.leaderEpoch()
-    if (epochOnReplicatedMessage > epochs.epoch())
-      epochs.appendEpoch(epochOnReplicatedMessage, entry.offset())
+    if (epochOnReplicatedMessage > epochs.latestEpoch())
+      epochs.maybeUpdate(epochOnReplicatedMessage, entry.offset())
   }
 }
 

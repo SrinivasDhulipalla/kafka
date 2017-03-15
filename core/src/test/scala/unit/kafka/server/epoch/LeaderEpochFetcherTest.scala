@@ -14,14 +14,11 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server.epoch
+package kafka.server.epoch
 
 import kafka.server.BlockingSend
-import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import org.apache.kafka.clients.ClientResponse
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.protocol.Errors
-import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochResponse}
 import org.easymock.EasyMock._
 import org.junit.Assert._
@@ -53,7 +50,7 @@ class LeaderEpochFetcherTest {
 
     val fetcher = new LeaderEpochFetcher(sender)
 
-    val response = fetcher.fetchLeaderEpochs(Set(
+    val response = fetcher.leaderOffsetsFor(Set(
       new PartitionEpoch(tp0, 5),
       new PartitionEpoch(tp1, 7))
     )
@@ -83,7 +80,7 @@ class LeaderEpochFetcherTest {
 
     val fetcher = new LeaderEpochFetcher(sender)
 
-    val response = fetcher.fetchLeaderEpochs(Set(
+    val response = fetcher.leaderOffsetsFor(Set(
       new PartitionEpoch(tp0, 5),
       new PartitionEpoch(tp1, 7))
     )

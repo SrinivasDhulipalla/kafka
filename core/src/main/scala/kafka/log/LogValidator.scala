@@ -121,6 +121,10 @@ private[kafka] object LogValidator {
       entry.setOffset(offset)
 
       // TODO move to leader epoch on message set once EoS change in
+      // TODO Check. It is important that we only update the epoch after
+      // TODO the LEO has been updated in the replica, else we might get a race condition
+      // TODO where we return the wrong offset for a leader epoch request. If this
+      // TODO is the first message from a new epoch the leo could be in the past which would be bad.
       interceptor.onMessage(entry)
 
       if (record.magic > Record.MAGIC_VALUE_V0) {

@@ -242,7 +242,7 @@ class ReplicaFetcherThread(name: String,
     val intitialisingPartitions = partitionMap
       .filter { case (_, state) => state.isInitialising }.toMap
     val epochRequests = intitialisingPartitions
-      .map { case (tp, state) => PartitionEpoch(tp, replicaMgr.getReplica(tp).get.epochs.get.epoch) }.toSet
+      .map { case (tp, state) => PartitionEpoch(tp, replicaMgr.getReplica(tp).get.epochs.get.latestEpoch) }.toSet
 
     //TODO refactor me
     if (!intitialisingPartitions.isEmpty) {
@@ -299,7 +299,7 @@ class ReplicaFetcherThread(name: String,
   }
 
   def fetchEpochsFromLeader(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
-    new LeaderEpochFetcher(network).fetchLeaderEpochs(partitions)
+    new LeaderEpochFetcher(network).leaderOffsetsFor(partitions)
   }
 }
 

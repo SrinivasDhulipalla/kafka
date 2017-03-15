@@ -14,11 +14,10 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server.epoch
+package kafka.server.epoch
 
 import kafka.admin.AdminUtils
 import kafka.server.KafkaConfig._
-import kafka.server.epoch.{LeaderEpochFetcher, PartitionEpoch}
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.utils.TestUtils._
 import kafka.utils.{Logging, TestUtils}
@@ -32,7 +31,7 @@ import org.apache.kafka.common.utils.SystemTime
 import org.apache.kafka.common.{Node, TopicPartition}
 import org.junit.Assert._
 import org.junit.{After, Before, Test}
-import unit.kafka.server.epoch.util.TestSender
+import kafka.server.epoch.util.TestSender
 
 import scala.collection.JavaConverters._
 
@@ -40,6 +39,10 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
   var brokers: Seq[KafkaServer] = null
   val topic1 = "foo"
   val topic2 = "bar"
+  val t1p0 = new TopicPartition(topic1, 0)
+  val t1p1 = new TopicPartition(topic1, 1)
+  val t1p2 = new TopicPartition(topic1, 2)
+  val tp = t1p0
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
 
   @Before
@@ -87,6 +90,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     waitUntilTrue(() => messagesHaveLeaderEpoch(expectedLeaderEpoch, 4), "Broker logs should be identical")
   }
 
+
   @Test
   def shouldSendLeaderEpochRequestAndGetAResponse(): Unit = {
 
@@ -100,34 +104,109 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     //Send messages equally to the two partitions
     producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1)
     (0 until 100).foreach { _ =>
-      producer.send(new ProducerRecord(topic1, 0, null, "test0".getBytes))
-      producer.send(new ProducerRecord(topic1, 1, null, "test1".getBytes))
+      producer.send(new ProducerRecord(topic1, 0, null, "IHeartLogs".getBytes))
+      producer.send(new ProducerRecord(topic1, 1, null, "IReallyDo".getBytes))
     }
     producer.flush()
 
-    val fetcher = new LeaderEpochFetcher(sender(brokers(0)))
-
-    val tp1 = new TopicPartition(topic1, 0)
-    val tp2 = new TopicPartition(topic1, 2)
-    val epochsRequested = Set(new PartitionEpoch(tp1, 5), new PartitionEpoch(tp2, 7))
+    val fetcher = new LeaderEpochFetcher(sender(brokers(2), brokers(0)))
+    val epochsRequested = Set(new PartitionEpoch(t1p0, 0), new PartitionEpoch(t1p1, 0))
 
     //When
-    val responses = fetcher.fetchLeaderEpochs(epochsRequested)
+    val offsetsForEpochs = fetcher.leaderOffsetsFor(epochsRequested)
 
-    //Then end offset should be defined as 0 for tp1
-    assertEquals(0, responses(tp1).endOffset)
+    //Then end offset should be 100 for tp1 (matching leo)
+    assertEquals(100, offsetsForEpochs(t1p0).endOffset)
 
-    assertTrue(responses(tp2).hasError)
-    assertEquals(REPLICA_NOT_AVAILABLE, responses(tp2).error)
-    assertEquals(UNDEFINED_OFFSET, responses(tp2).endOffset)
-
-    assertEquals(2, responses.size)
+    //Then the unsupported partition should return an error
+    assertTrue(offsetsForEpochs(t1p1).hasError)
+    assertEquals(REPLICA_NOT_AVAILABLE, offsetsForEpochs(t1p1).error)
+    assertEquals(UNDEFINED_OFFSET, offsetsForEpochs(t1p1).endOffset)
   }
 
-  def sender(broker: KafkaServer): TestSender = {
-    val endPoint = broker.metadataCache.getAliveBrokers.find(_.id == 100).get.getBrokerEndPoint(broker.config.interBrokerListenerName)
+  @Test
+  def shouldIncreaseVisibleLeaderEpochBetweenBrokerRestartsOfLeader(): Unit ={
+
+    //Setup: we are only interested in the single partition on broker 101
+    brokers = Seq(100, 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+    def epoch(e: Int) = Set(new PartitionEpoch(tp, e))
+    def leo() = brokers(1).replicaManager.getReplica(tp).get.logEndOffset.messageOffset
+    AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, tp.topic, Map(tp.partition -> Seq(101)))
+    producer = createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1)
+
+    //1. Given a single message
+    producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
+    var fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+
+    //Then epoch should be 0 and leo: 1
+    var offset = fetcher.leaderOffsetsFor(epoch(0))(tp).endOffset()
+    assertEquals(1, offset)
+    assertEquals(leo(), offset)
+
+
+    //2. When broker is bounced
+    brokers(1).shutdown()
+    brokers(1).startup()
+
+    producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
+    fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+
+
+    //Then epoch 0 should still be the start offset of epoch 1
+    offset = fetcher.leaderOffsetsFor(epoch(0))(tp).endOffset()
+    assertEquals(1, offset)
+
+    //Then epoch 2 should be the leo (NB: The leader epoch goes up in factors of 2)
+    assertEquals(2, fetcher.leaderOffsetsFor(epoch(2))(tp).endOffset())
+    assertEquals(leo(), fetcher.leaderOffsetsFor(epoch(2))(tp).endOffset())
+
+
+    //3. When broker is bounced again
+    brokers(1).shutdown()
+    brokers(1).startup()
+
+    producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
+    fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+
+
+    //Then Epoch 0 should still map to offset 1
+    assertEquals(1, fetcher.leaderOffsetsFor(epoch(0))(tp).endOffset())
+
+    //Then Epoch 2 should still map to offset 2
+    assertEquals(2, fetcher.leaderOffsetsFor(epoch(2))(tp).endOffset())
+
+    //Then Epoch 4 should still map to offset 2
+    assertEquals(3, fetcher.leaderOffsetsFor(epoch(4))(tp).endOffset())
+    assertEquals(leo(), fetcher.leaderOffsetsFor(epoch(4))(tp).endOffset())
+
+    //Adding some extra assertions here to save test setup.
+    shouldSupportRequestsForEpochsNotOnTheLeader(fetcher)
+  }
+
+  //Linked to previous test to save on setup cost.
+  def shouldSupportRequestsForEpochsNotOnTheLeader(fetcher: LeaderEpochFetcher): Unit ={
+    def epoch(e: Int) = Set(new PartitionEpoch(t1p0, e))
+
+    /**
+      * Asking for an epoch not present on the leader should return the
+      * next matching epoch, unless there isn't any, which should return
+      * undefined.
+      */
+
+    val epoch1 = epoch(1)
+    assertEquals(1, fetcher.leaderOffsetsFor(epoch1)(t1p0).endOffset())
+
+    val epoch3 = epoch(3)
+    assertEquals(2, fetcher.leaderOffsetsFor(epoch3)(t1p0).endOffset())
+
+    val epoch5 = epoch(5)
+    assertEquals(-1, fetcher.leaderOffsetsFor(epoch5)(t1p0).endOffset())
+  }
+
+  def sender(from: KafkaServer, to: KafkaServer): TestSender = {
+    val endPoint = from.metadataCache.getAliveBrokers.find(_.id == to.config.brokerId).get.getBrokerEndPoint(from.config.interBrokerListenerName)
     val destinationNode = new Node(endPoint.id, endPoint.host, endPoint.port)
-    new TestSender(destinationNode, broker.config, new Metrics(), new SystemTime())
+    new TestSender(destinationNode, from.config, new Metrics(), new SystemTime())
   }
 
   def waitForEpochChangeTo(topic: String, partition: Int, epoch: Int): Boolean = {

@@ -14,7 +14,7 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server.epoch
+package kafka.server.epoch
 
 import kafka.cluster.{BrokerEndPoint, Replica}
 import kafka.server._
@@ -29,7 +29,7 @@ import org.easymock.EasyMock._
 import org.easymock.{Capture, CaptureType}
 import org.junit.Assert._
 import org.junit.Test
-import unit.kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
+import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -54,7 +54,7 @@ class ReplicaFetcherThreadTest {
     expect(logManager.truncateTo(anyObject())).once //***This one is important***
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(replica.logEndOffset).andReturn(new LogOffsetMetadata(0)).anyTimes()
-    expect(leaderEpochs.epoch).andReturn(5)
+    expect(leaderEpochs.latestEpoch).andReturn(5)
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t1p1)).andReturn(Some(replica)).anyTimes()
@@ -88,7 +88,6 @@ class ReplicaFetcherThreadTest {
     verify(logManager)
   }
 
-
   @Test
   def shouldTruncateToOffsetSpecifiedInEpochOffsetResponse(): Unit = {
 
@@ -108,7 +107,7 @@ class ReplicaFetcherThreadTest {
     expect(logManager.truncateTo(capture(truncated))).once
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(replica.logEndOffset).andReturn(new LogOffsetMetadata(initialLEO)).anyTimes()
-    expect(leaderEpochs.epoch).andReturn(5)
+    expect(leaderEpochs.latestEpoch).andReturn(5)
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t2p1)).andReturn(Some(replica)).anyTimes()
@@ -159,7 +158,7 @@ class ReplicaFetcherThreadTest {
     expect(logManager.truncateTo(capture(truncated))).once
     expect(replica.epochs).andReturn(Some(leaderEpochs)).anyTimes()
     expect(replica.logEndOffset).andReturn(new LogOffsetMetadata(initialLeo)).anyTimes()
-    expect(leaderEpochs.epoch).andReturn(5)
+    expect(leaderEpochs.latestEpoch).andReturn(5)
     expect(replicaManager.logManager).andReturn(logManager).anyTimes()
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t2p1)).andReturn(Some(replica)).anyTimes()

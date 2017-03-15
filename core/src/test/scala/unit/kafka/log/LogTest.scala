@@ -240,7 +240,7 @@ class LogTest extends JUnitSuite {
     val epochInTracker = 71
 
     //Stubs
-    expect(epochs.epoch()).andStubReturn(epochInTracker)
+    expect(epochs.latestEpoch()).andStubReturn(epochInTracker)
 
     //Stamp each message with the epoch
     def recordsForEpoch(i: Int): MemoryRecords = {
@@ -250,7 +250,7 @@ class LogTest extends JUnitSuite {
     }
 
     //Assert we update the epoch in the tracker, as the message from the leader contained a larger epoch
-    expect(epochs.appendEpoch(72, 0))
+    expect(epochs.maybeUpdate(72, 0))
     replay(epochs)
 
     //Run it

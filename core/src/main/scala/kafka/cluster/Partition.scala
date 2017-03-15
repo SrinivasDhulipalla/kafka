@@ -172,10 +172,11 @@ class Partition(val topic: String,
       inSyncReplicas = newInSyncReplicas
 
       //We cache the leader epoch here, persisting it only if it's local (hence having a log dir)
+      info(s"Leader epoch was updated from $leaderEpoch to ${partitionStateInfo.leaderEpoch}")
       leaderEpoch = partitionStateInfo.leaderEpoch
       allReplicas.map(id => getOrCreateReplica(id))
           .filter(_.isLocal)
-              .foreach{replica => replica.epochs.get.becomeLeader(leaderEpoch)}
+              .foreach{replica => replica.epochs.get.maybeUpdate(leaderEpoch)}
 
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =

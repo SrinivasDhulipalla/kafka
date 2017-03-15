@@ -16,28 +16,24 @@
   */
 package kafka.server.epoch
 
-import java.util
-import java.util.{List => JList}
-
+import java.util.{List => JList, Map => JMap}
 import kafka.cluster.{BrokerEndPoint, Partition}
 import kafka.server.BlockingSend
 import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochResponse, _}
-
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 
 class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
 
-  def fetchLeaderEpochs(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
-    fetchLeaderEpochs(
+  def leaderOffsetsFor(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
+    leaderOffsetsFor(
       translate(partitions)
     )
   }
 
-  private def translate(partitions: Set[PartitionEpoch]): util.Map[String, JList[Epoch]] = {
+  private def translate(partitions: Set[PartitionEpoch]): JMap[String, JList[Epoch]] = {
     partitions.toSeq.groupBy {_.tp.topic()}
       .map { case (topic, partitionEpochs) =>
         val epochs = partitionEpochs.map { ep => new Epoch(ep.tp.partition, ep.epoch) }.asJava
@@ -45,7 +41,7 @@ class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
       }.asJava
   }
 
-  private def fetchLeaderEpochs(epochsByTopic: util.Map[String, util.List[Epoch]]): Map[TopicPartition, EpochEndOffset] = {
+  private def leaderOffsetsFor(epochsByTopic: JMap[String, java.util.List[Epoch]]): Map[TopicPartition, EpochEndOffset] = {
     val requestBuilder = new OffsetForLeaderEpochRequest.Builder(epochsByTopic)
     parseEpochs(
       sender.sendRequest(requestBuilder).responseBody.asInstanceOf[OffsetForLeaderEpochResponse]

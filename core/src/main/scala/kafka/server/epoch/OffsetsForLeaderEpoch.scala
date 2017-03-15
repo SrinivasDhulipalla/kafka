@@ -50,8 +50,8 @@ class OffsetsForLeaderEpoch(replicaManager: ReplicaManager) {
         replicaManager.getPartition(new TopicPartition(topic, epoch.partitionId)) match {
           case Some(p) =>
             if (p.getReplica().isDefined) {
-              val offset = p.getReplica().get.epochs.get.lastOffsetFor(epoch.epoch)
-              new EpochEndOffset(Errors.NONE, epoch.partitionId, offset)
+              val offset = p.getReplica().get.epochs.get.endOffsetFor(epoch.epoch)
+              new EpochEndOffset(epoch.partitionId, offset)
             } else
               new EpochEndOffset(NOT_LEADER_FOR_PARTITION, epoch.partitionId, EpochEndOffset.UNDEFINED_OFFSET)
           case None => new EpochEndOffset(REPLICA_NOT_AVAILABLE, epoch.partitionId, EpochEndOffset.UNDEFINED_OFFSET)

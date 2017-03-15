@@ -16,40 +16,44 @@
   */
 package kafka.server.epoch
 
-import kafka.cluster.Replica
+import kafka.server.LogOffsetMetadata
 import kafka.server.checkpoints.LeaderEpochCheckpoint
+import kafka.server.epoch.Constants.{UNSUPPORTED_EPOCH, UNSUPPORTED_EPOCH_OFFSET}
+import kafka.utils.Logging
 
-trait LeaderEpochs{
-  def becomeLeader(leaderEpoch: Int)
-  def appendEpoch(leaderEpoch: Int, offset: Long)
-  def epoch(): Int
-  def lastOffsetFor(epoch: Int): Long
+import scala.collection.mutable.ListBuffer
+
+trait LeaderEpochs {
+
+  def maybeUpdate(leaderEpoch: Int)
+
+  def maybeUpdate(leaderEpoch: Int, offset: Long)
+
+  def latestEpoch(): Int
+
+  def endOffsetFor(epoch: Int): Long
 }
 
-class SavedLeaderEpochs(replica: Replica, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochs {
-  private var epochs = Seq[EpochEntry]()
-  initialise()
+object Constants {
+  val UNSUPPORTED_EPOCH_OFFSET = -1
+  val UNSUPPORTED_EPOCH = -1
+}
 
-  private def initialise() = {
-    loadFromCheckpoint()
-    if (epochs.size == 0)
-      epochs = epochs :+ EpochEntry(0, 0)
+class LeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochs with Logging {
+  private[epoch] var epochs = ListBuffer(checkpoint.read(): _*)
+
+  def maybeUpdate(epoch: Int) = {
+    maybeUpdate(epoch, leo().messageOffset)
   }
 
-  def becomeLeader(leaderEpoch: Int) = {
-    updateWithLeo(leaderEpoch)
-  }
-
-  def appendEpoch(leaderEpoch: Int, offset: Long): Unit = {
-    if (leaderEpoch >= 0) {
-      epochs = epochs :+ EpochEntry(leaderEpoch, offset)
+  def maybeUpdate(epoch: Int, offset: Long): Unit = {
+    if (epoch >= 0 && epoch > latestEpoch()) {
+      epochs += EpochEntry(epoch, offset)
       flush()
     }
   }
 
-  def epoch(): Int = {
-    epochs.last.epoch
-  }
+  def latestEpoch(): Int = if(epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch
 
   /**
     * LastOffset will be the start offset of the first Leader Epoch larger than the Leader Epoch passed
@@ -58,17 +62,18 @@ class SavedLeaderEpochs(replica: Replica, checkpoint: LeaderEpochCheckpoint) ext
     * @param epoch
     * @return
     */
-  def lastOffsetFor(requestedEpoch: Int): Long = {
-
-    if (requestedEpoch == epoch()) {
-      replica.logEndOffset.messageOffset
+  def endOffsetFor(requestedEpoch: Int): Long = {
+    //Use LEO if requested current epoch
+    if (requestedEpoch == latestEpoch()) {
+      leo().messageOffset
     }
     else {
-      val latestEpochs = epochs.filter(e => e.epoch > requestedEpoch)
-      if (latestEpochs.isEmpty)
-        epochs.last.startOffset
+      //Return the start offset of the first subsequent epoch
+      val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
+      if (subsequentEpochs.isEmpty)
+        UNSUPPORTED_EPOCH_OFFSET
       else
-        latestEpochs.head.startOffset
+        subsequentEpochs.head.startOffset
     }
   }
 
@@ -76,14 +81,7 @@ class SavedLeaderEpochs(replica: Replica, checkpoint: LeaderEpochCheckpoint) ext
     checkpoint.write(epochs)
   }
 
-  private def loadFromCheckpoint(): Unit = {
-    epochs = checkpoint.read()
-  }
-
-  private def updateWithLeo(leaderEpoch: Int) = {
-    appendEpoch(leaderEpoch, replica.logEndOffset.messageOffset)
-  }
-
+  //TODO we will need this later...
   private def resetTo(leaderEpoch: Int, offset: Long): Unit = {
     //are there older offsets? if so delete all older offsets and take this one. flush file.
     if (epochs.last.startOffset > offset) {
@@ -93,4 +91,5 @@ class SavedLeaderEpochs(replica: Replica, checkpoint: LeaderEpochCheckpoint) ext
   }
 }
 
+// Mapping of epoch to the first offset of the subsequent epoch
 case class EpochEntry(epoch: Int, startOffset: Long)

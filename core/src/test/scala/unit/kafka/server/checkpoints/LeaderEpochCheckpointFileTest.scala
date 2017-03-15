@@ -53,4 +53,21 @@ class LeaderEpochCheckpointFileTest extends JUnitSuite  with Logging{
     //Then
     assertEquals(epochs2, checkpoint.read())
   }
+
+  @Test
+  def shouldRetainValuesEvenIfCheckpointIsRecreated(): Unit ={
+    val file = File.createTempFile("temp-checkpoint-file", System.nanoTime().toString)
+    file.deleteOnExit()
+
+    //Given a file with data in
+    val checkpoint = new LeaderEpochCheckpointFile(file)
+    val epochs = Seq(EpochEntry(0, 1L), EpochEntry(1, 2L), EpochEntry(2, 3L))
+    checkpoint.write(epochs)
+
+    //When we recreate
+    val checkpoint2 = new LeaderEpochCheckpointFile(file)
+
+    //The data should still be there
+    assertEquals(epochs, checkpoint2.read())
+  }
 }

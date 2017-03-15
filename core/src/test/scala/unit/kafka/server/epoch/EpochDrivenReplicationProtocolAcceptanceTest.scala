@@ -15,7 +15,7 @@
   * limitations under the License.
   */
 
-package unit.kafka.server.epoch
+package kafka.server.epoch
 
 import java.io.{File, RandomAccessFile}
 import java.util.Properties

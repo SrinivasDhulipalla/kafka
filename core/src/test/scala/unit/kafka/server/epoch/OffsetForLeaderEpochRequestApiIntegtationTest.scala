@@ -11,7 +11,7 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package unit.kafka.server.epoch
+package kafka.server.epoch
 
 import kafka.server.BaseRequestTest
 import kafka.utils.TestUtils
