@@ -22,7 +22,7 @@ import kafka.server.LogOffsetMetadata
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.Constants.{UNSUPPORTED_EPOCH, UNSUPPORTED_EPOCH_OFFSET}
 import kafka.utils.CoreUtils._
-import kafka.utils.{CoreUtils, Logging}
+import kafka.utils.{Logging}
 import org.apache.kafka.common.requests.EpochEndOffset
 
 import scala.collection.mutable.ListBuffer
@@ -75,7 +75,7 @@ object Constants {
   val UNSUPPORTED_EPOCH = -1
 }
 
-class FileBackedLeaderEpochCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
+class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
   private val lock = new ReentrantReadWriteLock()
   private[epoch] var epochs = lock synchronized {ListBuffer(checkpoint.read(): _*)}
 

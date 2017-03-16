@@ -27,7 +27,8 @@ import org.scalatest.junit.JUnitSuite
 import org.junit.{After, Before, Test}
 import kafka.utils._
 import kafka.server.KafkaConfig
-import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochCache}
+import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
+import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochCache, LeaderEpochFileCache}
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
 import org.easymock.EasyMock._
@@ -1064,7 +1065,7 @@ class LogTest extends JUnitSuite {
     val config = LogConfig(logProps)
     val set = TestUtils.singletonRecords(value = "test".getBytes, timestamp = time.milliseconds)
     val recoveryPoint = 50L
-    for (_ <- 0 until 50) {
+    for (_ <- 0 until 10) {
       // create a log and write some messages to it
       logDir.mkdirs()
       var log = new Log(logDir,
@@ -1082,13 +1083,28 @@ class LogTest extends JUnitSuite {
       TestUtils.appendNonsenseToFile(log.activeSegment.index.file, TestUtils.random.nextInt(1024) + 1)
       TestUtils.appendNonsenseToFile(log.activeSegment.log.file, TestUtils.random.nextInt(1024) + 1)
 
+      //Create a Leader Epoch file which is ahead of the log, as can happen after a crashe
+      val epoch = epochCheckpoint(log)
+      epoch.maybeUpdate(epoch = 7, offset = numMessages - 1) //Before LEO
+      epoch.maybeUpdate(epoch = 9, offset = numMessages)     //At LEO
+      epoch.maybeUpdate(epoch = 11, offset = numMessages + 1)//LEO + 1
+
       // attempt recovery
       log = new Log(logDir, config, recoveryPoint, time.scheduler, time)
       assertEquals(numMessages, log.logEndOffset)
       assertEquals("Messages in the log after recovery should be the same.", messages,
         log.logSegments.flatMap(_.log.deepEntries.asScala.toList))
+
+      //Ensure the Leader Epoch file was truncated to (including truncating) the LOE
+      assertEquals(7, epochCheckpoint(log).latestEpoch())
+
       Utils.delete(logDir)
     }
+  }
+
+  def epochCheckpoint(log: Log): LeaderEpochFileCache = {
+    val checkpoint2 = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.dir))
+    new LeaderEpochFileCache(() => log.logEndOffsetMetadata, checkpoint2)
   }
 
   @Test

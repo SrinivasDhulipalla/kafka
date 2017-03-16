@@ -36,7 +36,8 @@ import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
-import kafka.server.epoch.{EmptyEpochInterceptor, MessageAppendInterceptor}
+import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
+import kafka.server.epoch.{EmptyEpochInterceptor, LeaderEpochFileCache, MessageAppendInterceptor}
 import org.apache.kafka.common.TopicPartition
 
 object LogAppendInfo {
@@ -288,6 +289,12 @@ class Log(@volatile var dir: File,
     nextOffsetMetadata = new LogOffsetMetadata(messageOffset, activeSegment.baseOffset, activeSegment.size.toInt)
   }
 
+  def syncLeaderEpochFileToNewLogEndOffset(): Unit = {
+    val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
+    val cache = new LeaderEpochFileCache(() => logEndOffsetMetadata, checkpoint)
+    cache.resetTo(activeSegment.nextOffset())
+  }
+
   private def recoverLog() {
     // if we have the clean shutdown marker, skip recovery
     if(hasCleanShutdownFile) {
@@ -316,6 +323,8 @@ class Log(@volatile var dir: File,
         unflushed.foreach(deleteSegment)
       }
     }
+
+    syncLeaderEpochFileToNewLogEndOffset()
   }
 
   /**
