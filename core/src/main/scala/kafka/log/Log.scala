@@ -295,10 +295,6 @@ class Log(@volatile var dir: File,
     nextOffsetMetadata = new LogOffsetMetadata(messageOffset, activeSegment.baseOffset, activeSegment.size.toInt)
   }
 
-  def syncLeaderEpochFileToNewLogEndOffset(): Unit = {
-    leaderEpochCache.resetTo(activeSegment.nextOffset())
-  }
-
   private def recoverLog() {
     // if we have the clean shutdown marker, skip recovery
     if(hasCleanShutdownFile) {
@@ -328,7 +324,8 @@ class Log(@volatile var dir: File,
       }
     }
 
-    syncLeaderEpochFileToNewLogEndOffset()
+    //Leader epoch file could be ahead of the log after unclean shutdown
+    leaderEpochCache.clearLatest(activeSegment.nextOffset(), false)
   }
 
   /**
@@ -883,6 +880,7 @@ class Log(@volatile var dir: File,
     lock synchronized {
       logSegments.foreach(_.delete())
       segments.clear()
+      leaderEpochCache.clear()
       Utils.delete(dir)
     }
   }
@@ -911,6 +909,7 @@ class Log(@volatile var dir: File,
         this.recoveryPoint = math.min(targetOffset, this.recoveryPoint)
       }
     }
+    leaderEpochCache.clearLatest(targetOffset, false)
   }
 
   /**
@@ -983,6 +982,7 @@ class Log(@volatile var dir: File,
   private def deleteSegment(segment: LogSegment) {
     info("Scheduling log segment %d for log %s for deletion.".format(segment.baseOffset, name))
     lock synchronized {
+      leaderEpochCache.clearOldest(segment.nextOffset(), true)
       segments.remove(segment.baseOffset)
       asyncDeleteSegment(segment)
     }

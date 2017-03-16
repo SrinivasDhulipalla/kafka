@@ -28,46 +28,13 @@ import org.apache.kafka.common.requests.EpochEndOffset
 import scala.collection.mutable.ListBuffer
 
 trait LeaderEpochCache {
-  /**
-    * Updates the epoch store with new epochs and the log end offset
-    *
-    * @param leaderEpoch
-    * @param offset
-    */
-  def maybeUpdate(leaderEpoch: Int)
-
-  /**
-    * Updates the epoch store with new epochs and offset
-    *
-    * @param leaderEpoch
-    * @param offset
-    */
-  def maybeUpdate(leaderEpoch: Int, offset: Long)
-
-  /**
-    * Returns the current epoch for this replica
-    *
-    * @return
-    */
+  def assignToLeo(leaderEpoch: Int)
+  def assign(leaderEpoch: Int, offset: Long)
   def latestEpoch(): Int
-
-  /**
-    * Returns the start offset of the first Leader Epoch larger than the Leader Epoch passed
-    * or the Log End Offset, if the leader's current epoch is equal to the one passed
-    *
-    * @param epoch
-    * @return offset
-    */
   def endOffsetFor(epoch: Int): Long
-
-  /**
-    * Remove all epoch entries from the store where startOffset < offset passed
-    * This matches the logic in Log.truncateTo()
-    *
-    * @param leaderEpoch
-    * @param offset
-    */
-  def resetTo(offset: Long)
+  def clearLatest(offset: Long, retainMatchingOffset: Boolean = true)
+  def clearOldest(offset: Long, retainMatchingOffset: Boolean = true)
+  def clear()
 }
 
 object Constants {
@@ -76,20 +43,36 @@ object Constants {
 }
 
 /**
-  * Represents a cache of LeaderEpoch => LeaderOffsets backed by a file
-  * @param leo
-  * @param checkpoint
+  * Represents a cache of (LeaderEpoch => Offset) mappings derived from the log.
+  * The cache contains all LeaderEpochs currently in a single log.
+  * Offset is the offset of the first message in each epoch.
+  *
+  * @param leo a function that determines the log end offset
+  * @param checkpoint the checkpoint file
   */
 class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
   private val lock = new ReentrantReadWriteLock()
-  private[epoch] var epochs = lock synchronized {ListBuffer(checkpoint.read(): _*)}
+  private[epoch] var epochs = lock synchronized { ListBuffer(checkpoint.read(): _*) }
 
-
-  override def maybeUpdate(epoch: Int) = {
-    maybeUpdate(epoch, leo().messageOffset)
+  /**
+    * Assigns the passed Leader Epoch to the current LEO
+    * Once the epoch is assigned it cannot be reassigned
+    *
+    * @param leaderEpoch
+    * @param offset
+    */
+  override def assignToLeo(epoch: Int) = {
+    assign(epoch, leo().messageOffset)
   }
 
-  override def maybeUpdate(epoch: Int, offset: Long): Unit = {
+  /**
+    * Assigns the passed Leader Epoch to the passed Offset
+    * Once the epoch is assigned it cannot be reassigned
+    *
+    * @param leaderEpoch
+    * @param offset
+    */
+  override def assign(epoch: Int, offset: Long): Unit = {
     inWriteLock(lock) {
       if (epoch >= 0 && epoch > latestEpoch()) {
         epochs += EpochEntry(epoch, offset)
@@ -98,12 +81,26 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     }
   }
 
+  /**
+    * Returns the current Leader Epoch
+    *
+    * @return
+    */
   override def latestEpoch(): Int = {
     inReadLock(lock) {
       if (epochs.isEmpty) UNSUPPORTED_EPOCH else epochs.last.epoch
     }
   }
 
+  /**
+    * Returns the End Offset for a requested Leader Epoch.
+    *
+    * This is defined as the start offset of the first Leader Epoch larger than the
+    * Leader Epoch requested, or else the Log End Offset if the latest epoch was requested.
+    *
+    * @param epoch
+    * @return offset
+    */
   override def endOffsetFor(requestedEpoch: Int): Long = {
     inReadLock(lock) {
       //Use LEO if current epoch
@@ -121,19 +118,69 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     }
   }
 
-  override def resetTo(offset: Long): Unit = {
+  /**
+    * Removes all epoch entries from the store greater than the passed offset.
+    * Can be inclusive or exclusive.
+    *
+    * @param offset
+    * @param retainMatchingOffset if true the matching offset will be retained, else it will be removed
+    */
+  override def clearLatest(offset: Long, retainMatchingOffset: Boolean = true): Unit = {
     inWriteLock(lock) {
-      if (offset >= latestEpoch) {
-        epochs = epochs.filter(entry => entry.startOffset < offset)
+      if (offset >= 0 && offset <= latestOffset) {
+        epochs = if(retainMatchingOffset)
+          epochs.filter(entry => entry.startOffset <= offset)
+        else
+          epochs.filter(entry => entry.startOffset < offset)
         flush()
       }
     }
+  }
+
+  /**
+    * Removes all epoch entries from the store less than the passed offset.
+    * Can be inclusive or exclusive.
+    *
+    * @param offset
+    * @param retainMatchingOffset the matching offset will be kept, else it will be removed
+    */
+  override def clearOldest(offset: Long, retainMatchingOffset: Boolean = true): Unit = {
+    inWriteLock(lock) {
+      if (offset >= 0 && offset >= earliestOffset) {
+        epochs = if(retainMatchingOffset)
+          epochs.filter(entry => entry.startOffset >= offset)
+        else
+          epochs.filter(entry => entry.startOffset > offset)
+        flush()
+      }
+    }
+  }
+
+  /**
+    * Delete all entries.
+    */
+  override def clear() = {
+    inWriteLock(lock) {
+      epochs.clear()
+      flush()
+    }
+  }
+
+  private def earliestOffset(): Long = {
+    if (epochs.isEmpty) -1 else epochs.head.startOffset
+  }
+
+  private def latestOffset(): Long = {
+    if (epochs.isEmpty) -1 else epochs.last.startOffset
   }
 
   private def flush(): Unit = {
     checkpoint.write(epochs)
   }
 
+  def epochEntries(): ListBuffer[EpochEntry] ={
+    epochs
+  }
 }
 
 // Mapping of epoch to the first offset of the subsequent epoch

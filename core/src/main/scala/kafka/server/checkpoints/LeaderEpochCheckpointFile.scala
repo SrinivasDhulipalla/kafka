@@ -45,8 +45,8 @@ object LeaderEpochFile {
 /**
   * This class saves out a map of LeaderEpoch=>offsets to a file for a certain replica
   */
-class LeaderEpochCheckpointFile(val f: File) extends CheckpointFileFormatter[EpochEntry] with LeaderEpochCheckpoint {
-  val checkpoint = new CheckpointFile[EpochEntry](f, OffsetCheckpoint.CurrentVersion, this)
+class LeaderEpochCheckpointFile(val file: File) extends CheckpointFileFormatter[EpochEntry] with LeaderEpochCheckpoint {
+  val checkpoint = new CheckpointFile[EpochEntry](file, OffsetCheckpoint.CurrentVersion, this)
 
   override def toLine(entry: EpochEntry): String = {
     s"${entry.epoch} ${entry.startOffset}"

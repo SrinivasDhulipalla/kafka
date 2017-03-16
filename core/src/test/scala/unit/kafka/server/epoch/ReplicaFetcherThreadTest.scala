@@ -116,10 +116,6 @@ class ReplicaFetcherThreadTest {
     expect(replicaManager.getReplica(t1p0)).andReturn(Some(replica)).anyTimes()
     expect(replicaManager.getReplica(t2p1)).andReturn(Some(replica)).anyTimes()
 
-    //Expectations
-    expect(leaderEpochs.resetTo(156)).once()
-    expect(leaderEpochs.resetTo(172)).once()
-
     replay(leaderEpochs, replicaManager, logManager, quota, replica)
 
     //Define the offsets for the OffsetsForLeaderEpochResponse, these are used for truncation

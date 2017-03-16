@@ -237,13 +237,9 @@ class ReplicaFetcherThread(name: String,
     if (!partitions.isEmpty) {
       val leaderEpochs = fetchEpochsFromLeader(epochRequests)
       val truncationPoints = truncate(leaderEpochs)
-      resetLocalEpochHistory(leaderEpochs)
       initialisationComplete(partitions.keySet.toSeq, truncationPoints)
     }
   }
-
-  def resetLocalEpochHistory(leaderEpochs: Map[TopicPartition, EpochEndOffset]): Iterable[Unit] =
-    leaderEpochs.map { case (tp, epoch) => epochCache(tp).resetTo(epoch.endOffset) }
 
   protected def buildFetchRequest(partitionMap: Seq[(TopicPartition, PartitionFetchState)]): FetchRequest = {
     val requestMap = new util.LinkedHashMap[TopicPartition, JFetchRequest.PartitionData]

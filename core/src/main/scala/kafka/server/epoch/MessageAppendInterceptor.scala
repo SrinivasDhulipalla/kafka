@@ -39,10 +39,10 @@ class EpochSettingInterceptor(epoch: Int) extends MessageAppendInterceptor {
   * Used by the follower to track changes in the leader epoch
   * as messages are processed.
   */
-class EpochTrackingInterceptor(epochs: LeaderEpochCache) extends MessageAppendInterceptor {
+class EpochTrackingInterceptor(epochCache: LeaderEpochCache) extends MessageAppendInterceptor {
   override def onMessage(entry: ByteBufferLogEntry): Unit = {
     //TODO post message format merge we should check we handle the case of old messages that don't have the epoch
-    epochs.maybeUpdate(entry.record.leaderEpoch(), entry.offset())
+    epochCache.assign(entry.record.leaderEpoch(), entry.offset())
   }
 }
 

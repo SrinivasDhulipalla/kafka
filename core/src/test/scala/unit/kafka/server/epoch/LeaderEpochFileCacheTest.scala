@@ -32,40 +32,71 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldUpdateEpochWithLeo() = {
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     leo = 9
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(2);
+    cache.assignToLeo(2);
 
     //Then
     assertEquals(2, cache.latestEpoch())
-    assertEquals(EpochEntry(2, 9), cache.epochs(0))
+    assertEquals(EpochEntry(2, 9), cache.epochEntries()(0))
+  }
+
+  @Test
+  def shouldOnlyRetainTheFirstEpochAndLeo() = {
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    leo = 9
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+
+    cache.assignToLeo(2);
+
+    //When called again later
+    leo = 10
+    cache.assignToLeo(2);
+
+    //Then the offset should not have been updated
+    assertEquals(9, cache.epochEntries()(0).startOffset)
+  }
+  @Test
+  def shouldOnlyRetainTheFirstEpochAndOffset() = {
+    //Given
+    val cache = new LeaderEpochFileCache(() => new LogOffsetMetadata(0), checkpoint)
+    cache.assign(2, 6);
+
+    //When called again later with a greater offset
+    cache.assign(2, 10);
+
+    //Then later update should have been ignored
+    assertEquals(6, cache.epochEntries()(0).startOffset)
   }
 
   @Test
   def shouldUpdateEpochWithMessageOffset() = {
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 2, offset = 10); leo = 11
+    cache.assign(epoch = 2, offset = 10); leo = 11
 
     //Then
     assertEquals(2, cache.latestEpoch())
-    assertEquals(EpochEntry(2, 10), cache.epochs(0))
+    assertEquals(EpochEntry(2, 10), cache.epochEntries()(0))
     assertEquals(11, cache.endOffsetFor(2))
   }
 
   @Test
   def shouldReturnUnsupportedIfNoEpochRecorded(){
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(0)
+    def leoFinder() = new LogOffsetMetadata(0)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
@@ -78,14 +109,14 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldGetLogEndOffsetInRequestForTheCurrentEpoch() = {
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When just one epoch
-    cache.maybeUpdate(epoch = 2, offset = 11);
-    cache.maybeUpdate(epoch = 2, offset = 12);
+    cache.assign(epoch = 2, offset = 11);
+    cache.assign(epoch = 2, offset = 12);
     leo = 13
 
     //Then
@@ -95,18 +126,18 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldGetFirstOffsetOfSubsequentEpochWhenOffsetRequestedForPreviousEpoch() = {
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When several epochs
-    cache.maybeUpdate(epoch = 1, offset = 11);
-    cache.maybeUpdate(epoch = 1, offset = 12);
-    cache.maybeUpdate(epoch = 2, offset = 13);
-    cache.maybeUpdate(epoch = 2, offset = 14);
-    cache.maybeUpdate(epoch = 3, offset = 15);
-    cache.maybeUpdate(epoch = 3, offset = 16);
+    cache.assign(epoch = 1, offset = 11);
+    cache.assign(epoch = 1, offset = 12);
+    cache.assign(epoch = 2, offset = 13);
+    cache.assign(epoch = 2, offset = 14);
+    cache.assign(epoch = 3, offset = 15);
+    cache.assign(epoch = 3, offset = 16);
     leo = 17
 
     //Then get the start offset of the next epoch
@@ -117,18 +148,16 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldReturnNextAvailableEpochIfThereIsNoExactEpochForTheOneRequested(){
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 0, offset = 10)
-    cache.maybeUpdate(epoch = 2, offset = 13)
-    cache.maybeUpdate(epoch = 4, offset = 17)
+    cache.assign(epoch = 0, offset = 10)
+    cache.assign(epoch = 2, offset = 13)
+    cache.assign(epoch = 4, offset = 17)
     leo = 3
-
-    println(cache.epochs)
 
     //Then
     assertEquals(13, cache.endOffsetFor(requestedEpoch = 1))
@@ -138,30 +167,30 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldNotUpdateEpochAndStartOffsetIfItDidNotChange() = {
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 2, offset = 6); leo = 7
-    cache.maybeUpdate(epoch = 2, offset = 7); leo = 8
+    cache.assign(epoch = 2, offset = 6); leo = 7
+    cache.assign(epoch = 2, offset = 7); leo = 8
 
     //Then
-    assertEquals(1, cache.epochs.size)
+    assertEquals(1, cache.epochEntries.size)
     assertEquals(EpochEntry(2, 6), cache.epochs(0))
   }
 
   @Test
   def shouldReturnInvalidOffsetIfEpochIsRequestedWhichIsNotCurrentlyTracked(): Unit ={
     val leo = 100
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 2)
+    cache.assignToLeo(epoch = 2)
 
     //Then
     assertEquals(UNSUPPORTED_EPOCH_OFFSET, cache.endOffsetFor(3))
@@ -170,29 +199,29 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldSupportEpochsThatDontStartFromZero(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 2, offset = 6); leo = 7
+    cache.assign(epoch = 2, offset = 6); leo = 7
 
     //Then
     assertEquals(7, cache.endOffsetFor(2))
-    assertEquals(1, cache.epochs.size)
-    assertEquals(EpochEntry(2, 6), cache.epochs(0))
+    assertEquals(1, cache.epochEntries.size)
+    assertEquals(EpochEntry(2, 6), cache.epochEntries()(0))
   }
 
   @Test
   def shouldPersistEpochsBetweenInstances(){
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(0)
+    def leoFinder() = new LogOffsetMetadata(0)
     val checkpointPath = TestUtils.tempFile().getAbsolutePath
     checkpoint = new LeaderEpochCheckpointFile(new File(checkpointPath))
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
-    cache.maybeUpdate(epoch = 2, offset = 6);
+    cache.assign(epoch = 2, offset = 6);
 
     //When
     val checkpoint2 = new LeaderEpochCheckpointFile(new File(checkpointPath))
@@ -206,16 +235,16 @@ class LeaderEpochFileCacheTest {
   @Test  //TODO double check Jun agrees with this logic
   def shouldNeverLetEpochGoBackwardsEvenIfMessageEpochsDo(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //Given
-    cache.maybeUpdate(epoch = 1, offset = 5); leo = 6
-    cache.maybeUpdate(epoch = 2, offset = 6); leo = 7
+    cache.assign(epoch = 1, offset = 5); leo = 6
+    cache.assign(epoch = 2, offset = 6); leo = 7
 
     //When we update an epoch in the past with an earlier offset
-    cache.maybeUpdate(epoch = 1, offset = 7); leo = 8
+    cache.assign(epoch = 1, offset = 7); leo = 8
 
     //Then epoch should not be changed
     assertEquals(2, cache.latestEpoch())
@@ -227,20 +256,20 @@ class LeaderEpochFileCacheTest {
     assertEquals(8, cache.endOffsetFor(2))
 
     //Epoch history shouldn't have changed
-    assertEquals(EpochEntry(1, 5), cache.epochs(0))
-    assertEquals(EpochEntry(2, 6), cache.epochs(1))
+    assertEquals(EpochEntry(1, 5), cache.epochEntries()(0))
+    assertEquals(EpochEntry(2, 6), cache.epochEntries()(1))
   }
 
   @Test
   def shouldIncreaseAndTrackEpochAsLeadersChangeManyTimes(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When
-    cache.maybeUpdate(epoch = 1) //leo=0
+    cache.assignToLeo(epoch = 1) //leo=0
 
     //Then epoch should go up
     assertEquals(1, cache.latestEpoch())
@@ -258,7 +287,7 @@ class LeaderEpochFileCacheTest {
     assertEquals(0, cache.endOffsetFor(0))
 
     //When
-    cache.maybeUpdate(epoch = 2) //leo=5
+    cache.assignToLeo(epoch = 2) //leo=5
     leo = 10 //write another 5 messages
 
     //Then end offset for epoch(2) should be leo => 10
@@ -274,32 +303,32 @@ class LeaderEpochFileCacheTest {
   @Test
   def shouldIncreaseAndTrackEpochAsFollowerReceivesManyMessages(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //When new
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
 
     //When Messages come in
-    cache.maybeUpdate(epoch = 0, offset = 0); leo = 1
-    cache.maybeUpdate(epoch = 0, offset = 1); leo = 2
-    cache.maybeUpdate(epoch = 0, offset = 2); leo = 3
+    cache.assign(epoch = 0, offset = 0); leo = 1
+    cache.assign(epoch = 0, offset = 1); leo = 2
+    cache.assign(epoch = 0, offset = 2); leo = 3
 
     //Then epoch should stay, offsets should grow
     assertEquals(0, cache.latestEpoch())
     assertEquals(leo, cache.endOffsetFor(0))
 
     //When messags arrive with greater epoch
-    cache.maybeUpdate(epoch = 1, offset = 3); leo = 4
-    cache.maybeUpdate(epoch = 1, offset = 4); leo = 5
-    cache.maybeUpdate(epoch = 1, offset = 5); leo = 6
+    cache.assign(epoch = 1, offset = 3); leo = 4
+    cache.assign(epoch = 1, offset = 4); leo = 5
+    cache.assign(epoch = 1, offset = 5); leo = 6
 
     assertEquals(1, cache.latestEpoch())
     assertEquals(leo, cache.endOffsetFor(1))
 
     //When
-    cache.maybeUpdate(epoch = 2, offset = 6); leo = 7
-    cache.maybeUpdate(epoch = 2, offset = 7); leo = 8
-    cache.maybeUpdate(epoch = 2, offset = 8); leo = 9
+    cache.assign(epoch = 2, offset = 6); leo = 7
+    cache.assign(epoch = 2, offset = 7); leo = 8
+    cache.assign(epoch = 2, offset = 8); leo = 9
 
     assertEquals(2, cache.latestEpoch())
     assertEquals(leo, cache.endOffsetFor(2))
@@ -310,62 +339,199 @@ class LeaderEpochFileCacheTest {
   }
 
   @Test
-  def shouldResetLeaderEpochBetweenEpochBoundary(): Unit ={
+  def shouldDropEntriesOnEpochBoundaryViaWhenRemovingNewestEntriesAndRetainingMatchingOffsets(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
-    cache.maybeUpdate(epoch = 2, offset = 6);  leo = 7
-    cache.maybeUpdate(epoch = 3, offset = 8);  leo = 9
-    cache.maybeUpdate(epoch = 4, offset = 11); leo = 12
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
 
-    //When reset to offset between epoch boundaries
-    cache.resetTo(offset = 9)
+    //When reset to offset on epoch boundary
+    cache.clearLatest(offset = 8, retainMatchingOffset = true)
 
-    //Then should keep the preceding epochs
+    //Then should remove that epoch
     assertEquals(3, cache.latestEpoch())
-    assertEquals(ListBuffer(
-      EpochEntry(2, 6),
-      EpochEntry(3, 8)
-    ), cache.epochs)
+    assertEquals(ListBuffer(EpochEntry(2, 6), EpochEntry(3, 8)), cache.epochEntries)
   }
 
   @Test
-  def shouldResetLeaderEpochOnEpochBoundary(): Unit ={
+  def shouldDropEntriesOnEpochBoundaryViaWhenRemovingNewestAndExcludingMatchingOffsets(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
-    cache.maybeUpdate(epoch = 2, offset = 6);  leo = 7
-    cache.maybeUpdate(epoch = 3, offset = 8);  leo = 9
-    cache.maybeUpdate(epoch = 4, offset = 11); leo = 12
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
 
     //When reset to offset on epoch boundary
-    cache.resetTo(offset = 8)
+    cache.clearLatest(offset = 8, retainMatchingOffset = false)
 
     //Then should remove that epoch
     assertEquals(2, cache.latestEpoch())
-    assertEquals(ListBuffer(EpochEntry(2, 6)), cache.epochs)
+    assertEquals(ListBuffer(EpochEntry(2, 6)), cache.epochEntries)
   }
 
   @Test
-  def shouldNotResetEpochHistoryIfUndefinedPassed(): Unit ={
+  def shouldDropEntriesOnEpochBoundaryWhenRemovingOldestWhenRetainingMatching(): Unit ={
     var leo = 0
-    def leoFinder(): LogOffsetMetadata = new LogOffsetMetadata(leo)
+    def leoFinder() = new LogOffsetMetadata(leo)
 
     //Given
     val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
-    cache.maybeUpdate(epoch = 2, offset = 6);  leo = 7
-    cache.maybeUpdate(epoch = 3, offset = 8);  leo = 9
-    cache.maybeUpdate(epoch = 4, offset = 11); leo = 12
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
 
     //When reset to offset on epoch boundary
-    cache.resetTo(offset = UNSUPPORTED_EPOCH_OFFSET)
+    cache.clearOldest(offset = 8, retainMatchingOffset = true)
+
+    //Then
+    assertEquals(ListBuffer(EpochEntry(3, 8),EpochEntry(4, 11)), cache.epochEntries)
+  }
+
+  @Test
+  def shouldDropEntriesOnEpochBoundaryWhenRemovingOldestWhenRemovingMatchingOffsets(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset on epoch boundary
+    cache.clearOldest(offset = 8, retainMatchingOffset = false)
+
+    //Then
+    assertEquals(ListBuffer(EpochEntry(4, 11)), cache.epochEntries)
+  }
+
+  @Test
+  def shouldDropEntriesBetweenEpochBoundaryWhenRemovingOldest(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset between epoch boundaries
+    cache.clearOldest(offset = 7)
+
+    //Then should keep the preceding epochs
+    assertEquals(ListBuffer(
+      EpochEntry(3, 8),
+      EpochEntry(4, 11)
+    ), cache.epochEntries)
+  }
+
+  @Test
+  def shouldDropEntriesBetweenEpochBoundaryWhenRemovingNewest(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset between epoch boundaries
+    cache.clearLatest(offset = 9)
+
+    //Then should keep the preceding epochs
+    assertEquals(3, cache.latestEpoch())
+    assertEquals(ListBuffer(EpochEntry(2, 6), EpochEntry(3, 8)), cache.epochEntries)
+  }
+
+  @Test
+  def shouldClearAllEntries(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When 
+    cache.clear()
+
+    //Then 
+    assertEquals(0, cache.epochEntries.size)
+  }
+
+  @Test
+  def shouldNotResetEpochHistoryHeadIfUndefinedPassed(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset on epoch boundary
+    cache.clearLatest(offset = UNSUPPORTED_EPOCH_OFFSET)
 
     //Then should do nothing
-    assertEquals(3, cache.epochs.size)
+    assertEquals(3, cache.epochEntries.size)
+  }
+
+  @Test
+  def shouldNotResetEpochHistoryTailIfUndefinedPassed(): Unit ={
+    var leo = 0
+    def leoFinder() = new LogOffsetMetadata(leo)
+
+    //Given
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.assign(epoch = 2, offset = 6);  leo = 7
+    cache.assign(epoch = 3, offset = 8);  leo = 9
+    cache.assign(epoch = 4, offset = 11); leo = 12
+
+    //When reset to offset on epoch boundary
+    cache.clearOldest(offset = UNSUPPORTED_EPOCH_OFFSET)
+
+    //Then should do nothing
+    assertEquals(3, cache.epochEntries.size)
+  }
+
+  @Test
+  def shouldFetchLatestEpochOfEmptyCache(): Unit ={
+    def leoFinder() = new LogOffsetMetadata(0)
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    assertEquals(-1, cache.latestEpoch)
+  }
+
+  @Test
+  def shouldFetchEndOffsetOfEmptyCache(): Unit ={
+    def leoFinder() = new LogOffsetMetadata(0)
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    assertEquals(-1, cache.endOffsetFor(7))
+  }
+
+  @Test
+  def shouldClearOldestOnEmptyCache(): Unit ={
+    def leoFinder() = new LogOffsetMetadata(0)
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.clearOldest(7)
+  }
+
+  @Test
+  def shouldClearLatestOnEmptyCache(): Unit ={
+    def leoFinder() = new LogOffsetMetadata(0)
+    val cache = new LeaderEpochFileCache(() => leoFinder, checkpoint)
+    cache.clearLatest(7)
   }
 
   @Before

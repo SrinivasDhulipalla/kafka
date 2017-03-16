@@ -28,7 +28,8 @@ import org.junit.{After, Before, Test}
 import kafka.utils._
 import kafka.server.KafkaConfig
 import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
-import kafka.server.epoch.{EpochSettingInterceptor, EpochTrackingInterceptor, LeaderEpochCache, LeaderEpochFileCache}
+import kafka.server.epoch._
+import org.apache.kafka.common.record.ByteBufferLogInputStream.ByteBufferLogEntry
 import org.apache.kafka.common.record._
 import org.apache.kafka.common.utils.Utils
 import org.easymock.EasyMock._
@@ -210,57 +211,6 @@ class LogTest extends JUnitSuite {
   }
 
 
-  //TODO there should be a comparable test for compressed messages
-  @Test
-  def shouldApplyEpochToMessageOnAppendIfLeader() {
-    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
-    val records = (0 until 100 by 2).map(id => Record.create(id.toString.getBytes)).toArray
-
-    //Given this partition is on leader epoch 72
-    val leaderEPockOverride = 72
-
-    //When appending messages as a leader
-    for(i <- records.indices)
-      log.append(MemoryRecords.withRecords(records(i)), interceptor = new EpochSettingInterceptor(leaderEPockOverride))
-
-    //Then leader epoch should be set on messages
-    for(i <- records.indices) {
-      val read = log.read(i, 100, Some(i+1)).records.shallowEntries.iterator.next()
-      assertEquals("Should have set leader epoch", 72, read.record.leaderEpoch())
-    }
-  }
-
-  @Test
-  def shouldTrackEpochChangeFromFollower() {
-    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
-    val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
-    val epochs = createMock(classOf[LeaderEpochCache])
-
-    //Given
-    val epochOnMessage = 72
-    val epochInTracker = 71
-
-    //Stubs
-    expect(epochs.latestEpoch()).andStubReturn(epochInTracker)
-
-    //Stamp each message with the epoch
-    def recordsForEpoch(i: Int): MemoryRecords = {
-      val withRecords = MemoryRecords.withRecords(records(i))
-      withRecords.shallowEntries().asScala.foreach(x => x.setLeaderEpoch(epochOnMessage))
-      withRecords
-    }
-
-    //Assert we update the epoch in the tracker, as the message from the leader contained a larger epoch
-    expect(epochs.maybeUpdate(72, 0))
-    replay(epochs)
-
-    //Run it
-    for(i <- records.indices) {
-      log.append(recordsForEpoch(i), interceptor = new EpochTrackingInterceptor(epochs))
-    }
-    verify(epochs)
-  }
-
 
   /**
    * This test appends a bunch of messages with non-sequential offsets and checks that we can read the correct message
@@ -441,7 +391,7 @@ class LogTest extends JUnitSuite {
   def testCompressedMessages() {
     /* this log should roll after every messageset */
     val logProps = new Properties()
-    logProps.put(LogConfig.SegmentBytesProp, 101: java.lang.Integer)
+    logProps.put(LogConfig.SegmentBytesProp, 110: java.lang.Integer)
     val log = new Log(logDir, LogConfig(logProps), recoveryPoint = 0L, time.scheduler, time = time)
 
     /* append 2 compressed message sets, each with two messages giving offsets 0, 1, 2, 3 */
@@ -1085,9 +1035,9 @@ class LogTest extends JUnitSuite {
 
       //Create a Leader Epoch file which is ahead of the log, as can happen after a crashe
       val epoch = epochCheckpoint(log)
-      epoch.maybeUpdate(epoch = 7, offset = numMessages - 1) //Before LEO
-      epoch.maybeUpdate(epoch = 9, offset = numMessages)     //At LEO
-      epoch.maybeUpdate(epoch = 11, offset = numMessages + 1)//LEO + 1
+      epoch.assign(epoch = 7, offset = numMessages - 1) //Before LEO
+      epoch.assign(epoch = 9, offset = numMessages)     //At LEO
+      epoch.assign(epoch = 11, offset = numMessages + 1)//LEO + 1
 
       // attempt recovery
       log = new Log(logDir, config, recoveryPoint, time.scheduler, time)
@@ -1370,6 +1320,122 @@ class LogTest extends JUnitSuite {
 
     log.deleteOldSegments()
     assertEquals("There should be 1 segment remaining", 1, log.numberOfSegments)
+  }
+
+  //TODO there should be a comparable test for compressed messages
+  @Test
+  def shouldApplyEpochToMessageOnAppendIfLeader() {
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+    val records = (0 until 100 by 2).map(id => Record.create(id.toString.getBytes)).toArray
+
+    //Given this partition is on leader epoch 72
+    val leaderEPockOverride = 72
+
+    //When appending messages as a leader
+    for(i <- records.indices)
+      log.append(MemoryRecords.withRecords(records(i)), interceptor = new EpochSettingInterceptor(leaderEPockOverride))
+
+    //Then leader epoch should be set on messages
+    for(i <- records.indices) {
+      val read = log.read(i, 100, Some(i+1)).records.shallowEntries.iterator.next()
+      assertEquals("Should have set leader epoch", 72, read.record.leaderEpoch())
+    }
+  }
+
+  @Test
+  def shouldTrackEpochChangeFromFollower() {
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+    val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
+    val cache = createMock(classOf[LeaderEpochCache])
+
+    //Given
+    val epochOnMessage = 72
+
+    //Stubs
+    expect(cache.latestEpoch()).andStubReturn(42)
+
+    //Stamp each message with the epoch
+    def recordsForEpoch(i: Int): MemoryRecords = {
+      val withRecords = MemoryRecords.withRecords(records(i))
+      withRecords.shallowEntries().asScala.foreach(x => x.setLeaderEpoch(epochOnMessage))
+      withRecords
+    }
+
+    //Assert the cache is assigned the epoch from the message (not the existing one, 42)
+    expect(cache.assign(72, 0))
+    replay(cache)
+
+    //When
+    for(i <- records.indices) {
+      log.append(recordsForEpoch(i), interceptor = new EpochTrackingInterceptor(cache))
+    }
+    verify(cache)
+  }
+
+  @Test
+  def shouldTruncateLeaderEpochsWithLogSegments() {
+    val set = TestUtils.singletonRecords("test".getBytes)
+    val log = createLog(set.sizeInBytes, retentionBytes = set.sizeInBytes * 10)
+    val cache = log.leaderEpochCache.asInstanceOf[LeaderEpochFileCache]
+
+    // Given three segments, with different epochs on each message
+      for (e <- 0 until 15) {
+        log.append(set, interceptor = testEpochAppend(e, log))
+      }
+
+    assertEquals(15, cache.epochEntries().size)
+
+    //When one segment (of 3) removed
+    log.deleteOldSegments
+
+    //Then 1/3 of epoch entries should have been removed
+    assertEquals(10, cache.epochEntries().size)
+
+    //Then first 5 offsets (from deleted segment) should  resolve to epoch 5.
+    (0 until 5).foreach { offset =>
+      assertEquals(5, cache.endOffsetFor(offset))
+    }
+  }
+
+  @Test
+  def shouldTruncateLeaderEpochFileWhenTruncatingLog() {
+    val set = TestUtils.singletonRecords(value = "test".getBytes, timestamp = time.milliseconds)
+    val logProps = CoreUtils.propsWith(LogConfig.SegmentBytesProp, (10 * set.sizeInBytes).toString)
+    val log = new Log(logDir, LogConfig( logProps), recoveryPoint = 0L, scheduler = time.scheduler, time = time)
+    val cache = log.leaderEpochCache.asInstanceOf[LeaderEpochFileCache]
+
+    //Given 2 segments, 10 messages per segment
+    for (epoch <- 1 to 20)
+      log.append(set, interceptor = testEpochAppend(epoch, log))
+
+    assertEquals(2, log.numberOfSegments)
+    assertEquals(20, log.logEndOffset)
+
+    //When truncate to LEO (no op)
+    log.truncateTo(log.logEndOffset)
+
+    //Then no change
+    assertEquals(20, cache.epochEntries().size)
+
+    //When truncate first segment
+    log.truncateTo(10)
+
+    //Then
+    assertEquals(10, cache.epochEntries().size)
+
+    //When
+    log.truncateTo(0)
+
+    //Then
+    assertEquals( 0, log.leaderEpochCache.asInstanceOf[LeaderEpochFileCache].epochEntries().size)
+  }
+
+  def testEpochAppend(epoch: Int, log: Log): MessageAppendInterceptor with Object {def onMessage(entry: ByteBufferLogEntry): Unit} = {
+    new MessageAppendInterceptor() {
+      override def onMessage(entry: ByteBufferLogEntry): Unit = {
+        log.leaderEpochCache.assign(epoch, entry.offset())
+      }
+    }
   }
 
   def createLog(messageSizeInBytes: Int, retentionMs: Int = -1,

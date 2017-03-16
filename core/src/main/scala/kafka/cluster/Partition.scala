@@ -176,7 +176,7 @@ class Partition(val topic: String,
       leaderEpoch = partitionStateInfo.leaderEpoch
       allReplicas.map(id => getOrCreateReplica(id))
           .filter(_.isLocal)
-              .foreach{replica => replica.epochs.get.maybeUpdate(leaderEpoch)}
+              .foreach{replica => replica.epochs.get.assignToLeo(leaderEpoch)}
 
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =
