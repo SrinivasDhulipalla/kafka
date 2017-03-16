@@ -37,7 +37,7 @@ import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
 import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
-import kafka.server.epoch.{EmptyEpochInterceptor, LeaderEpochFileCache, MessageAppendInterceptor}
+import kafka.server.epoch.{EmptyEpochInterceptor, LeaderEpochCache, LeaderEpochFileCache, MessageAppendInterceptor}
 import org.apache.kafka.common.TopicPartition
 
 object LogAppendInfo {
@@ -112,6 +112,12 @@ class Log(@volatile var dir: File,
 
   /* the actual segments of the log */
   private val segments: ConcurrentNavigableMap[java.lang.Long, LogSegment] = new ConcurrentSkipListMap[java.lang.Long, LogSegment]
+
+  val leaderEpochCache: LeaderEpochCache = new LeaderEpochFileCache(
+    () => logEndOffsetMetadata,
+    new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
+  )
+
   locally {
     val startMs = time.milliseconds
 
@@ -125,7 +131,6 @@ class Log(@volatile var dir: File,
   }
 
   val topicPartition: TopicPartition = Log.parseTopicPartitionName(dir)
-  val epochCheckpointFile = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
 
   private val tags = Map("topic" -> topicPartition.topic, "partition" -> topicPartition.partition.toString)
 
@@ -291,8 +296,7 @@ class Log(@volatile var dir: File,
   }
 
   def syncLeaderEpochFileToNewLogEndOffset(): Unit = {
-    val cache = new LeaderEpochFileCache(() => logEndOffsetMetadata, epochCheckpointFile)
-    cache.resetTo(activeSegment.nextOffset())
+    leaderEpochCache.resetTo(activeSegment.nextOffset())
   }
 
   private def recoverLog() {

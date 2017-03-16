@@ -54,11 +54,7 @@ class Replica(val brokerId: Int,
 
   def lastCaughtUpTimeMs = _lastCaughtUpTimeMs
 
-  val epochs: Option[LeaderEpochCache] = isLocal match {
-    case true =>
-      Some(new LeaderEpochFileCache(() => logEndOffset, log.get.epochCheckpointFile))
-    case false => None
-  }
+  val epochs = log.map(_.leaderEpochCache)
 
   /*
    * If the FetchRequest reads up to the log end offset of the leader when the current fetch request is received,
