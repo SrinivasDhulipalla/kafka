@@ -125,6 +125,7 @@ class Log(@volatile var dir: File,
   }
 
   val topicPartition: TopicPartition = Log.parseTopicPartitionName(dir)
+  val epochCheckpointFile = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
 
   private val tags = Map("topic" -> topicPartition.topic, "partition" -> topicPartition.partition.toString)
 
@@ -290,8 +291,7 @@ class Log(@volatile var dir: File,
   }
 
   def syncLeaderEpochFileToNewLogEndOffset(): Unit = {
-    val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
-    val cache = new LeaderEpochFileCache(() => logEndOffsetMetadata, checkpoint)
+    val cache = new LeaderEpochFileCache(() => logEndOffsetMetadata, epochCheckpointFile)
     cache.resetTo(activeSegment.nextOffset())
   }
 

@@ -56,8 +56,7 @@ class Replica(val brokerId: Int,
 
   val epochs: Option[LeaderEpochCache] = isLocal match {
     case true =>
-      val checkpoint = new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(log.get.dir))
-      Some(new LeaderEpochFileCache(() => logEndOffset, checkpoint))
+      Some(new LeaderEpochFileCache(() => logEndOffset, log.get.epochCheckpointFile))
     case false => None
   }
 

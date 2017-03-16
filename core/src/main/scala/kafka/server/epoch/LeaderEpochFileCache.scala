@@ -75,6 +75,11 @@ object Constants {
   val UNSUPPORTED_EPOCH = -1
 }
 
+/**
+  * Represents a cache of LeaderEpoch => LeaderOffsets backed by a file
+  * @param leo
+  * @param checkpoint
+  */
 class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpochCheckpoint) extends LeaderEpochCache with Logging {
   private val lock = new ReentrantReadWriteLock()
   private[epoch] var epochs = lock synchronized {ListBuffer(checkpoint.read(): _*)}
