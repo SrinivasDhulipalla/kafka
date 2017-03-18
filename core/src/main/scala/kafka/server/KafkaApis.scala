@@ -421,7 +421,6 @@ class KafkaApis(val requestChannel: RequestChannel,
       sendResponseCallback(Map.empty)
     else {
       val internalTopicsAllowed = request.header.clientId == AdminUtils.AdminClientId
-
       // call the replica manager to append messages to the replicas
       replicaManager.appendRecords(
         produceRequest.timeout.toLong,

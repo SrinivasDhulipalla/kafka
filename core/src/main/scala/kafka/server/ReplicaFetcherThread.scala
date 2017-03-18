@@ -27,7 +27,7 @@ import kafka.utils.Exit
 import org.apache.kafka.common.internals.FatalExitError
 import kafka.log.LogConfig
 import kafka.server.ReplicaFetcherThread._
-import kafka.server.epoch.{EpochTrackingInterceptor, LeaderEpochFetcher, LeaderEpochCache, PartitionEpoch}
+import kafka.server.epoch.{LeaderEpochFetcher, LeaderEpochCache, PartitionEpoch}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
@@ -93,7 +93,7 @@ class ReplicaFetcherThread(name: String,
         trace("Follower %d has replica log end offset %d for partition %s. Received %d messages and leader hw %d"
           .format(replica.brokerId, replica.logEndOffset.messageOffset, topicPartition, records.sizeInBytes, partitionData.highWatermark))
 
-      replica.log.get.append(records, assignOffsets = false, interceptor = new EpochTrackingInterceptor(replica.epochs.get))
+      replica.log.get.append(records, assignOffsets = false)
 
       if (logger.isTraceEnabled)
         trace("Follower %d has replica log end offset %d after appending %d bytes of messages for partition %s"

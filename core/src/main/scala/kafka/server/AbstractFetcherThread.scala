@@ -379,5 +379,5 @@ case class PartitionFetchState(offset: Long, delay: DelayedItem, initialising: B
 
   def isInitialising: Boolean = initialising
 
-  override def toString = "%d-%b".format(offset, isActive)
+  override def toString = "offset:%d-active:%b-initialising:%b".format(offset, isActive, initialising)
 }

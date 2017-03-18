@@ -43,8 +43,9 @@ object Constants {
 }
 
 /**
-  * Represents a cache of (LeaderEpoch => Offset) mappings derived from the log.
-  * The cache contains all LeaderEpochs currently in a single log.
+  * Represents a cache of (LeaderEpoch => Offset) mappings for a particular replica.
+  *
+  * Leader Epoch is the epoch assigned to each leader by the controller
   * Offset is the offset of the first message in each epoch.
   *
   * @param leo a function that determines the log end offset
@@ -58,8 +59,7 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     * Assigns the passed Leader Epoch to the current LEO
     * Once the epoch is assigned it cannot be reassigned
     *
-    * @param leaderEpoch
-    * @param offset
+    * @param epoch
     */
   override def assignToLeo(epoch: Int) = {
     assign(epoch, leo().messageOffset)
@@ -69,7 +69,7 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     * Assigns the passed Leader Epoch to the passed Offset
     * Once the epoch is assigned it cannot be reassigned
     *
-    * @param leaderEpoch
+    * @param epoch
     * @param offset
     */
   override def assign(epoch: Int, offset: Long): Unit = {
@@ -98,28 +98,30 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     * This is defined as the start offset of the first Leader Epoch larger than the
     * Leader Epoch requested, or else the Log End Offset if the latest epoch was requested.
     *
-    * @param epoch
+    * @param requestedEpoch
     * @return offset
     */
   override def endOffsetFor(requestedEpoch: Int): Long = {
     inReadLock(lock) {
-      //Use LEO if current epoch
-      if (requestedEpoch == latestEpoch) {
-        leo().messageOffset
-      }
-      else {
-        //Use the start offset of the first subsequent epoch otherwise
-        val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
-        if (subsequentEpochs.isEmpty)
-          UNSUPPORTED_EPOCH_OFFSET
-        else
-          subsequentEpochs.head.startOffset
-      }
+      val offset =
+      //Use LEO if current epoch, else the start offset of the first subsequent epoch
+        if (requestedEpoch == latestEpoch) {
+          leo().messageOffset
+        }
+        else {
+          val subsequentEpochs = epochs.filter(e => e.epoch > requestedEpoch)
+          if (subsequentEpochs.isEmpty)
+            UNSUPPORTED_EPOCH_OFFSET
+          else
+            subsequentEpochs.head.startOffset
+        }
+      info(s"Processed offset for epoch request for epoch:$requestedEpoch and returning offset $offset from epoch list of size ${epochs.size}")
+      offset
     }
   }
 
   /**
-    * Removes all epoch entries from the store greater than the passed offset.
+    * Removes all epoch entries from the store greater than the passed offset. i.e. dropRight
     * Can be inclusive or exclusive.
     *
     * @param offset
@@ -127,18 +129,20 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     */
   override def clearLatest(offset: Long, retainMatchingOffset: Boolean = true): Unit = {
     inWriteLock(lock) {
+      val before = epochs
       if (offset >= 0 && offset <= latestOffset) {
         epochs = if(retainMatchingOffset)
           epochs.filter(entry => entry.startOffset <= offset)
         else
           epochs.filter(entry => entry.startOffset < offset)
         flush()
+        info(s"Cleared latest ${before.toSet.filterNot(epochs.toSet)} entries from epoch cache based on passed offset $offset / $retainMatchingOffset leaving ${epochs.size} in EpochFile")
       }
     }
   }
 
   /**
-    * Removes all epoch entries from the store less than the passed offset.
+    * Removes all epoch entries from the store less than the passed offset. ie drop
     * Can be inclusive or exclusive.
     *
     * @param offset
@@ -146,12 +150,14 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
     */
   override def clearOldest(offset: Long, retainMatchingOffset: Boolean = true): Unit = {
     inWriteLock(lock) {
+      val before = epochs
       if (offset >= 0 && offset >= earliestOffset) {
         epochs = if(retainMatchingOffset)
           epochs.filter(entry => entry.startOffset >= offset)
         else
           epochs.filter(entry => entry.startOffset > offset)
         flush()
+        info(s"Cleared oldest ${before.toSet.filterNot(epochs.toSet).size} entries from epoch cache based on passed offset $offset / $retainMatchingOffset leaving ${epochs.size} in EpochFile")
       }
     }
   }

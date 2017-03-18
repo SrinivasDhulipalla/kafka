@@ -33,7 +33,6 @@ import org.apache.kafka.common.protocol.Errors
 
 import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
-import kafka.server.epoch.EpochSettingInterceptor
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.MemoryRecords
 import org.apache.kafka.common.requests.PartitionState
@@ -150,8 +149,7 @@ class Partition(val topic: String,
     }
   }
 
-  //TODO maybe remove this as it's really a duplicate of what is stored in the
-  //tracker. Or maybe it is ok??
+  //TODO replace this with replica.epochs.get.latestEpoch
   def getLeaderEpoch: Int = this.leaderEpoch
 
   /**
@@ -176,7 +174,10 @@ class Partition(val topic: String,
       leaderEpoch = partitionStateInfo.leaderEpoch
       allReplicas.map(id => getOrCreateReplica(id))
           .filter(_.isLocal)
-              .foreach{replica => replica.epochs.get.assignToLeo(leaderEpoch)}
+              .foreach{replica =>
+                replica.epochs.get.assignToLeo(leaderEpoch)
+                info(s"Broker[${replicaManager.config.brokerId}] Becoming Leader for ${replica.topicPartition} @ Epoch[$leaderEpoch]")
+              }
 
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =
@@ -457,7 +458,7 @@ class Partition(val topic: String,
               .format(topicPartition, inSyncSize, minIsr))
           }
 
-          val info = log.append(records, assignOffsets = true, interceptor = new EpochSettingInterceptor(leaderEpoch))
+          val info = log.append(records, assignOffsets = true)
           // probably unblock some follower fetch requests since log end offset has been updated
           replicaManager.tryCompleteDelayedFetch(TopicPartitionOperationKey(this.topic, this.partitionId))
           // we may need to increment high watermark since ISR could be down to 1
