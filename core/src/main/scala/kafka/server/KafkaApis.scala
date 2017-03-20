@@ -33,11 +33,11 @@ import kafka.log._
 import kafka.network._
 import kafka.network.RequestChannel.{Response, Session}
 import kafka.security.auth
-import kafka.security.auth.{Authorizer, ClusterAction, Create, Delete, Describe, Group, Operation, Read, Resource, Write}
-import kafka.utils.{Exit, Logging, ZKGroupTopicDirs, ZkUtils}
-import kafka.server.epoch.OffsetsForLeaderEpoch
+import kafka.security.auth.{Topic => _, _}
+import kafka.utils.Exit
+import kafka.server.epoch.OffsetsForLeaderEpoch._
 import kafka.utils.{Logging, ZKGroupTopicDirs, ZkUtils}
-import org.apache.kafka.common.errors.{ClusterAuthorizationException, NotLeaderForPartitionException, TopicExistsException, UnknownTopicOrPartitionException, UnsupportedForMessageFormatException}
+import org.apache.kafka.common.errors.{ClusterAuthorizationException => _, NotLeaderForPartitionException => _, UnknownTopicOrPartitionException => _, _}
 import org.apache.kafka.common.internals.FatalExitError
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.network.ListenerName
@@ -1256,14 +1256,12 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   def handleHandleOffsetForLeaderEpochRequest(request: RequestChannel.Request): Unit = {
     val offsetForEpoch = request.body[OffsetForLeaderEpochRequest]
-    val requestInfo = offsetForEpoch.epochsByTopic().asScala
+    val requestInfo = offsetForEpoch.epochsByTopic()
+    val authorised = authorize(request.session, ClusterAction, Resource.ClusterResource)
     info(s"Received OffsetForEpoch Request for ${offsetForEpoch.epochsByTopic()} from ${request.session.clientAddress}")
 
-    val authorised = authorize(request.session, ClusterAction, Resource.ClusterResource)
-    val epochFinder = new OffsetsForLeaderEpoch(replicaManager)
-
     val responseBody = new OffsetForLeaderEpochResponse(
-      epochFinder.getOffsetsForEpochs(requestInfo, authorised)
+      getOffsetsForEpochs(replicaManager, requestInfo, authorised)
     )
 
     info(s"Returning OffsetForEpoch Request for $responseBody")

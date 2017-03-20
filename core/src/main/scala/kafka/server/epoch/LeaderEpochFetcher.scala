@@ -28,12 +28,14 @@ import scala.collection.{Map, Set}
 class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
 
   def leaderOffsetsFor(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
-    leaderOffsetsFor(
-      translate(partitions)
+    fromWireFormat(
+      sender.sendRequest(
+        new OffsetForLeaderEpochRequest.Builder(toWireFormat(partitions)))
+        .responseBody.asInstanceOf[OffsetForLeaderEpochResponse]
     )
   }
 
-  private def translate(partitions: Set[PartitionEpoch]): JMap[String, JList[Epoch]] = {
+  private def toWireFormat(partitions: Set[PartitionEpoch]): JMap[String, JList[Epoch]] = {
     partitions.toSeq.groupBy {_.tp.topic()}
       .map { case (topic, partitionEpochs) =>
         val epochs = partitionEpochs.map { ep => new Epoch(ep.tp.partition, ep.epoch) }.asJava
@@ -41,14 +43,7 @@ class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
       }.asJava
   }
 
-  private def leaderOffsetsFor(epochsByTopic: JMap[String, java.util.List[Epoch]]): Map[TopicPartition, EpochEndOffset] = {
-    val requestBuilder = new OffsetForLeaderEpochRequest.Builder(epochsByTopic)
-    parseEpochs(
-      sender.sendRequest(requestBuilder).responseBody.asInstanceOf[OffsetForLeaderEpochResponse]
-    )
-  }
-
-  private def parseEpochs(response: OffsetForLeaderEpochResponse): Map[TopicPartition, EpochEndOffset] = {
+  private def fromWireFormat(response: OffsetForLeaderEpochResponse): Map[TopicPartition, EpochEndOffset] = {
     response
       .responses.asScala
       .flatMap { case (topic, offsets) =>
@@ -67,7 +62,7 @@ class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
 }
 
 trait EndpointSupplier {
-  def supply(partition: Partition): BrokerEndPoint
+  def newEndpoint(partition: Partition): BrokerEndPoint
 }
 
 case class PartitionEpoch(tp: TopicPartition, epoch: Int)

@@ -16,49 +16,38 @@
   */
 package kafka.server.epoch
 
-import java.util
+import java.util.{List => JList, Map => JMap}
 
 import kafka.server.ReplicaManager
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.protocol.Errors._
-import org.apache.kafka.common.requests.{Epoch, EpochEndOffset, OffsetForLeaderEpochRequest}
+import org.apache.kafka.common.requests.EpochEndOffset._
+import org.apache.kafka.common.requests.{Epoch, EpochEndOffset}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable._
 
 
-/**
-  * TODO [delete me before merge]
-  * Currently there is no direct unit test for this class (although it doesn't do all that much).
-  * It is covered indirectly by a number of functional tests. We could unit test if we pulled
-  * out the ReplicaManager dependency and replaced it with a Finder of LeaderEpochs which we
-  * might inject
-  */
+object OffsetsForLeaderEpoch {
 
-class OffsetsForLeaderEpoch(replicaManager: ReplicaManager) {
-
-  def getOffsetsForEpochs(requestedEpochInfo: Map[String, util.List[Epoch]], authorised: Boolean): util.Map[String, util.List[EpochEndOffset]] = {
-    requestedEpochInfo.map { case (topic, epochs) =>
-      (topic, lastOffsetsByEpoch(topic, epochs, authorised))
-    }.asJava
-  }
-
-  private def lastOffsetsByEpoch(topic: String, epochs: util.List[Epoch], authorised: Boolean): util.List[EpochEndOffset] = {
-    epochs.asScala.map { epoch =>
-      if (authorised) {
-        replicaManager.getPartition(new TopicPartition(topic, epoch.partitionId)) match {
-          case Some(p) =>
-            if (p.getReplica().isDefined) {
-              val offset = p.getReplica().get.epochs.get.endOffsetFor(epoch.epoch)
-              new EpochEndOffset(epoch.partitionId, offset)
-            } else
-              new EpochEndOffset(NOT_LEADER_FOR_PARTITION, epoch.partitionId, EpochEndOffset.UNDEFINED_OFFSET)
-          case None => new EpochEndOffset(REPLICA_NOT_AVAILABLE, epoch.partitionId, EpochEndOffset.UNDEFINED_OFFSET)
+  def getOffsetsForEpochs(replicaManager: ReplicaManager,
+                          requestedEpochInfo: JMap[String, JList[Epoch]],
+                          authorised: Boolean): JMap[String, JList[EpochEndOffset]] = {
+    requestedEpochInfo.asScala.map { case (topic, epochs) =>
+      val lastOffsetsByEpoch = epochs.asScala.map { epoch =>
+        if (authorised) {
+          replicaManager.getReplica(new TopicPartition(topic, epoch.partitionId)) match {
+            case Some(replica) =>
+                val offset = replica.epochs.get.endOffsetFor(epoch.epoch)
+                new EpochEndOffset(epoch.partitionId, offset)
+            case None => new EpochEndOffset(NOT_LEADER_FOR_PARTITION, epoch.partitionId, UNDEFINED_OFFSET)
+          }
+        } else {
+          new EpochEndOffset(Errors.CLUSTER_AUTHORIZATION_FAILED, epoch.partitionId)
         }
-      } else {
-        new EpochEndOffset(Errors.CLUSTER_AUTHORIZATION_FAILED, epoch.partitionId)
-      }
+      }.asJava
+      
+      (topic, lastOffsetsByEpoch)
     }.asJava
   }
 }

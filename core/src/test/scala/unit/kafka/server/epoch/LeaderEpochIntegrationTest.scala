@@ -120,7 +120,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
 
     //Then the unsupported partition should return an error
     assertTrue(offsetsForEpochs(t1p1).hasError)
-    assertEquals(REPLICA_NOT_AVAILABLE, offsetsForEpochs(t1p1).error)
+    assertEquals(NOT_LEADER_FOR_PARTITION, offsetsForEpochs(t1p1).error)
     assertEquals(UNDEFINED_OFFSET, offsetsForEpochs(t1p1).endOffset)
   }
 
