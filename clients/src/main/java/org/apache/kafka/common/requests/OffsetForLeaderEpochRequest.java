@@ -99,7 +99,6 @@ public class OffsetForLeaderEpochRequest extends AbstractRequest {
         }
     }
 
-
     public static OffsetForLeaderEpochRequest parse(ByteBuffer buffer, short versionId) {
         return new OffsetForLeaderEpochRequest(ApiKeys.OFFSET_FOR_LEADER_EPOCH.parseRequest(versionId, buffer), versionId);
     }
