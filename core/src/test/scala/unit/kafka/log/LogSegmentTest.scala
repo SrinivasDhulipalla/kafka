@@ -342,4 +342,25 @@ class LogSegmentTest {
     assertEquals(oldSize, size)
     assertEquals(size, fileSize)
   }
+
+  @Test
+  def shouldTruncateEvenIfGivenOffsetIsMissing() {
+    val seg = createSegment(40)
+    var offset = 40
+
+    //Given two messages with a gap between them (e.g. mid offset compacted away)
+    val ms1 = records(offset, "hello")
+    seg.append(offset, offset, Record.NO_TIMESTAMP, -1L, ms1)
+    val ms2 = records(offset + 3, "hello")
+    seg.append(offset + 3, offset + 1, Record.NO_TIMESTAMP, -1L, ms2)
+
+    // When we truncate to an offset that is 'missing'
+    seg.truncateTo(offset + 1)
+
+    //Then we should still truncate the record that was present
+    val log = seg.read(offset, None, 10000)
+    assertEquals(ms1.deepEntries.iterator.next(), log.records.deepEntries.iterator.next())
+    assertEquals(1, log.records.deepEntries.asScala.size)
+  }
+
 }
