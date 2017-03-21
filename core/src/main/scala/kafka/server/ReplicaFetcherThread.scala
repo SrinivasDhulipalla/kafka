@@ -32,7 +32,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.record.MemoryRecords
-import org.apache.kafka.common.requests.{EpochEndOffset, FetchResponse, ListOffsetRequest, ListOffsetResponse, OffsetForLeaderEpochResponse, FetchRequest => JFetchRequest}
+import org.apache.kafka.common.requests.{EpochEndOffset, FetchResponse, ListOffsetRequest, ListOffsetResponse, FetchRequest => JFetchRequest}
 import org.apache.kafka.common.utils.Time
 
 import scala.collection.JavaConverters._
@@ -57,9 +57,7 @@ class ReplicaFetcherThread(name: String,
   type REQ = FetchRequest
   type PD = PartitionData
 
-  val network = blockingSend
-    .getOrElse(new ReplicaFetcherBlockingSend(sourceBroker, brokerConfig, metrics, time, fetcherId, clientId))
-
+  private val network = blockingSend.getOrElse(new ReplicaFetcherBlockingSend(sourceBroker, brokerConfig, metrics, time, fetcherId, clientId))
   private val fetchRequestVersion: Short =
     if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_10_1_IV1) 3
     else if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_10_0_IV0) 2
@@ -71,7 +69,7 @@ class ReplicaFetcherThread(name: String,
   private val minBytes = brokerConfig.replicaFetchMinBytes
   private val maxBytes = brokerConfig.replicaFetchResponseMaxBytes
   private val fetchSize = brokerConfig.replicaFetchMaxBytes
-
+  private def epochCache(tp: TopicPartition): LeaderEpochCache =  replicaMgr.getReplica(tp).get.epochs.get
   private def clientId = name
 
   override def shutdown(): Unit = {
@@ -227,8 +225,6 @@ class ReplicaFetcherThread(name: String,
       case error => throw error.exception
     }
   }
-
-  private def epochCache(tp: TopicPartition): LeaderEpochCache =  replicaMgr.getReplica(tp).get.epochs.get
 
   override protected def initialisePartitions(allPartitions: Seq[(TopicPartition, PartitionFetchState)]) = {
     val partitions = allPartitions.filter { case (_, state) => state.isInitialising }.toMap

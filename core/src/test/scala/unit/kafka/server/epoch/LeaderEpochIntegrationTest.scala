@@ -90,7 +90,6 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     waitUntilTrue(() => messagesHaveLeaderEpoch(expectedLeaderEpoch, 4), "Broker logs should be identical")
   }
 
-
   @Test
   def shouldSendLeaderEpochRequestAndGetAResponse(): Unit = {
 

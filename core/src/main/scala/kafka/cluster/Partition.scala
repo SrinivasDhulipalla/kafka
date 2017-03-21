@@ -149,7 +149,7 @@ class Partition(val topic: String,
     }
   }
 
-  //TODO we might refactor this out, replacing it with a reference to the leader epoch cache??
+  //TODO we could refactor this out, replacing it with a reference to the leader epoch cache??
   def getLeaderEpoch: Int = this.leaderEpoch
 
   /**
