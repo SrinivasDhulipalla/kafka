@@ -26,10 +26,9 @@ import java.util.concurrent.locks.ReentrantLock
 
 import com.yammer.metrics.core.Gauge
 import kafka.api.{ApiVersion, KAFKA_0_10_1_IV0}
-import kafka.cluster.Partition
 import kafka.common.{MessageFormatter, _}
 import kafka.metrics.KafkaMetricsGroup
-import kafka.server.{MetadataCache, ReplicaManager}
+import kafka.server.ReplicaManager
 import kafka.utils.CoreUtils.inLock
 import kafka.utils._
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -50,8 +49,7 @@ class GroupMetadataManager(val brokerId: Int,
                            val config: OffsetConfig,
                            replicaManager: ReplicaManager,
                            zkUtils: ZkUtils,
-                           time: Time
-                          ) extends Logging with KafkaMetricsGroup {
+                           time: Time) extends Logging with KafkaMetricsGroup {
 
   private val compressionType: CompressionType = CompressionType.forId(config.offsetsTopicCompressionCodec.codec)
 

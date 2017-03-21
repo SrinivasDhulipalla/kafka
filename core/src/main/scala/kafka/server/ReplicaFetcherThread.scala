@@ -228,7 +228,7 @@ class ReplicaFetcherThread(name: String,
 
   override protected def initialisePartitions(allPartitions: Seq[(TopicPartition, PartitionFetchState)]) = {
     val partitions = allPartitions.filter { case (_, state) => state.isInitialising }.toMap
-    val epochRequests = partitions.map { case (tp, state) => PartitionEpoch(tp, epochCache(tp).latestEpoch) }.toSet
+    val epochRequests = partitions.keys.map { tp => PartitionEpoch(tp, epochCache(tp).latestEpoch) }.toSet
 
     if (!partitions.isEmpty) {
       val leaderEpochs = fetchEpochsFromLeader(epochRequests)
