@@ -42,7 +42,7 @@ class CheckpointFile[T](val file: File, version: Int, formatter: CheckpointFileF
     lock synchronized {
       // write to temp file and then swap with the existing file
       val fileOutputStream = new FileOutputStream(tempPath.toFile)
-      val writer = new BufferedWriter(new OutputStreamWriter(fileOutputStream, StandardCharsets.UTF_8)))
+      val writer = new BufferedWriter(new OutputStreamWriter(fileOutputStream, StandardCharsets.UTF_8))
       try {
         writer.write(version.toString)
         writer.newLine()
