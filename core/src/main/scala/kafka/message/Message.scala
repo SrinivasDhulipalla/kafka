@@ -58,7 +58,7 @@ object Message {
    * used here, which comes from a message in message format V0 with empty key and value.
    */
   val MinMessageOverhead = KeyOffset_V0 + ValueSizeLength
-  
+
   /**
    * The "magic" value
    * When magic value is 0, the message uses absolute offset and does not have a timestamp field.
@@ -135,7 +135,7 @@ object Message {
 class Message(val buffer: ByteBuffer,
               private val wrapperMessageTimestamp: Option[Long] = None,
               private val wrapperMessageTimestampType: Option[TimestampType] = None) {
-  
+
   import kafka.message.Message._
 
   private[message] def asRecord: LegacyRecord = wrapperMessageTimestamp match {
@@ -154,12 +154,12 @@ class Message(val buffer: ByteBuffer,
    * @param payloadSize The size of the payload to use
    * @param magicValue the magic value to use
    */
-  def this(bytes: Array[Byte], 
+  def this(bytes: Array[Byte],
            key: Array[Byte],
            timestamp: Long,
            timestampType: TimestampType,
-           codec: CompressionCodec, 
-           payloadOffset: Int, 
+           codec: CompressionCodec,
+           payloadOffset: Int,
            payloadSize: Int,
            magicValue: Byte) = {
     this(ByteBuffer.allocate(Message.CrcLength +
@@ -167,11 +167,11 @@ class Message(val buffer: ByteBuffer,
                              Message.AttributesLength +
                              (if (magicValue == Message.MagicValue_V0) 0
                               else Message.TimestampLength) +
-                             Message.KeySizeLength + 
-                             (if(key == null) 0 else key.length) + 
-                             Message.ValueSizeLength + 
-                             (if(bytes == null) 0 
-                              else if(payloadSize >= 0) payloadSize 
+                             Message.KeySizeLength +
+                             (if(key == null) 0 else key.length) +
+                             Message.ValueSizeLength +
+                             (if(bytes == null) 0
+                              else if(payloadSize >= 0) payloadSize
                               else bytes.length - payloadOffset)))
     validateTimestampAndMagicValue(timestamp, magicValue)
     // skip crc, we will fill that in at the end
@@ -189,7 +189,7 @@ class Message(val buffer: ByteBuffer,
       buffer.put(key, 0, key.length)
     }
     val size = if(bytes == null) -1
-               else if(payloadSize >= 0) payloadSize 
+               else if(payloadSize >= 0) payloadSize
                else bytes.length - payloadOffset
     buffer.putInt(size)
     if(bytes != null)
@@ -205,35 +205,35 @@ class Message(val buffer: ByteBuffer,
 
   def this(bytes: Array[Byte], key: Array[Byte], timestamp: Long, codec: CompressionCodec, magicValue: Byte) =
     this(bytes = bytes, key = key, timestamp = timestamp, timestampType = TimestampType.CREATE_TIME, codec = codec, payloadOffset = 0, payloadSize = -1, magicValue = magicValue)
-  
+
   def this(bytes: Array[Byte], timestamp: Long, codec: CompressionCodec, magicValue: Byte) =
     this(bytes = bytes, key = null, timestamp = timestamp, codec = codec, magicValue = magicValue)
-  
+
   def this(bytes: Array[Byte], key: Array[Byte], timestamp: Long, magicValue: Byte) =
     this(bytes = bytes, key = key, timestamp = timestamp, codec = NoCompressionCodec, magicValue = magicValue)
-    
+
   def this(bytes: Array[Byte], timestamp: Long, magicValue: Byte) =
     this(bytes = bytes, key = null, timestamp = timestamp, codec = NoCompressionCodec, magicValue = magicValue)
 
   def this(bytes: Array[Byte]) =
     this(bytes = bytes, key = null, timestamp = Message.NoTimestamp, codec = NoCompressionCodec, magicValue = Message.CurrentMagicValue)
-    
+
   /**
    * Compute the checksum of the message from the message contents
    */
   def computeChecksum: Long =
     Crc32.crc32(buffer, MagicOffset, buffer.limit - MagicOffset)
-  
+
   /**
    * Retrieve the previously computed CRC for this message
    */
   def checksum: Long = ByteUtils.readUnsignedInt(buffer, CrcOffset)
-  
+
     /**
    * Returns true if the crc stored with the message matches the crc computed off the message contents
    */
   def isValid: Boolean = checksum == computeChecksum
-  
+
   /**
    * Throw an InvalidMessageException if isValid is false for this message
    */
@@ -241,7 +241,7 @@ class Message(val buffer: ByteBuffer,
     if(!isValid)
       throw new InvalidMessageException(s"Message is corrupt (stored crc = ${checksum}, computed crc = ${computeChecksum})")
   }
-  
+
   /**
    * The complete serialized size of this message in bytes (including crc, header attributes, etc)
    */
@@ -259,12 +259,12 @@ class Message(val buffer: ByteBuffer,
    * The length of the key in bytes
    */
   def keySize: Int = buffer.getInt(keySizeOffset)
-  
+
   /**
    * Does the message have a key?
    */
   def hasKey: Boolean = keySize >= 0
-  
+
   /**
    * The position where the payload size is stored
    */
@@ -272,22 +272,22 @@ class Message(val buffer: ByteBuffer,
     if (magic == MagicValue_V0) KeyOffset_V0 + max(0, keySize)
     else KeyOffset_V1 + max(0, keySize)
   }
-  
+
   /**
    * The length of the message value in bytes
    */
   def payloadSize: Int = buffer.getInt(payloadSizeOffset)
-  
+
   /**
    * Is the payload of this message null
    */
   def isNull: Boolean = payloadSize < 0
-  
+
   /**
    * The magic version of this message
    */
   def magic: Byte = buffer.get(MagicOffset)
-  
+
   /**
    * The attributes stored with this message
    */
@@ -318,14 +318,14 @@ class Message(val buffer: ByteBuffer,
   /**
    * The compression codec used with this message
    */
-  def compressionCodec: CompressionCodec = 
+  def compressionCodec: CompressionCodec =
     CompressionCodec.getCompressionCodec(buffer.get(AttributesOffset) & CompressionCodeMask)
-  
+
   /**
    * A ByteBuffer containing the content of the message
    */
   def payload: ByteBuffer = sliceDelimited(payloadSizeOffset)
-  
+
   /**
    * A ByteBuffer containing the message key
    */

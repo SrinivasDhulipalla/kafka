@@ -181,6 +181,7 @@ class LogCleanerManagerTest extends JUnitSuite with Logging {
 
     val config = LogConfig(logProps)
     val partitionDir = new File(logDir, "log-0")
+    partitionDir.mkdir()
     val log = new Log(partitionDir,
       config,
       recoveryPoint = 0L,

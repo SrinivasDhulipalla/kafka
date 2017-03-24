@@ -36,6 +36,8 @@ import scala.collection.JavaConverters._
 import com.yammer.metrics.core.Gauge
 import org.apache.kafka.common.utils.{Time, Utils}
 import kafka.message.{BrokerCompressionCodec, CompressionCodec, NoCompressionCodec}
+import kafka.server.checkpoints.{LeaderEpochCheckpointFile, LeaderEpochFile}
+import kafka.server.epoch.{LeaderEpochCache, LeaderEpochFileCache}
 import org.apache.kafka.common.TopicPartition
 
 object LogAppendInfo {
@@ -89,7 +91,8 @@ class Log(@volatile var dir: File,
           @volatile var config: LogConfig,
           @volatile var recoveryPoint: Long = 0L,
           scheduler: Scheduler,
-          time: Time = Time.SYSTEM) extends Logging with KafkaMetricsGroup {
+          time: Time = Time.SYSTEM
+         ) extends Logging with KafkaMetricsGroup {
 
   import kafka.log.Log._
 
@@ -110,6 +113,12 @@ class Log(@volatile var dir: File,
 
   /* the actual segments of the log */
   private val segments: ConcurrentNavigableMap[java.lang.Long, LogSegment] = new ConcurrentSkipListMap[java.lang.Long, LogSegment]
+
+  val leaderEpochCache: LeaderEpochCache = new LeaderEpochFileCache(
+    () => logEndOffsetMetadata,
+    new LeaderEpochCheckpointFile(LeaderEpochFile.newFile(dir))
+  )
+
   locally {
     val startMs = time.milliseconds
 
@@ -312,7 +321,7 @@ class Log(@volatile var dir: File,
       if(truncatedBytes > 0) {
         // we had an invalid message, delete all remaining log
         warn("Corruption found in segment %d of log %s, truncating to offset %d.".format(curr.baseOffset, name, curr.nextOffset))
-        unflushed.foreach(deleteSegment)
+        unflushed.foreach(deleteSegment(_))
       }
     }
   }
@@ -349,7 +358,7 @@ class Log(@volatile var dir: File,
    * @throws KafkaStorageException If the append fails due to an I/O error.
    * @return Information about the appended messages including the first and last offset.
    */
-  def append(records: MemoryRecords, assignOffsets: Boolean = true): LogAppendInfo = {
+  def append(records: MemoryRecords, assignOffsets: Boolean = true, epochCache: LeaderEpochCache = leaderEpochCache): LogAppendInfo = {
     val appendInfo = analyzeAndValidateRecords(records)
 
     // if we have any valid messages, append them to the log
@@ -377,7 +386,8 @@ class Log(@volatile var dir: File,
                                                           config.compact,
                                                           config.messageFormatVersion.messageFormatVersion,
                                                           config.messageTimestampType,
-                                                          config.messageTimestampDifferenceMaxMs)
+                                                          config.messageTimestampDifferenceMaxMs,
+                                                          epochCache.latestEpoch())
           } catch {
             case e: IOException => throw new KafkaException("Error in validating messages while appending to log '%s'".format(name), e)
           }
@@ -403,6 +413,12 @@ class Log(@volatile var dir: File,
             }
           }
         } else {
+          //Update the epoch cache with the epoch stamped by the leader
+          //TODO There may be a more efficeint way to do this post message set rebase
+          records.batches().asScala.map { entry =>
+            epochCache.assign(entry.partitionLeaderEpoch, entry.baseOffset())
+          }
+
           // we are taking the offsets we are given
           if (!appendInfo.offsetsMonotonic || appendInfo.firstOffset < nextOffsetMetadata.messageOffset)
             throw new IllegalArgumentException("Out of order offsets found in " + records.records.asScala.map(_.offset))
@@ -672,7 +688,7 @@ class Log(@volatile var dir: File,
         if (segments.size == numToDelete)
           roll()
         // remove the segments for lookups
-        deletable.foreach(deleteSegment)
+        deletable.foreach(deleteSegment(_))
       }
       numToDelete
     }
@@ -869,6 +885,7 @@ class Log(@volatile var dir: File,
     lock synchronized {
       logSegments.foreach(_.delete())
       segments.clear()
+      leaderEpochCache.clear()
       Utils.delete(dir)
     }
   }
@@ -891,12 +908,14 @@ class Log(@volatile var dir: File,
         truncateFullyAndStartAt(targetOffset)
       } else {
         val deletable = logSegments.filter(segment => segment.baseOffset > targetOffset)
-        deletable.foreach(deleteSegment)
+        deletable.foreach(deleteSegment(_, false))
         activeSegment.truncateTo(targetOffset)
         updateLogEndOffset(targetOffset)
         this.recoveryPoint = math.min(targetOffset, this.recoveryPoint)
       }
     }
+    //Shouldn't need this as we clear in deleteSegment and
+    leaderEpochCache.clearLatest(targetOffset, false)
   }
 
   /**
@@ -908,7 +927,7 @@ class Log(@volatile var dir: File,
     debug("Truncate and start log '" + name + "' to " + newOffset)
     lock synchronized {
       val segmentsToDelete = logSegments.toList
-      segmentsToDelete.foreach(deleteSegment)
+      segmentsToDelete.foreach(deleteSegment(_, false))
       addSegment(new LogSegment(dir,
                                 newOffset,
                                 indexIntervalBytes = config.indexInterval,
@@ -919,6 +938,7 @@ class Log(@volatile var dir: File,
                                 initFileSize = initFileSize,
                                 preallocate = config.preallocate))
       updateLogEndOffset(newOffset)
+      leaderEpochCache.clearLatest(newOffset, false)
       this.recoveryPoint = math.min(newOffset, this.recoveryPoint)
     }
   }
@@ -966,9 +986,10 @@ class Log(@volatile var dir: File,
    *
    * @param segment The log segment to schedule for deletion
    */
-  private def deleteSegment(segment: LogSegment) {
+  private def deleteSegment(segment: LogSegment, deleteEpochCache: Boolean = true) {
     info("Scheduling log segment %d for log %s for deletion.".format(segment.baseOffset, name))
     lock synchronized {
+      if(deleteEpochCache) leaderEpochCache.clearOldest(segment.nextOffset(), true)
       segments.remove(segment.baseOffset)
       asyncDeleteSegment(segment)
     }

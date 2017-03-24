@@ -25,9 +25,10 @@ import kafka.utils._
 import scala.collection._
 import scala.collection.JavaConverters._
 import kafka.common.{KafkaException, KafkaStorageException}
-import kafka.server.{BrokerState, OffsetCheckpoint, RecoveringFromUncleanShutdown}
+import kafka.server.{BrokerState, RecoveringFromUncleanShutdown}
 import java.util.concurrent.{ExecutionException, ExecutorService, Executors, Future}
 
+import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Time
 
@@ -63,7 +64,7 @@ class LogManager(val logDirs: Array[File],
 
   createAndValidateLogDirs(logDirs)
   private val dirLocks = lockLogDirs(logDirs)
-  private val recoveryPointCheckpoints = logDirs.map(dir => (dir, new OffsetCheckpoint(new File(dir, RecoveryPointCheckpointFile)))).toMap
+  private val recoveryPointCheckpoints = logDirs.map(dir => (dir, new OffsetCheckpointFile(new File(dir, RecoveryPointCheckpointFile)))).toMap
   loadLogs()
 
   // public, so we can access this from kafka.admin.DeleteTopicTest

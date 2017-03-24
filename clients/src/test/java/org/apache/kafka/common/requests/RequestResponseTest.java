@@ -158,6 +158,10 @@ public class RequestResponseTest {
         checkRequest(createListOffsetRequest(0));
         checkErrorResponse(createListOffsetRequest(0), new UnknownServerException());
         checkResponse(createListOffsetResponse(0), 0);
+        checkRequest(createLeaderEpochRequest());
+        checkResponse(createLeaderEpochResponse(), 0);
+        //TODO fix me
+//        checkErrorResponse(createLeaderEpochRequest(), new UnknownServerException());
     }
 
     @Test
@@ -754,6 +758,22 @@ public class RequestResponseTest {
         errors.put("t1", Errors.INVALID_TOPIC_EXCEPTION);
         errors.put("t2", Errors.TOPIC_AUTHORIZATION_FAILED);
         return new DeleteTopicsResponse(errors);
+    }
+
+    private OffsetForLeaderEpochRequest createLeaderEpochRequest() {
+        Map<String, List<Epoch>> epochsByTopic = new HashMap<>();
+        epochsByTopic.put("topic1", Arrays.asList(new Epoch[]{new Epoch(0, 0), new Epoch(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new Epoch[]{new Epoch(2, 2), new Epoch(3, 3)}));
+
+        return new OffsetForLeaderEpochRequest.Builder(epochsByTopic).build();
+    }
+
+    private OffsetForLeaderEpochResponse createLeaderEpochResponse() {
+        Map<String, List<EpochEndOffset>> epochsByTopic = new HashMap<>();
+        epochsByTopic.put("topic1", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(0, 0), new EpochEndOffset(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(2, 2), new EpochEndOffset(3, 3)}));
+
+        return new OffsetForLeaderEpochResponse(epochsByTopic);
     }
 
     private static class ByteBufferChannel implements GatheringByteChannel {
