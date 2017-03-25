@@ -1327,52 +1327,58 @@ class LogTest extends JUnitSuite {
   }
 
   //TODO there should be a comparable test for compressed messages
-//  @Test
-//  def shouldApplyEpochToMessageOnAppendIfLeader() {
-//    val records = (0 until 100 by 2).map(id => Record.create(id.toString.getBytes)).toArray
-//
-//    //Given this partition is on leader epoch 72
-//    val epoch = 72
-//    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
-//
-//    //When appending messages as a leader
-//    for(i <- records.indices)
-//      log.append(MemoryRecords.withRecords(records(i)), epochCache = mockCache(epoch))
-//
-//    //Then leader epoch should be set on messages
-//    for(i <- records.indices) {
-//      val read = log.read(i, 100, Some(i+1)).records.shallowEntries.iterator.next()
-//      assertEquals("Should have set leader epoch", 72, read.record.leaderEpoch())
-//    }
-//  }
+  @Test
+  def shouldApplyEpochToMessageOnAppendIfLeader() {
+    val messageIds = (0 until 50).toArray
+    val records = messageIds.map(id => new SimpleRecord(id.toString.getBytes))
+
+    //Given this partition is on leader epoch 72
+    val epoch = 72
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+
+    //When appending messages as a leader (assignOffsets = true)
+    for (i <- records.indices)
+      log.append(
+        MemoryRecords.withRecords(messageIds(i), CompressionType.NONE, records(i)),
+        epochCache = mockCache(epoch),
+        assignOffsets = true
+      )
+
+    //Then leader epoch should be set on messages
+    for (i <- records.indices) {
+      val read = log.read(i, 100, Some(i+1)).records.batches().iterator.next()
+      assertEquals("Should have set leader epoch", 72, read.partitionLeaderEpoch())
+    }
+  }
 
   @Test
   def followerShouldSaveEpochInformationFromReplicatedMessagesToTheEpochCache() {
-      fail()
-//    val records = (0 until 1).map(id => Record.create(id.toString.getBytes)).toArray
-//    val cache = createMock(classOf[LeaderEpochCache])
-//
-//    //Given each message has an offset & epoch, as msgs from leader would
-//    def recordsForEpoch(i: Int): MemoryRecords = {
-//      val withRecords = MemoryRecords.withRecords(records(i))
-//      withRecords.shallowEntries().asScala.foreach{msg =>
-//        msg.setLeaderEpoch(42)
-//        msg.setOffset(i)
-//      }
-//      witnhRecords
-//    }
-//
-//    //Verify we save the epoch to the cache.
-//    expect(cache.assign(EasyMock.eq(42), anyInt())).times(records.size)
-//    replay(cache)
-//
-//    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
-//
-//    //When
-//    for(i <- records.indices)
-//      log.append(recordsForEpoch(i), assignOffsets = false, epochCache = cache)
-//
-//    verify(cache)
+    val messageIds = (0 until 50).toArray
+    val records = messageIds.map(id => new SimpleRecord(id.toString.getBytes))
+
+    val cache = createMock(classOf[LeaderEpochCache])
+
+    //Given each message has an offset & epoch, as msgs from leader would
+    def recordsForEpoch(i: Int): MemoryRecords = {
+      val recs = MemoryRecords.withRecords(messageIds(i), CompressionType.NONE, records(i))
+      recs.batches().asScala.foreach{record =>
+        record.setPartitionLeaderEpoch(42)
+        record.setLastOffset(i)
+      }
+      recs
+    }
+
+    //Verify we save the epoch to the cache.
+    expect(cache.assign(EasyMock.eq(42), anyInt())).times(records.size)
+    replay(cache)
+
+    val log = new Log(logDir, LogConfig(), recoveryPoint = 0L, time.scheduler, time = time)
+
+    //When appending as follower (assignOffsets = false)
+    for (i <- records.indices)
+      log.append(recordsForEpoch(i), assignOffsets = false, epochCache = cache)
+
+    verify(cache)
   }
 
   @Test
