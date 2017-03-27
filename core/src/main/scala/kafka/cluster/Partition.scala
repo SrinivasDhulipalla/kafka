@@ -149,6 +149,7 @@ class Partition(val topic: String,
     }
   }
 
+  //TODO we could refactor this out, replacing it with a reference to the leader epoch cache??
   def getLeaderEpoch: Int = this.leaderEpoch
 
   /**
@@ -163,12 +164,21 @@ class Partition(val topic: String,
       // to maintain the decision maker controller's epoch in the zookeeper path
       controllerEpoch = partitionStateInfo.controllerEpoch
       // add replicas that are new
-      allReplicas.foreach(replica => getOrCreateReplica(replica))
       val newInSyncReplicas = partitionStateInfo.isr.asScala.map(r => getOrCreateReplica(r)).toSet
       // remove assigned replicas that have been removed by the controller
       (assignedReplicas.map(_.brokerId) -- allReplicas).foreach(removeReplica)
       inSyncReplicas = newInSyncReplicas
+
+      //We cache the leader epoch here, persisting it only if it's local (hence having a log dir)
+      info(s"Leader epoch was updated from $leaderEpoch to ${partitionStateInfo.leaderEpoch}")
       leaderEpoch = partitionStateInfo.leaderEpoch
+      allReplicas.map(id => getOrCreateReplica(id))
+          .filter(_.isLocal)
+              .foreach{replica =>
+                replica.epochs.get.assignToLeo(leaderEpoch)
+                info(s"Broker[${replicaManager.config.brokerId}] Becoming Leader for ${replica.topicPartition} @ Epoch[$leaderEpoch]")
+              }
+
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =
         if (leaderReplicaIdOpt.isDefined && leaderReplicaIdOpt.get == localBrokerId) {

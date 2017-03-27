@@ -102,7 +102,8 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
       ApiKeys.STOP_REPLICA -> classOf[requests.StopReplicaResponse],
       ApiKeys.CONTROLLED_SHUTDOWN_KEY -> classOf[requests.ControlledShutdownResponse],
       ApiKeys.CREATE_TOPICS -> classOf[CreateTopicsResponse],
-      ApiKeys.DELETE_TOPICS -> classOf[requests.DeleteTopicsResponse]
+      ApiKeys.DELETE_TOPICS -> classOf[requests.DeleteTopicsResponse],
+      ApiKeys.OFFSET_FOR_LEADER_EPOCH -> classOf[requests.OffsetForLeaderEpochResponse]
   )
 
   val RequestKeyToError = Map[ApiKeys, (Nothing) => Errors](
@@ -122,7 +123,8 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
     ApiKeys.STOP_REPLICA -> ((resp: requests.StopReplicaResponse) => resp.responses().asScala.find(_._1 == tp).get._2),
     ApiKeys.CONTROLLED_SHUTDOWN_KEY -> ((resp: requests.ControlledShutdownResponse) => resp.error),
     ApiKeys.CREATE_TOPICS -> ((resp: CreateTopicsResponse) => resp.errors().asScala.find(_._1 == createTopic).get._2.error),
-    ApiKeys.DELETE_TOPICS -> ((resp: requests.DeleteTopicsResponse) => resp.errors().asScala.find(_._1 == deleteTopic).get._2)
+    ApiKeys.DELETE_TOPICS -> ((resp: requests.DeleteTopicsResponse) => resp.errors().asScala.find(_._1 == deleteTopic).get._2),
+    ApiKeys.OFFSET_FOR_LEADER_EPOCH -> ((resp: requests.OffsetForLeaderEpochResponse) => resp.responses.asScala.find(_._1 == topic).get._2.asScala.find(_.partitionId() == tp.partition()).get.error())
   )
 
   val RequestKeysToAcls = Map[ApiKeys, Map[Resource, Set[Acl]]](
@@ -142,7 +144,8 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
     ApiKeys.STOP_REPLICA -> ClusterAcl,
     ApiKeys.CONTROLLED_SHUTDOWN_KEY -> ClusterAcl,
     ApiKeys.CREATE_TOPICS -> ClusterCreateAcl,
-    ApiKeys.DELETE_TOPICS -> TopicDeleteAcl
+    ApiKeys.DELETE_TOPICS -> TopicDeleteAcl,
+    ApiKeys.OFFSET_FOR_LEADER_EPOCH -> ClusterAcl
   )
 
   @Before
@@ -199,6 +202,10 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
     requests.ListOffsetRequest.Builder.forConsumer(false).setTargetTimes(
       Map(tp -> (0L: java.lang.Long)).asJava).
       build()
+  }
+
+  private def offsetsForLeaderEpochRequest = {
+    new requests.OffsetForLeaderEpochRequest.Builder().add(topic, new Epoch(tp.partition(), 7)).build()
   }
 
   private def createOffsetFetchRequest = {
@@ -269,23 +276,24 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
   @Test
   def testAuthorizationWithTopicExisting() {
     val requestKeyToRequest = mutable.LinkedHashMap[ApiKeys, AbstractRequest](
-      ApiKeys.METADATA -> createMetadataRequest,
-      ApiKeys.PRODUCE -> createProduceRequest,
-      ApiKeys.FETCH -> createFetchRequest,
-      ApiKeys.LIST_OFFSETS -> createListOffsetsRequest,
-      ApiKeys.OFFSET_FETCH -> createOffsetFetchRequest,
-      ApiKeys.GROUP_COORDINATOR -> createGroupCoordinatorRequest,
-      ApiKeys.UPDATE_METADATA_KEY -> createUpdateMetadataRequest,
-      ApiKeys.JOIN_GROUP -> createJoinGroupRequest,
-      ApiKeys.SYNC_GROUP -> createSyncGroupRequest,
-      ApiKeys.OFFSET_COMMIT -> createOffsetCommitRequest,
-      ApiKeys.HEARTBEAT -> createHeartbeatRequest,
-      ApiKeys.LEAVE_GROUP -> createLeaveGroupRequest,
-      ApiKeys.LEADER_AND_ISR -> createLeaderAndIsrRequest,
-      ApiKeys.STOP_REPLICA -> createStopReplicaRequest,
-      ApiKeys.CONTROLLED_SHUTDOWN_KEY -> createControlledShutdownRequest,
-      ApiKeys.CREATE_TOPICS -> createTopicsRequest,
-      ApiKeys.DELETE_TOPICS -> deleteTopicsRequest
+//      ApiKeys.METADATA -> createMetadataRequest,
+//      ApiKeys.PRODUCE -> createProduceRequest,
+//      ApiKeys.FETCH -> createFetchRequest,
+//      ApiKeys.LIST_OFFSETS -> createListOffsetsRequest,
+//      ApiKeys.OFFSET_FETCH -> createOffsetFetchRequest,
+//      ApiKeys.GROUP_COORDINATOR -> createGroupCoordinatorRequest,
+//      ApiKeys.UPDATE_METADATA_KEY -> createUpdateMetadataRequest,
+//      ApiKeys.JOIN_GROUP -> createJoinGroupRequest,
+//      ApiKeys.SYNC_GROUP -> createSyncGroupRequest,
+//      ApiKeys.OFFSET_COMMIT -> createOffsetCommitRequest,
+//      ApiKeys.HEARTBEAT -> createHeartbeatRequest,
+//      ApiKeys.LEAVE_GROUP -> createLeaveGroupRequest,
+//      ApiKeys.LEADER_AND_ISR -> createLeaderAndIsrRequest,
+//      ApiKeys.STOP_REPLICA -> createStopReplicaRequest,
+//      ApiKeys.CONTROLLED_SHUTDOWN_KEY -> createControlledShutdownRequest,
+//      ApiKeys.CREATE_TOPICS -> createTopicsRequest,
+//      ApiKeys.DELETE_TOPICS -> deleteTopicsRequest,
+      ApiKeys.OFFSET_FOR_LEADER_EPOCH -> offsetsForLeaderEpochRequest
     )
 
     for ((key, request) <- requestKeyToRequest) {
@@ -811,6 +819,7 @@ class AuthorizerIntegrationTest extends BaseRequestTest {
                                         isAuthorized: Boolean,
                                         isAuthorizedTopicDescribe: Boolean,
                                         topicExists: Boolean = true): AbstractResponse = {
+    println("API "+apiKey)
     val resp = connectAndSend(request, apiKey)
     val response = RequestKeyToResponseDeserializer(apiKey).getMethod("parse", classOf[ByteBuffer], classOf[Short]).invoke(
       null, resp, request.version: java.lang.Short).asInstanceOf[AbstractResponse]

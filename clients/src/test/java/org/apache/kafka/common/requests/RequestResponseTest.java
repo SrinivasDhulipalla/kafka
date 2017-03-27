@@ -35,7 +35,10 @@ import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
 import org.apache.kafka.common.record.TimestampType;
+<<<<<<< HEAD
 import org.apache.kafka.common.utils.Utils;
+=======
+>>>>>>> test-branch-ver-eos
 import org.junit.Test;
 
 import java.io.IOException;
@@ -70,7 +73,10 @@ public class RequestResponseTest {
         checkResponse(createControlledShutdownResponse(), 1);
         checkErrorResponse(createControlledShutdownRequest(), new UnknownServerException());
         checkRequest(createFetchRequest(4));
+<<<<<<< HEAD
         checkResponse(createFetchResponse(), 4);
+=======
+>>>>>>> test-branch-ver-eos
         checkErrorResponse(createFetchRequest(4), new UnknownServerException());
         checkRequest(createHeartBeatRequest());
         checkErrorResponse(createHeartBeatRequest(), new UnknownServerException());
@@ -160,6 +166,10 @@ public class RequestResponseTest {
         checkRequest(createListOffsetRequest(0));
         checkErrorResponse(createListOffsetRequest(0), new UnknownServerException());
         checkResponse(createListOffsetResponse(0), 0);
+        checkRequest(createLeaderEpochRequest());
+        checkResponse(createLeaderEpochResponse(), 0);
+        //TODO fix me
+//        checkErrorResponse(createLeaderEpochRequest(), new UnknownServerException());
     }
 
     @Test
@@ -777,6 +787,22 @@ public class RequestResponseTest {
         errors.put("t1", Errors.INVALID_TOPIC_EXCEPTION);
         errors.put("t2", Errors.TOPIC_AUTHORIZATION_FAILED);
         return new DeleteTopicsResponse(errors);
+    }
+
+    private OffsetForLeaderEpochRequest createLeaderEpochRequest() {
+        Map<String, List<Epoch>> epochsByTopic = new HashMap<>();
+        epochsByTopic.put("topic1", Arrays.asList(new Epoch[]{new Epoch(0, 0), new Epoch(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new Epoch[]{new Epoch(2, 2), new Epoch(3, 3)}));
+
+        return new OffsetForLeaderEpochRequest.Builder(epochsByTopic).build();
+    }
+
+    private OffsetForLeaderEpochResponse createLeaderEpochResponse() {
+        Map<String, List<EpochEndOffset>> epochsByTopic = new HashMap<>();
+        epochsByTopic.put("topic1", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(0, 0), new EpochEndOffset(1, 1)}));
+        epochsByTopic.put("topic2", Arrays.asList(new EpochEndOffset[]{new EpochEndOffset(2, 2), new EpochEndOffset(3, 3)}));
+
+        return new OffsetForLeaderEpochResponse(epochsByTopic);
     }
 
     private static class ByteBufferChannel implements GatheringByteChannel {

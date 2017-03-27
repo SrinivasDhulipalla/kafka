@@ -34,6 +34,7 @@ import kafka.network._
 import kafka.network.RequestChannel.{Response, Session}
 import kafka.security.auth
 import kafka.security.auth.{Authorizer, ClusterAction, Create, Delete, Describe, Group, Operation, Read, Resource, Write}
+import kafka.server.epoch.OffsetsForLeaderEpoch
 import kafka.utils.{Exit, Logging, ZKGroupTopicDirs, ZkUtils}
 import org.apache.kafka.common.errors.{ClusterAuthorizationException, NotLeaderForPartitionException, TopicExistsException, UnknownTopicOrPartitionException, UnsupportedForMessageFormatException}
 import org.apache.kafka.common.internals.FatalExitError
@@ -99,6 +100,7 @@ class KafkaApis(val requestChannel: RequestChannel,
         case ApiKeys.API_VERSIONS => handleApiVersionsRequest(request)
         case ApiKeys.CREATE_TOPICS => handleCreateTopicsRequest(request)
         case ApiKeys.DELETE_TOPICS => handleDeleteTopicsRequest(request)
+        case ApiKeys.OFFSET_FOR_LEADER_EPOCH => handleHandleOffsetForLeaderEpochRequest(request)
         case requestId => throw new KafkaException("Unknown api code " + requestId)
       }
     } catch {
@@ -1258,6 +1260,22 @@ class KafkaApis(val requestChannel: RequestChannel,
       }
     }
   }
+
+  def handleHandleOffsetForLeaderEpochRequest(request: RequestChannel.Request): Unit = {
+    val offsetForEpoch = request.body[OffsetForLeaderEpochRequest]
+    val requestInfo = offsetForEpoch.epochsByTopic()
+    authorizeClusterAction(request)
+    info(s"Received OffsetForEpoch Request for ${offsetForEpoch.epochsByTopic()} from ${request.session.clientAddress}")
+
+    val responseBody = new OffsetForLeaderEpochResponse(
+      //TODO we can remove the passing of authroisation info, not needed
+      OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, requestInfo, true)
+    )
+
+    info(s"Returning OffsetForEpoch Request for $responseBody")
+    requestChannel.sendResponse(new RequestChannel.Response(request, responseBody))
+  }
+
 
   def authorizeClusterAction(request: RequestChannel.Request): Unit = {
     if (!authorize(request.session, ClusterAction, Resource.ClusterResource))

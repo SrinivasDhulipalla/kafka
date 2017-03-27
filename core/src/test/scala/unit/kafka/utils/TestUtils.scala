@@ -37,6 +37,7 @@ import kafka.producer._
 import kafka.security.auth.{Acl, Authorizer, Resource}
 import kafka.serializer.{DefaultEncoder, Encoder, StringEncoder}
 import kafka.server._
+import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
 import kafka.utils.ZkUtils._
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{KafkaConsumer, RangeAssignor}
@@ -771,6 +772,8 @@ object TestUtils extends Logging {
       fail("Timing out after %d ms since leader is not elected or changed for partition [%s,%d]"
            .format(timeoutMs, topic, partition))
 
+    //TODO don't merge me
+    Thread.sleep(1000)
     leader
   }
 
@@ -1077,7 +1080,7 @@ object TestUtils extends Logging {
     // ensure that topic is removed from all cleaner offsets
     TestUtils.waitUntilTrue(() => servers.forall(server => topicPartitions.forall { tp =>
       val checkpoints = server.getLogManager().logDirs.map { logDir =>
-        new OffsetCheckpoint(new File(logDir, "cleaner-offset-checkpoint")).read()
+        new OffsetCheckpointFile(new File(logDir, "cleaner-offset-checkpoint")).read()
       }
       checkpoints.forall(checkpointsPerLogDir => !checkpointsPerLogDir.contains(tp))
     }), "Cleaner offset for deleted partition should have been removed")
