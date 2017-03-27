@@ -29,7 +29,6 @@ private object OffsetCheckpoint {
 
 trait OffsetCheckpoint {
   def write(epochs: Seq[EpochEntry])
-
   def read(): Seq[EpochEntry]
 }
 
