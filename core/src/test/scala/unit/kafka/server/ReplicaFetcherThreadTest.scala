@@ -14,14 +14,15 @@
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
-package kafka.server.epoch
-//TODO move this out of epoch package
+package kafka.server
 
 import kafka.cluster.{BrokerEndPoint, Replica}
-import kafka.server._
+import kafka.server.epoch.LeaderEpochCache
+import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
 import kafka.utils.TestUtils
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
+import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.EpochEndOffset
 import org.apache.kafka.common.utils.SystemTime
@@ -29,8 +30,6 @@ import org.easymock.EasyMock._
 import org.easymock.{Capture, CaptureType}
 import org.junit.Assert._
 import org.junit.Test
-import kafka.server.epoch.util.ReplicaFetcherMockBlockingSend
-import org.apache.kafka.common.protocol.Errors
 
 import scala.collection.JavaConverters._
 import scala.collection.Map

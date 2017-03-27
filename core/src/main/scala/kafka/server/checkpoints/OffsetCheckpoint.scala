@@ -18,10 +18,8 @@ package kafka.server.checkpoints
 
 import java.io._
 import java.util.regex.Pattern
-
 import kafka.server.epoch.EpochEntry
 import org.apache.kafka.common.TopicPartition
-
 import scala.collection._
 
 private object OffsetCheckpoint {
@@ -35,7 +33,7 @@ trait OffsetCheckpoint {
 }
 
 /**
-  * This class saves out a map of topic/partition=>offsets to a file
+  * This class persists a map of (Partition => Offsets) to a file (for a certain replica)
   */
 class OffsetCheckpointFile(val f: File) extends CheckpointFileFormatter[(TopicPartition, Long)]{
   val checkpoint = new CheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion, this)

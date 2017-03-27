@@ -35,7 +35,6 @@ import scala.collection.mutable.Buffer
 
 /* We have some tests in this class instead of `BaseConsumerTest` in order to keep the build time under control. */
 class PlaintextConsumerTest extends BaseConsumerTest {
-  //Not sure this helps
   serverConfig.put(KafkaConfig.OffsetsTopicPartitionsProp, "5")//TODO don't merge me - us seperate fix in https://github.com/apache/kafka/pull/2734
 
   @Test
@@ -651,15 +650,8 @@ class PlaintextConsumerTest extends BaseConsumerTest {
     val largeRecord = new ProducerRecord(tp.topic(), tp.partition(), "large".getBytes,
       new Array[Byte](largeProducerRecordSize))
 
-<<<<<<< HEAD
     this.producers.head.send(smallRecord).get
     this.producers.head.send(largeRecord).get
-=======
-    this.producers.head.send(smallRecord)
-    this.producers.head.flush()
-    this.producers.head.send(largeRecord)
-    this.producers.head.flush()
->>>>>>> test-branch-ver-eos
 
     // we should only get the small record in the first `poll`
     consumer0.assign(List(tp).asJava)

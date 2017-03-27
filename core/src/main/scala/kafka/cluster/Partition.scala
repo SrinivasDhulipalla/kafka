@@ -149,7 +149,7 @@ class Partition(val topic: String,
     }
   }
 
-  //TODO we could refactor this out, replacing it with a reference to the leader epoch cache??
+  //TODO Maybe refactor this out, replacing it with a reference to the leader epoch cache (or remove this comment)
   def getLeaderEpoch: Int = this.leaderEpoch
 
   /**
@@ -178,7 +178,6 @@ class Partition(val topic: String,
                 replica.epochs.get.assignToLeo(leaderEpoch)
                 info(s"Broker[${replicaManager.config.brokerId}] Becoming Leader for ${replica.topicPartition} @ Epoch[$leaderEpoch]")
               }
-
       zkVersion = partitionStateInfo.zkVersion
       val isNewLeader =
         if (leaderReplicaIdOpt.isDefined && leaderReplicaIdOpt.get == localBrokerId) {

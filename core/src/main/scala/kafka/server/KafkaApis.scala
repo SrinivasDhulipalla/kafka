@@ -1265,11 +1265,9 @@ class KafkaApis(val requestChannel: RequestChannel,
     val offsetForEpoch = request.body[OffsetForLeaderEpochRequest]
     val requestInfo = offsetForEpoch.epochsByTopic()
     authorizeClusterAction(request)
-    info(s"Received OffsetForEpoch Request for ${offsetForEpoch.epochsByTopic()} from ${request.session.clientAddress}")
 
     val responseBody = new OffsetForLeaderEpochResponse(
-      //TODO we can remove the passing of authroisation info, not needed
-      OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, requestInfo, true)
+      OffsetsForLeaderEpoch.getResponseFor(replicaManager, requestInfo)
     )
 
     info(s"Returning OffsetForEpoch Request for $responseBody")

@@ -102,6 +102,8 @@ class LogManagerTest {
     time.sleep(maxLogAgeMs + 1)
     assertEquals("Now there should only be only one segment in the index.", 1, log.numberOfSegments)
     time.sleep(log.config.fileDeleteDelayMs + 1)
+
+    //There should be a log file, two indexes and the leader epoch checkpoint
     assertEquals("Files should have been deleted", log.numberOfSegments * 3 + 1, log.dir.list.length)
     assertEquals("Should get empty fetch off new log.", 0, log.read(offset+1, 1024).records.sizeInBytes)
 
@@ -148,6 +150,8 @@ class LogManagerTest {
     time.sleep(logManager.InitialTaskDelayMs)
     assertEquals("Now there should be exactly 6 segments", 6, log.numberOfSegments)
     time.sleep(log.config.fileDeleteDelayMs + 1)
+
+    //There should be a log file, two indexes and the leader epoch checkpoint
     assertEquals("Files should have been deleted", log.numberOfSegments * 3 + 1, log.dir.list.length)
     assertEquals("Should get empty fetch off new log.", 0, log.read(offset + 1, 1024).records.sizeInBytes)
     try {

@@ -17,36 +17,31 @@
 package kafka.server.epoch
 
 import java.util.{List => JList, Map => JMap}
-
 import kafka.server.ReplicaManager
+import kafka.utils.Logging
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.protocol.Errors
 import org.apache.kafka.common.protocol.Errors._
 import org.apache.kafka.common.requests.EpochEndOffset._
 import org.apache.kafka.common.requests.{Epoch, EpochEndOffset}
-
 import scala.collection.JavaConverters._
 
 
-object OffsetsForLeaderEpoch {
+object OffsetsForLeaderEpoch extends Logging {
 
-  def getOffsetsForEpochs(replicaManager: ReplicaManager,
-                          requestedEpochInfo: JMap[String, JList[Epoch]],
-                          authorised: Boolean): JMap[String, JList[EpochEndOffset]] = {
+  def getResponseFor(replicaManager: ReplicaManager,
+                     requestedEpochInfo: JMap[String, JList[Epoch]]): JMap[String, JList[EpochEndOffset]] = {
+    info(s"Processing OffsetForEpochRequest: $requestedEpochInfo")
+
     requestedEpochInfo.asScala.map { case (topic, epochs) =>
       val lastOffsetsByEpoch = epochs.asScala.map { epoch =>
-        if (authorised) {
-          replicaManager.getReplica(new TopicPartition(topic, epoch.partitionId)) match {
-            case Some(replica) =>
-                val offset = replica.epochs.get.endOffsetFor(epoch.epoch)
-                new EpochEndOffset(epoch.partitionId, offset)
-            case None => new EpochEndOffset(NOT_LEADER_FOR_PARTITION, epoch.partitionId, UNDEFINED_OFFSET)
-          }
-        } else {
-          new EpochEndOffset(Errors.CLUSTER_AUTHORIZATION_FAILED, epoch.partitionId)
+        replicaManager.getReplica(new TopicPartition(topic, epoch.partitionId)) match {
+          case Some(replica) =>
+            val offset = replica.epochs.get.endOffsetFor(epoch.epoch)
+            new EpochEndOffset(epoch.partitionId, offset)
+          case None => new EpochEndOffset(NOT_LEADER_FOR_PARTITION, epoch.partitionId, UNDEFINED_OFFSET)
         }
       }.asJava
-      
+
       (topic, lastOffsetsByEpoch)
     }.asJava
   }

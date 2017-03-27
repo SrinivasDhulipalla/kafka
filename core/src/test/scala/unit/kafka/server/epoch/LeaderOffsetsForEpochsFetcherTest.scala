@@ -29,7 +29,7 @@ import scala.collection.JavaConverters._
 /**
   * Unit test for the LeaderEpochFetcher
   */
-class LeaderEpochFetcherTest {
+class LeaderOffsetsForEpochsFetcherTest {
 
   @Test
   def shouldProcessEpochResponseFromMultiplePartitions(): Unit = {
@@ -51,7 +51,7 @@ class LeaderEpochFetcherTest {
     expect(clientResponse.responseBody()).andStubReturn(epochResponse)
     replay(sender, clientResponse, epochResponse)
 
-    val fetcher = new LeaderEpochFetcher(sender)
+    val fetcher = new LeaderOffsetsForEpochsFetcher(sender)
 
     val response = fetcher.leaderOffsetsFor(Set(
       new PartitionEpoch(tp0, 5),
@@ -81,7 +81,7 @@ class LeaderEpochFetcherTest {
     expect(clientResponse.responseBody()).andStubReturn(epochResponse)
     replay(sender, clientResponse, epochResponse)
 
-    val fetcher = new LeaderEpochFetcher(sender)
+    val fetcher = new LeaderOffsetsForEpochsFetcher(sender)
 
     val response = fetcher.leaderOffsetsFor(Set(
       new PartitionEpoch(tp0, 5),

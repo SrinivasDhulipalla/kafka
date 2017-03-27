@@ -14,6 +14,7 @@ import org.apache.kafka.common.utils.Time
 import scala.collection.JavaConverters._
 
 trait BlockingSend {
+
   def sendRequest(requestBuilder: AbstractRequest.Builder[_ <: AbstractRequest]): ClientResponse
 
   def close()

@@ -366,7 +366,6 @@ class ReplicaManager(val config: KafkaConfig,
     requiredAcks == -1 || requiredAcks == 1 || requiredAcks == 0
   }
 
-
   /**
    * Append the messages to the local replica logs
    */

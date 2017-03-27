@@ -30,8 +30,10 @@ import org.apache.kafka.common.utils.{SystemTime, Time}
 
 import scala.collection.JavaConverters._
 
-class TestSender(destination: Node, brokerConfig: KafkaConfig, metrics: Metrics, time: Time) extends BlockingSend{
-
+/**
+  * Wrapper around the network client used for testing KafkaAPI integration
+  */
+class TestSender(destination: Node, brokerConfig: KafkaConfig, metrics: Metrics, time: Time) extends BlockingSend {
 
   private val networkClient = {
     val channelBuilder = ChannelBuilders.clientChannelBuilder(
@@ -91,4 +93,3 @@ class TestSender(destination: Node, brokerConfig: KafkaConfig, metrics: Metrics,
     networkClient.close()
   }
 }
-

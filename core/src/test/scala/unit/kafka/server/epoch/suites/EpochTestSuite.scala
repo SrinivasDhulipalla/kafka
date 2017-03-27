@@ -1,17 +1,3 @@
-package unit.kafka.server.epoch.suites
-
-import kafka.integration.FetcherTest
-import kafka.log.{LogSegmentTest, LogTest, LogValidatorTest}
-import kafka.message.MessageCompressionTest
-import kafka.server.LogRecoveryTest
-import kafka.server.epoch._
-import org.apache.kafka.common.requests.RequestResponseTest
-import org.junit.runner.RunWith
-import org.junit.runners.Suite
-import org.junit.runners.Suite.SuiteClasses
-import unit.kafka.server.checkpoints.{LeaderEpochCheckpointFileTest, OffsetCheckpointFileTest}
-import unit.kafka.server.epoch.OffsetsForLeaderEpochTest
-
 /**
   * Licensed to the Apache Software Foundation (ASF) under one or more
   * contributor license agreements.  See the NOTICE file distributed with
@@ -28,6 +14,19 @@ import unit.kafka.server.epoch.OffsetsForLeaderEpochTest
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+package kafka.server.epoch.suites
+
+import kafka.integration.FetcherTest
+import kafka.log.{LogSegmentTest, LogTest, LogValidatorTest}
+import kafka.message.MessageCompressionTest
+import kafka.server.checkpoints.LeaderEpochCheckpointFileTest
+import kafka.server.{LogRecoveryTest, ReplicaFetcherThreadTest}
+import kafka.server.epoch._
+import org.apache.kafka.common.requests.RequestResponseTest
+import org.junit.runner.RunWith
+import org.junit.runners.Suite
+import org.junit.runners.Suite.SuiteClasses
+import unit.kafka.server.checkpoints.OffsetCheckpointFileTest
 
 /**
   * Set of tests relating to Epoch Functionality
@@ -41,7 +40,7 @@ import unit.kafka.server.epoch.OffsetsForLeaderEpochTest
   classOf[OffsetsForLeaderEpochTest],
   classOf[OffsetsForLeaderEpochIntegrationTest],
   classOf[ReplicaFetcherThreadTest],
-  classOf[LeaderEpochFetcherTest],
+  classOf[LeaderOffsetsForEpochsFetcherTest],
   classOf[LeaderEpochFileCacheTest],
 
   //Checkpoint

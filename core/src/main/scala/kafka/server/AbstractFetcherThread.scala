@@ -46,8 +46,8 @@ abstract class AbstractFetcherThread(name: String,
                                      clientId: String,
                                      val sourceBroker: BrokerEndPoint,
                                      fetchBackOffMs: Int = 0,
-                                     includePartitionInitialisation: Boolean,
-                                     isInterruptible: Boolean = true
+                                     isInterruptible: Boolean = true,
+                                     includePartitionInitialisation: Boolean
                                     )
   extends ShutdownableThread(name, isInterruptible) {
 
@@ -91,9 +91,7 @@ abstract class AbstractFetcherThread(name: String,
     fetcherLagStats.unregister()
   }
 
-  def states(): Seq[(TopicPartition, PartitionFetchState)] = partitionStates.partitionStates.asScala.map { state =>
-    state.topicPartition -> state.value
-  }
+  def states() = partitionStates.partitionStates.asScala.map { state => state.topicPartition -> state.value}
 
   override def doWork() {
     val fetchRequest = inLock(partitionMapLock) {
@@ -215,13 +213,16 @@ abstract class AbstractFetcherThread(name: String,
         !partitionStates.contains(tp)
       }.map { case (tp, offset) =>
         val fetchState =
-          if (PartitionTopicInfo.isOffsetInvalid(offset)) new PartitionFetchState(handleOffsetOutOfRange(tp), includePartitionInitialisation)
-          else new PartitionFetchState(offset, includePartitionInitialisation)
+          if (PartitionTopicInfo.isOffsetInvalid(offset))
+            new PartitionFetchState(
+              handleOffsetOutOfRange(tp),
+              includePartitionInitialisation
+            )
+          else
+            new PartitionFetchState(offset, includePartitionInitialisation)
         tp -> fetchState
       }
-      val existingPartitionToState = partitionStates.partitionStates.asScala.map { state =>
-        state.topicPartition -> state.value
-      }.toMap
+      val existingPartitionToState = states().toMap
       partitionStates.set((existingPartitionToState ++ newPartitionToState).asJava)
       partitionMapCond.signalAll()
     } finally partitionMapLock.unlock()
@@ -232,7 +233,7 @@ abstract class AbstractFetcherThread(name: String,
     try {
       val existingPartitionToState = partitionStates.partitionStates.asScala.map { state =>
         val overriddenOffset = newOffsets.getOrElse(state.topicPartition, state.value.offset)
-        state.topicPartition ->  new PartitionFetchState(overriddenOffset, state.value.delay, false)
+        state.topicPartition ->  new PartitionFetchState(overriddenOffset, state.value.delay)
       }.toMap
       partitionStates.set(existingPartitionToState.asJava)
       partitionMapCond.signalAll()
@@ -372,6 +373,8 @@ case class ClientIdTopicPartition(clientId: String, topic: String, partitionId: 
 case class PartitionFetchState(offset: Long, delay: DelayedItem, initialising: Boolean = false) {
 
   def this(offset: Long, initialising: Boolean) = this(offset, new DelayedItem(0), initialising)
+
+  def this(offset: Long, delay: DelayedItem) = this(offset, new DelayedItem(0), false)
 
   def this(offset: Long) = this(offset, new DelayedItem(0))
 

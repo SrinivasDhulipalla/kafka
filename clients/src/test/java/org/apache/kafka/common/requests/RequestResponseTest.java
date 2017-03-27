@@ -35,10 +35,7 @@ import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.MemoryRecordsBuilder;
 import org.apache.kafka.common.record.TimestampType;
-<<<<<<< HEAD
 import org.apache.kafka.common.utils.Utils;
-=======
->>>>>>> test-branch-ver-eos
 import org.junit.Test;
 
 import java.io.IOException;
@@ -46,14 +43,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -73,10 +63,7 @@ public class RequestResponseTest {
         checkResponse(createControlledShutdownResponse(), 1);
         checkErrorResponse(createControlledShutdownRequest(), new UnknownServerException());
         checkRequest(createFetchRequest(4));
-<<<<<<< HEAD
         checkResponse(createFetchResponse(), 4);
-=======
->>>>>>> test-branch-ver-eos
         checkErrorResponse(createFetchRequest(4), new UnknownServerException());
         checkRequest(createHeartBeatRequest());
         checkErrorResponse(createHeartBeatRequest(), new UnknownServerException());
@@ -168,8 +155,7 @@ public class RequestResponseTest {
         checkResponse(createListOffsetResponse(0), 0);
         checkRequest(createLeaderEpochRequest());
         checkResponse(createLeaderEpochResponse(), 0);
-        //TODO fix me
-//        checkErrorResponse(createLeaderEpochRequest(), new UnknownServerException());
+        checkErrorResponse(createLeaderEpochRequest(), new UnknownServerException());
     }
 
     @Test

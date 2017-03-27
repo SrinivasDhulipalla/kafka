@@ -91,8 +91,7 @@ class Log(@volatile var dir: File,
           @volatile var config: LogConfig,
           @volatile var recoveryPoint: Long = 0L,
           scheduler: Scheduler,
-          time: Time = Time.SYSTEM
-         ) extends Logging with KafkaMetricsGroup {
+          time: Time = Time.SYSTEM) extends Logging with KafkaMetricsGroup {
 
   import kafka.log.Log._
 
@@ -414,7 +413,6 @@ class Log(@volatile var dir: File,
           }
         } else {
           //Update the epoch cache with the epoch stamped by the leader
-          //TODO There may be a more efficeint way to do this post message set rebase
           records.batches().asScala.map { entry =>
             epochCache.assign(entry.partitionLeaderEpoch, entry.baseOffset())
           }
@@ -434,7 +432,6 @@ class Log(@volatile var dir: File,
         val segment = maybeRoll(messagesSize = validRecords.sizeInBytes,
           maxTimestampInMessages = appendInfo.maxTimestamp,
           maxOffsetInMessages = appendInfo.lastOffset)
-
 
         // now append to the log
         segment.append(firstOffset = appendInfo.firstOffset,
@@ -914,8 +911,8 @@ class Log(@volatile var dir: File,
         this.recoveryPoint = math.min(targetOffset, this.recoveryPoint)
       }
     }
-    //Shouldn't need this as we clear in deleteSegment and
-    leaderEpochCache.clearLatest(targetOffset, false)
+    //Shouldn't need this as we clear in deleteSegment
+    leaderEpochCache.clearLatest(targetOffset, false) //TODO hmm... might be clearer to clear the epoch cache with each segment
   }
 
   /**
@@ -938,7 +935,7 @@ class Log(@volatile var dir: File,
                                 initFileSize = initFileSize,
                                 preallocate = config.preallocate))
       updateLogEndOffset(newOffset)
-      leaderEpochCache.clearLatest(newOffset, false)
+      leaderEpochCache.clearLatest(newOffset, false) //TODO can we roll this ito deleteSegment for clarity????
       this.recoveryPoint = math.min(newOffset, this.recoveryPoint)
     }
   }
@@ -985,11 +982,13 @@ class Log(@volatile var dir: File,
    * deleting a file while it is being read from.
    *
    * @param segment The log segment to schedule for deletion
+   * @param deleteCorrespondingLeaderEpochs Optionally clear the epoch cache
    */
-  private def deleteSegment(segment: LogSegment, deleteEpochCache: Boolean = true) {
+  private def deleteSegment(segment: LogSegment, deleteCorrespondingLeaderEpochs: Boolean = true) {
     info("Scheduling log segment %d for log %s for deletion.".format(segment.baseOffset, name))
     lock synchronized {
-      if(deleteEpochCache) leaderEpochCache.clearOldest(segment.nextOffset(), true)
+      if(deleteCorrespondingLeaderEpochs)
+        leaderEpochCache.clearOldest(segment.nextOffset(), true)
       segments.remove(segment.baseOffset)
       asyncDeleteSegment(segment)
     }

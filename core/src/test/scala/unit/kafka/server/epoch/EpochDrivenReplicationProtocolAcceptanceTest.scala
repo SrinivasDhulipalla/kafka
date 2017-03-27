@@ -40,21 +40,20 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ListBuffer => Buffer}
 
 /**
+  * These tests were written to assert the addition of leader epochs to the replication protocol fix the problems
+  * described in KIP-101.
   *
-  * These tests were written to assert the addition of leader epochs to messages solve the
-  * problems with the replication protocol described in KIP-101.
-  *
-  * The tests map to the two scenarios described in the KIP:
   * https://cwiki.apache.org/confluence/display/KAFKA/KIP-101+-+Alter+Replication+Protocol+to+use+Leader+Epoch+rather+than+High+Watermark+for+Truncation
   *
+  * A test which validates the end to end workflow is also included.
   */
 class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness with Logging {
 
+  val topic = "topic1"
   val msg = new Array[Byte](1000)
   val msgBigger = new Array[Byte](10000)
   var brokers: Seq[KafkaServer] = null
   var producer: KafkaProducer[Array[Byte], Array[Byte]] = null
-  val topic = "topic1"
   var consumer: KafkaConsumer[Array[Byte], Array[Byte]] = null
 
   @Before
@@ -83,7 +82,7 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     //When one record is written to the leader
     producer.send(new ProducerRecord(topic, 0, null, msg)).get
 
-    //The message should have epoch 0 on it in both leader and follower
+    //The message should have epoch 0 stamped onto it in both leader and follower
     assertEquals(0, latestRecord(leader).partitionLeaderEpoch())
     assertEquals(0, latestRecord(follower).partitionLeaderEpoch())
 
@@ -95,7 +94,9 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     bounce(follower)
     awaitISR(tp)
 
-    //TODO: Not sure why this is or whether it is correct. Ideally the leader epoch shouldn't be affected by the follower bounce.
+    //TODO: Bouncing the follower causes the leader epoch to change. This should not affect this PR functionally but we should
+    //TODO: explain why it is happening
+
     //Epochs on leader in increase
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1)), epochCache(leader).epochEntries())
     assertEquals(Buffer(EpochEntry(0, 0)), epochCache(follower).epochEntries())
@@ -111,23 +112,22 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     assertEquals(1, latestRecord(leader).partitionLeaderEpoch())
     assertEquals(1, latestRecord(follower).partitionLeaderEpoch())
 
-    //Bounce the leader Epoch -> 2
+    //Bounce the leader. Epoch -> 2
     bounce(leader)
     awaitISR(tp)
 
-    //Epochs 2 should be added to the leader, but not on the follower (yet)
+    //Epochs 2 should be added to the leader, but not on the follower (yet), as there has been no replication.
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1), EpochEntry(2, 2)), epochCache(leader).epochEntries())
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1)), epochCache(follower).epochEntries())
 
     //Send a message
     producer.send(new ProducerRecord(topic, 0, null, msg)).get
 
-    //This should be stamped as epoch 2 on both leader & follower
+    //This should case epoch 2 to propagate to the follower
     assertEquals(2, latestRecord(leader).partitionLeaderEpoch())
     assertEquals(2, latestRecord(follower).partitionLeaderEpoch())
 
-    //The propagation of this message via replication should increase the leader epoch
-    // on the follower, so it now matches the leader
+    //The leader epoch files should now match on leader and follower
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1), EpochEntry(2, 2)), epochCache(leader).epochEntries())
     assertEquals(Buffer(EpochEntry(0, 0), EpochEntry(1, 1), EpochEntry(2, 2)), epochCache(follower).epochEntries())
   }
@@ -137,6 +137,7 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
 
     //Given two brokers
     brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+
     //A single partition topic with 2 replicas
     AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, Map(
       0 -> Seq(100, 101)
@@ -158,14 +159,14 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     //Delete 5 messages from the leader's log on 100
     deleteMessagesFromLogFile(5 * msg.length, brokers(0), 0)
 
-    //Start broker 100 again
+    //Restart broker 100
     brokers(0).startup()
 
     //Bounce the producer (this is required, although I'm unsure as to why?)
     producer.close()
     producer = createProducer()
 
-    //Write ten larger messages
+    //Write ten larger messages (so we can easily distinguish between messages written in the two phases)
     (0 until 10).foreach { _ =>
       producer.send(new ProducerRecord(topic, 0, null, msgBigger))
       producer.flush()
@@ -180,14 +181,12 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
   }
 
-
-  //This is essentially the use case described in https://issues.apache.org/jira/browse/KAFKA-3919
-  //Is currently in "failing mode"
   @Test
   def offsetsShouldNotGoBackwards(): Unit = {
 
     //Given two brokers
     brokers = (100 to 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
+
     //A single partition topic with 2 replicas
     AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, Map(
       0 -> Seq(100, 101)
@@ -219,7 +218,7 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     producer = bufferingProducer()
 
     //Write two large batches of messages. This will ensure that the LeO of the follower's log aligns with the middle
-    //of the a compressed message set in the leader (which, when forwarded will result in offsets going backwards)
+    //of the a compressed message set in the leader (which, when forwarded, will result in offsets going backwards)
     (0 until 77).foreach { _ =>
       producer.send(new ProducerRecord(topic, 0, null, msg))
     }
@@ -256,7 +255,11 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
     assertEquals("Log files should match Broker0 vs Broker 1", getLogFile(brokers(0), 0).length, getLogFile(brokers(1), 0).length)
   }
 
-  @Test //This test doesn't work as expected (i.e. it doesn't fail on trunk). WIP.
+  /**
+    * Unlike the tests above, this test doesn't fail prior to the Leader Epoch Change. I was unable to find a deterministic
+    * method for recreating the fast leader change bug.
+    */
+  @Test
   def shouldSurviveFastLeaderChange(): Unit = {
     val tp = new TopicPartition(topic, 0)
 
@@ -382,7 +385,6 @@ class EpochDrivenReplicationProtocolAcceptanceTest extends ZooKeeperTestHarness 
       leader.replicaManager.getReplicaOrException(tp).partition.inSyncReplicas.map(_.brokerId).size == 2
     }, "")
   }
-
 
   def createProducer(): KafkaProducer[Array[Byte], Array[Byte]] = {
     createNewProducer(getBrokerListStrFromServers(brokers), retries = 5, acks = -1)

@@ -28,7 +28,7 @@ import kafka.common.{KafkaException, KafkaStorageException}
 import kafka.server.{BrokerState, RecoveringFromUncleanShutdown}
 import java.util.concurrent.{ExecutionException, ExecutorService, Executors, Future}
 
-import kafka.server.checkpoints.{OffsetCheckpoint, OffsetCheckpointFile}
+import kafka.server.checkpoints.OffsetCheckpointFile
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Time
 

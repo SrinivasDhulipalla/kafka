@@ -17,14 +17,12 @@
 package kafka.server.epoch
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
-
 import kafka.server.LogOffsetMetadata
 import kafka.server.checkpoints.LeaderEpochCheckpoint
 import kafka.server.epoch.Constants.{UNSUPPORTED_EPOCH, UNSUPPORTED_EPOCH_OFFSET}
 import kafka.utils.CoreUtils._
 import kafka.utils.{Logging}
 import org.apache.kafka.common.requests.EpochEndOffset
-
 import scala.collection.mutable.ListBuffer
 
 trait LeaderEpochCache {
@@ -45,8 +43,8 @@ object Constants {
 /**
   * Represents a cache of (LeaderEpoch => Offset) mappings for a particular replica.
   *
-  * Leader Epoch is the epoch assigned to each leader by the controller
-  * Offset is the offset of the first message in each epoch.
+  * Leader Epoch = epoch assigned to each leader by the controller.
+  * Offset = offset of the first message in each epoch.
   *
   * @param leo a function that determines the log end offset
   * @param checkpoint the checkpoint file
@@ -56,7 +54,7 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
   private[epoch] var epochs = lock synchronized { ListBuffer(checkpoint.read(): _*) }
 
   /**
-    * Assigns the passed Leader Epoch to the current LEO
+    * Assigns the supplied Leader Epoch to the current LEO
     * Once the epoch is assigned it cannot be reassigned
     *
     * @param epoch
@@ -66,7 +64,7 @@ class LeaderEpochFileCache(leo: () => LogOffsetMetadata, checkpoint: LeaderEpoch
   }
 
   /**
-    * Assigns the passed Leader Epoch to the passed Offset
+    * Assigns the supplied Leader Epoch to the supplied Offset
     * Once the epoch is assigned it cannot be reassigned
     *
     * @param epoch

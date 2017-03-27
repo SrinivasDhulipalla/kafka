@@ -348,7 +348,7 @@ class LogSegmentTest {
   }
 
   @Test
-  def shouldTruncateEvenIfGivenOffsetIsMissing() {
+  def shouldTruncateEvenIfOffsetPointsToAGapInTheLog() {
     val seg = createSegment(40)
     val offset = 40
 
@@ -357,12 +357,12 @@ class LogSegmentTest {
         new SimpleRecord(offset * 1000, record.getBytes))
 
     //Given two messages with a gap between them (e.g. mid offset compacted away)
-    val ms1 = records(offset, "hello")
+    val ms1 = records(offset, "first message")
     seg.append(offset, offset, RecordBatch.NO_TIMESTAMP, -1L, ms1)
-    val ms2 = records(offset + 3, "hello")
+    val ms2 = records(offset + 3, "message after gap")
     seg.append(offset + 3, offset + 1, RecordBatch.NO_TIMESTAMP, -1L, ms2)
 
-    // When we truncate to an offset that is 'missing'
+    // When we truncate to an offset without a corresponding log entry
     seg.truncateTo(offset + 1)
 
     //Then we should still truncate the record that was present (i.e. offset + 3 is gone)

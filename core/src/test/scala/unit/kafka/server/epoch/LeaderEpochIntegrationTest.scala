@@ -108,7 +108,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     }
     producer.flush()
 
-    val fetcher = new LeaderEpochFetcher(sender(brokers(2), brokers(0)))
+    val fetcher = new LeaderOffsetsForEpochsFetcher(sender(brokers(2), brokers(0)))
     val epochsRequested = Set(new PartitionEpoch(t1p0, 0), new PartitionEpoch(t1p1, 0))
 
     //When
@@ -124,7 +124,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
   }
 
   @Test
-  def shouldIncreaseVisibleLeaderEpochBetweenBrokerRestartsOfLeader(): Unit ={
+  def shouldIncreaseLeaderEpochBetweenLeaderRestarts(): Unit ={
 
     //Setup: we are only interested in the single partition on broker 101
     brokers = Seq(100, 101).map { id => createServer(fromProps(createBrokerConfig(id, zkConnect))) }
@@ -135,7 +135,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
 
     //1. Given a single message
     producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
-    var fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+    var fetcher = new LeaderOffsetsForEpochsFetcher(sender(brokers(0), brokers(1)))
 
     //Then epoch should be 0 and leo: 1
     var offset = fetcher.leaderOffsetsFor(epoch(0))(tp).endOffset()
@@ -148,7 +148,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     brokers(1).startup()
 
     producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
-    fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+    fetcher = new LeaderOffsetsForEpochsFetcher(sender(brokers(0), brokers(1)))
 
 
     //Then epoch 0 should still be the start offset of epoch 1
@@ -165,7 +165,7 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     brokers(1).startup()
 
     producer.send(new ProducerRecord(tp.topic, tp.partition, null, "IHeartLogs".getBytes)).get
-    fetcher = new LeaderEpochFetcher(sender(brokers(0), brokers(1)))
+    fetcher = new LeaderOffsetsForEpochsFetcher(sender(brokers(0), brokers(1)))
 
 
     //Then Epoch 0 should still map to offset 1
@@ -182,8 +182,8 @@ class LeaderEpochIntegrationTest extends ZooKeeperTestHarness with Logging {
     shouldSupportRequestsForEpochsNotOnTheLeader(fetcher)
   }
 
-  //Linked to previous test to save on setup cost.
-  def shouldSupportRequestsForEpochsNotOnTheLeader(fetcher: LeaderEpochFetcher): Unit ={
+  //Appended onto the previous test to save on setup cost.
+  def shouldSupportRequestsForEpochsNotOnTheLeader(fetcher: LeaderOffsetsForEpochsFetcher): Unit ={
     def epoch(e: Int) = Set(new PartitionEpoch(t1p0, e))
 
     /**

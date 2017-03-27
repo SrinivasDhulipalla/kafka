@@ -24,11 +24,10 @@ import kafka.cluster.BrokerEndPoint
 import kafka.api.{FetchRequest => _, _}
 import kafka.common.KafkaStorageException
 import kafka.utils.Exit
-import org.apache.kafka.clients.{ApiVersions, ClientResponse, ManualMetadataUpdater, NetworkClient}
 import org.apache.kafka.common.internals.FatalExitError
 import kafka.log.LogConfig
 import kafka.server.ReplicaFetcherThread._
-import kafka.server.epoch.{LeaderEpochFetcher, LeaderEpochCache, PartitionEpoch}
+import kafka.server.epoch.{LeaderOffsetsForEpochsFetcher, LeaderEpochCache, PartitionEpoch}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.metrics.Metrics
 import org.apache.kafka.common.protocol.Errors
@@ -47,25 +46,25 @@ class ReplicaFetcherThread(name: String,
                            metrics: Metrics,
                            time: Time,
                            quota: ReplicationQuotaManager,
-                           blockingSend: Option[BlockingSend] = None)
+                           leaderEndpointBlockingSend: Option[BlockingSend] = None)
   extends AbstractFetcherThread(name = name,
                                 clientId = name,
                                 sourceBroker = sourceBroker,
                                 fetchBackOffMs = brokerConfig.replicaFetchBackoffMs,
-                                includePartitionInitialisation = true,
-                                isInterruptible = false) {
+                                isInterruptible = false,
+                                includePartitionInitialisation = true) {
 
   type REQ = FetchRequest
   type PD = PartitionData
 
-  private val network = blockingSend.getOrElse(new ReplicaFetcherBlockingSend(sourceBroker, brokerConfig, metrics, time, fetcherId, clientId))
+  private val leaderEndpoint = leaderEndpointBlockingSend.getOrElse(
+    new ReplicaFetcherBlockingSend(sourceBroker, brokerConfig, metrics, time, fetcherId, clientId))
   private val fetchRequestVersion: Short =
     if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_11_0_IV0) 4
     else if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_10_1_IV1) 3
     else if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_10_0_IV0) 2
     else if (brokerConfig.interBrokerProtocolVersion >= KAFKA_0_9_0) 1
     else 0
-  private val socketTimeout: Int = brokerConfig.replicaSocketTimeoutMs
   private val replicaId = brokerConfig.brokerId
   private val maxWait = brokerConfig.replicaFetchWaitMaxMs
   private val minBytes = brokerConfig.replicaFetchMinBytes
@@ -73,10 +72,10 @@ class ReplicaFetcherThread(name: String,
   private val fetchSize = brokerConfig.replicaFetchMaxBytes
   private def epochCache(tp: TopicPartition): LeaderEpochCache =  replicaMgr.getReplica(tp).get.epochs.get
   private def clientId = name
-git 
+
   override def shutdown(): Unit = {
     super.shutdown()
-    network.close()
+    leaderEndpoint.close()
   }
 
   // process fetched data
@@ -93,6 +92,7 @@ git
         trace("Follower %d has replica log end offset %d for partition %s. Received %d messages and leader hw %d"
           .format(replica.brokerId, replica.logEndOffset.messageOffset, topicPartition, records.sizeInBytes, partitionData.highWatermark))
 
+      // Append the leader's messages to the log
       replica.log.get.append(records, assignOffsets = false)
 
       if (logger.isTraceEnabled)
@@ -200,7 +200,7 @@ git
   }
 
   protected def fetch(fetchRequest: FetchRequest): Seq[(TopicPartition, PartitionData)] = {
-    val clientResponse = network.sendRequest(fetchRequest.underlying)
+    val clientResponse = leaderEndpoint.sendRequest(fetchRequest.underlying)
     val fetchResponse = clientResponse.responseBody.asInstanceOf[FetchResponse]
     fetchResponse.responseData.asScala.toSeq.map { case (key, value) =>
       key -> new PartitionData(value)
@@ -215,7 +215,7 @@ git
         val partitions = Map(topicPartition -> new ListOffsetRequest.PartitionData(earliestOrLatest, 1))
         ListOffsetRequest.Builder.forReplica(0, replicaId).setOffsetData(partitions.asJava)
       }
-    val clientResponse = network.sendRequest(requestBuilder)
+    val clientResponse = leaderEndpoint.sendRequest(requestBuilder)
     val response = clientResponse.responseBody.asInstanceOf[ListOffsetResponse]
     val partitionData = response.responseData.get(topicPartition)
     partitionData.error match {
@@ -228,6 +228,15 @@ git
     }
   }
 
+  /**
+    * - Check to see if we have any partitions that are in an initialising state.
+    * - If there are, send a message to the leader to retrieve the latest offset
+    *   or each partition's local epoch. This is the offset the follower
+    *   should truncate to ensure accurate log replication.
+    * - Finally truncate the logs for initialising partitions and mark them
+    *   initialised.
+    * @param allPartitions
+    */
   override protected def initialisePartitions(allPartitions: Seq[(TopicPartition, PartitionFetchState)]) = {
     val partitions = allPartitions.filter { case (_, state) => state.isInitialising }.toMap
     val epochRequests = partitions.keys.map { tp => PartitionEpoch(tp, epochCache(tp).latestEpoch) }.toSet
@@ -253,9 +262,10 @@ git
   }
 
   /**
-    * if there is an error we truncate to the HWM
-    * if the leader's offset is greater, we stick with the Log End Offset
-    * otherwise we truncate to the leaders offset.
+    * - Truncate the log to the leader's offset for each partition's epoch.
+    * - If the leader's offset is greater, we stick with the Log End Offset
+    *   otherwise we truncate to the leaders offset.
+    * - If no epoch was supplied by the leader then use the HighWatermark
     */
   def truncate(epochOffsets: Map[TopicPartition, EpochEndOffset]): Map[TopicPartition, Long] = {
     val truncationPoints = epochOffsets
@@ -285,7 +295,7 @@ git
   }
 
   def fetchEpochsFromLeader(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
-    new LeaderEpochFetcher(network).leaderOffsetsFor(partitions)
+    new LeaderOffsetsForEpochsFetcher(leaderEndpoint).leaderOffsetsFor(partitions)
   }
 }
 

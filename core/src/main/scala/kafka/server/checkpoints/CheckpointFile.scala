@@ -1,14 +1,3 @@
-package kafka.server.checkpoints
-
-import java.io._
-import java.nio.charset.StandardCharsets
-import java.nio.file.{FileSystems, Paths}
-
-import kafka.utils.Logging
-import org.apache.kafka.common.utils.Utils
-
-import scala.collection.{Seq, mutable}
-
 /**
   * Licensed to the Apache Software Foundation (ASF) under one or more
   * contributor license agreements.  See the NOTICE file distributed with
@@ -25,6 +14,14 @@ import scala.collection.{Seq, mutable}
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+package kafka.server.checkpoints
+
+import java.io._
+import java.nio.charset.StandardCharsets
+import java.nio.file.{FileSystems, Paths}
+import kafka.utils.Logging
+import org.apache.kafka.common.utils.Utils
+import scala.collection.{Seq, mutable}
 
 trait CheckpointFileFormatter[T]{
   def toLine(entry: T): String

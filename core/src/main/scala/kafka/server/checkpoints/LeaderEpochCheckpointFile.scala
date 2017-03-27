@@ -17,20 +17,8 @@
 package kafka.server.checkpoints
 
 import java.io._
-import java.nio.file.{FileSystems, Paths}
-import java.util.regex.Pattern
-
 import kafka.server.epoch.EpochEntry
-import kafka.utils.Logging
-import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.utils.Utils
-
 import scala.collection._
-
-private object LeaderEpochCheckpointFile {
-  private val WhiteSpacesPattern = Pattern.compile("\\s+")
-  private val CurrentVersion = 0
-}
 
 trait LeaderEpochCheckpoint {
   def write(epochs: Seq[EpochEntry])
@@ -43,7 +31,7 @@ object LeaderEpochFile {
 }
 
 /**
-  * This class saves out a map of LeaderEpoch=>offsets to a file for a certain replica
+  * This class persists a map of (LeaderEpoch => Offsets) to a file (for a certain replica)
   */
 class LeaderEpochCheckpointFile(val file: File) extends CheckpointFileFormatter[EpochEntry] with LeaderEpochCheckpoint {
   val checkpoint = new CheckpointFile[EpochEntry](file, OffsetCheckpoint.CurrentVersion, this)

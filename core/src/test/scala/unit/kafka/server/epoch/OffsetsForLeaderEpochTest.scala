@@ -1,4 +1,3 @@
-package unit.kafka.server.epoch
 /**
   * Licensed to the Apache Software Foundation (ASF) under one or more
   * contributor license agreements.  See the NOTICE file distributed with
@@ -15,6 +14,8 @@ package unit.kafka.server.epoch
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+package kafka.server.epoch
+
 import kafka.server.epoch.OffsetsForLeaderEpoch
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.protocol.Errors
@@ -49,7 +50,7 @@ class OffsetsForLeaderEpochTest {
     replay(replica, replicaManager, cache)
 
     //When
-    val response = OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, request, true)
+    val response = OffsetsForLeaderEpoch.getResponseFor(replicaManager, request)
 
     //Then
     assertEquals(List(new EpochEndOffset(Errors.NONE, 1, offset)).asJava, response.get(topic))
@@ -79,7 +80,7 @@ class OffsetsForLeaderEpochTest {
     replay(replica, replicaManager, cache)
 
     //When
-    val response = OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, request, true)
+    val response = OffsetsForLeaderEpoch.getResponseFor(replicaManager, request)
 
     //Then
     assertEquals(List(new EpochEndOffset(Errors.NONE, 1, offset)).asJava, response.get("topic1"))
@@ -115,7 +116,7 @@ class OffsetsForLeaderEpochTest {
     replay(replica1, replica2, replicaManager, cache1, cache2)
 
     //When
-    val response = OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, request, true)
+    val response = OffsetsForLeaderEpoch.getResponseFor(replicaManager, request)
 
     //Then
     assertEquals(List(
@@ -139,25 +140,9 @@ class OffsetsForLeaderEpochTest {
     replay(replicaManager)
 
     //When
-    val response = OffsetsForLeaderEpoch.getOffsetsForEpochs(replicaManager, request, true)
+    val response = OffsetsForLeaderEpoch.getResponseFor(replicaManager, request)
 
     //Then
     assertEquals(List(new EpochEndOffset(Errors.NOT_LEADER_FOR_PARTITION, partition, UNDEFINED_OFFSET)).asJava, response.get(topic))
-  }
-
-  @Test
-  def shouldFailAuthorisation(): Unit = {
-
-    //Given
-    val topic = "topic"
-    val partition = 1
-    val request = mutable.Map(topic -> List(new Epoch(partition, 5)).asJava).asJava
-
-    //When
-    val authorised = false
-    val response = OffsetsForLeaderEpoch.getOffsetsForEpochs(null, request, authorised)
-
-    //Then
-    assertEquals(List(new EpochEndOffset(Errors.CLUSTER_AUTHORIZATION_FAILED, partition, UNDEFINED_OFFSET)).asJava, response.get(topic))
   }
 }

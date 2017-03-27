@@ -1,15 +1,3 @@
-package kafka.server.epoch.util
-
-import kafka.cluster.BrokerEndPoint
-import kafka.server.BlockingSend
-import org.apache.kafka.clients.{ClientRequest, ClientResponse, MockClient}
-import org.apache.kafka.common.{Node, TopicPartition}
-import org.apache.kafka.common.protocol.ApiKeys
-import org.apache.kafka.common.requests.AbstractRequest.Builder
-import org.apache.kafka.common.requests.FetchResponse.PartitionData
-import org.apache.kafka.common.requests.{AbstractRequest, EpochEndOffset, FetchResponse, OffsetForLeaderEpochResponse}
-import org.apache.kafka.common.utils.{SystemTime, Time}
-
 /**
   * Licensed to the Apache Software Foundation (ASF) under one or more
   * contributor license agreements.  See the NOTICE file distributed with
@@ -26,7 +14,21 @@ import org.apache.kafka.common.utils.{SystemTime, Time}
   * See the License for the specific language governing permissions and
   * limitations under the License.
   */
+package kafka.server.epoch.util
 
+import kafka.cluster.BrokerEndPoint
+import kafka.server.BlockingSend
+import org.apache.kafka.clients.{ClientRequest, ClientResponse, MockClient}
+import org.apache.kafka.common.{Node, TopicPartition}
+import org.apache.kafka.common.protocol.ApiKeys
+import org.apache.kafka.common.requests.AbstractRequest.Builder
+import org.apache.kafka.common.requests.FetchResponse.PartitionData
+import org.apache.kafka.common.requests.{AbstractRequest, EpochEndOffset, FetchResponse, OffsetForLeaderEpochResponse}
+import org.apache.kafka.common.utils.{SystemTime, Time}
+
+/**
+  * Stub network client used for testing the ReplicaFetcher, wraps the MockClient used for consumer testing
+  */
 class ReplicaFetcherMockBlockingSend(offsets: java.util.Map[String, java.util.List[EpochEndOffset]], destination: BrokerEndPoint, time: Time) extends BlockingSend {
   private val client = new MockClient(new SystemTime)
   var fetchCount = 0

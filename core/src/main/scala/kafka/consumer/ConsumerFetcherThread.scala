@@ -38,8 +38,8 @@ class ConsumerFetcherThread(name: String,
                                       clientId = config.clientId,
                                       sourceBroker = sourceBroker,
                                       fetchBackOffMs = config.refreshLeaderBackoffMs,
-                                      includePartitionInitialisation = false,
-                                      isInterruptible = true) {
+                                      isInterruptible = true,
+                                      includePartitionInitialisation = false) {
 
   type REQ = FetchRequest
   type PD = PartitionData

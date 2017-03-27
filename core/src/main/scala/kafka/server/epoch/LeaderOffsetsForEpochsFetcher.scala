@@ -25,8 +25,19 @@ import org.apache.kafka.common.requests.{EpochEndOffset, OffsetForLeaderEpochRes
 import scala.collection.JavaConverters._
 import scala.collection.{Map, Set}
 
-class LeaderEpochFetcher(sender: BlockingSend) extends Logging{
+/**
+  * Fetches Offsets from the Leader based on Epoch information stored in the follower
+  * @param sender
+  */
+class LeaderOffsetsForEpochsFetcher(sender: BlockingSend) extends Logging{
 
+  /**
+    * Fetch offsets from the leader for the passed (Partition, Epoch).
+    * This is used to accurately truncate the log.
+    *
+    * @param partitions (Partition, Epoch) entries to be fetched
+    * @return Offsets
+    */
   def leaderOffsetsFor(partitions: Set[PartitionEpoch]): Map[TopicPartition, EpochEndOffset] = {
     fromWireFormat(
       sender.sendRequest(

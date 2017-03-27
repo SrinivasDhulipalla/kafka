@@ -104,7 +104,7 @@ class AbstractFetcherThreadTest {
                            clientId: String,
                            sourceBroker: BrokerEndPoint,
                            fetchBackOffMs: Int = 0)
-    extends AbstractFetcherThread(name, clientId, sourceBroker, fetchBackOffMs, false) {
+    extends AbstractFetcherThread(name, clientId, sourceBroker, fetchBackOffMs, false, true) { //TODO this should probable be true for includePartitionInitialisation
 
     type REQ = DummyFetchRequest
     type PD = PartitionData

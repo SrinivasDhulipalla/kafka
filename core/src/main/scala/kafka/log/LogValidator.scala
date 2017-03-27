@@ -52,7 +52,7 @@ private[kafka] object LogValidator extends Logging {
                                                       messageFormatVersion: Byte = RecordBatch.CURRENT_MAGIC_VALUE,
                                                       messageTimestampType: TimestampType,
                                                       messageTimestampDiffMaxMs: Long,
-                                                      partitionLeaderEpoch: Int = -1): ValidationAndOffsetAssignResult = {
+                                                      partitionLeaderEpoch: Int = RecordBatch.UNKNOWN_PARTITION_LEADER_EPOCH): ValidationAndOffsetAssignResult = {
     if (sourceCodec == NoCompressionCodec && targetCodec == NoCompressionCodec) {
       // check the magic value
       if (!records.hasMatchingMagic(messageFormatVersion))
@@ -140,7 +140,7 @@ private[kafka] object LogValidator extends Logging {
 
       batch.setLastOffset(offsetCounter.value - 1)
 
-      if(batch.magic > RecordBatch.MAGIC_VALUE_V1)
+      if(batch.magic >= RecordBatch.MAGIC_VALUE_V2)
         batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
 
       // TODO: in the compressed path, we ensure that the batch max timestamp is correct.
@@ -236,7 +236,7 @@ private[kafka] object LogValidator extends Logging {
         if (messageFormatVersion >= RecordBatch.MAGIC_VALUE_V1)
           batch.setMaxTimestamp(messageTimestampType, maxTimestamp)
 
-        if(messageFormatVersion > RecordBatch.MAGIC_VALUE_V1)
+        if(messageFormatVersion >= RecordBatch.MAGIC_VALUE_V2)
           batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
 
         ValidationAndOffsetAssignResult(validatedRecords = records,

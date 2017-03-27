@@ -772,8 +772,6 @@ object TestUtils extends Logging {
       fail("Timing out after %d ms since leader is not elected or changed for partition [%s,%d]"
            .format(timeoutMs, topic, partition))
 
-    //TODO don't merge me
-    Thread.sleep(1000)
     leader
   }
 
