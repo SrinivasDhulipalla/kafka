@@ -50,11 +50,10 @@ public class Epoch {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
 
-        Epoch epoch1 = (Epoch) o;
+        Epoch other = (Epoch) o;
 
-        if (partitionId != epoch1.partitionId) return false;
-        return epoch == epoch1.epoch;
-
+        if (partitionId != other.partitionId) return false;
+        return epoch == other.epoch;
     }
 
     @Override

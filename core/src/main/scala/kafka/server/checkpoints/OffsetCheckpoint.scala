@@ -29,13 +29,14 @@ private object OffsetCheckpoint {
 
 trait OffsetCheckpoint {
   def write(epochs: Seq[EpochEntry])
+
   def read(): Seq[EpochEntry]
 }
 
 /**
   * This class persists a map of (Partition => Offsets) to a file (for a certain replica)
   */
-class OffsetCheckpointFile(val f: File) extends CheckpointFileFormatter[(TopicPartition, Long)]{
+class OffsetCheckpointFile(val f: File) extends CheckpointFileFormatter[(TopicPartition, Long)] {
   val checkpoint = new CheckpointFile[(TopicPartition, Long)](f, OffsetCheckpoint.CurrentVersion, this)
 
   override def toLine(entry: (TopicPartition, Long)): String = {
