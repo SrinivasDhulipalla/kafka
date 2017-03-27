@@ -139,7 +139,8 @@ private[kafka] object LogValidator extends Logging {
       }
 
       batch.setLastOffset(offsetCounter.value - 1)
-      batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
+      if(batch.magic > RecordBatch.MAGIC_VALUE_V1)
+        batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
 
       // TODO: in the compressed path, we ensure that the batch max timestamp is correct.
       //       We should either do the same or (better) let those two paths converge.
@@ -227,13 +228,15 @@ private[kafka] object LogValidator extends Logging {
         val lastOffset = offsetCounter.addAndGet(validatedRecords.size) - 1
 
         batch.setLastOffset(lastOffset)
-        batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
 
         if (messageTimestampType == TimestampType.LOG_APPEND_TIME)
           maxTimestamp = currentTimestamp
 
         if (messageFormatVersion >= RecordBatch.MAGIC_VALUE_V1)
           batch.setMaxTimestamp(messageTimestampType, maxTimestamp)
+
+        if(messageFormatVersion > RecordBatch.MAGIC_VALUE_V1)
+          batch.setPartitionLeaderEpoch(partitionLeaderEpoch)
 
         ValidationAndOffsetAssignResult(validatedRecords = records,
           maxTimestamp = maxTimestamp,

@@ -35,6 +35,8 @@ import scala.collection.mutable.Buffer
 
 /* We have some tests in this class instead of `BaseConsumerTest` in order to keep the build time under control. */
 class PlaintextConsumerTest extends BaseConsumerTest {
+  //Not sure this helps
+  serverConfig.put(KafkaConfig.OffsetsTopicPartitionsProp, "5")//TODO don't merge me - us seperate fix in https://github.com/apache/kafka/pull/2734
 
   @Test
   def testMaxPollRecords() {

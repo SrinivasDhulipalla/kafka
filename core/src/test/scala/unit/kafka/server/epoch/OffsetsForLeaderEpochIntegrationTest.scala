@@ -25,7 +25,7 @@ import org.junit.{After, Before, Test}
 
 import scala.collection.JavaConverters._
 
-class OffsetForLeaderEpochRequestApiIntegtationTest extends BaseRequestTest {
+class OffsetsForLeaderEpochIntegrationTest extends BaseRequestTest {
   override def numBrokers: Int = 1
 
   val topic = "test-topic"
