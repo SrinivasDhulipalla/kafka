@@ -28,6 +28,13 @@ import scala.collection.JavaConverters._
 
 object OffsetsForLeaderEpoch extends Logging {
 
+  /**
+    * Fetch the Leader Offsets for a request containing Leader Epochs from the follower
+    *
+    * @param replicaManager
+    * @param requestedEpochInfo
+    * @return
+    */
   def getResponseFor(replicaManager: ReplicaManager,
                      requestedEpochInfo: JMap[String, JList[Epoch]]): JMap[String, JList[EpochEndOffset]] = {
     info(s"Processing OffsetForEpochRequest: $requestedEpochInfo")
